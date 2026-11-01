@@ -75,14 +75,19 @@ install -m 644 "$ROOT/target/components/evotap/x64/evotap-$EVOTAP-x64/LICENSE" "
 } > "$STAGE/components.json"
 
 # Node modules: with npm on this machine, directly; otherwise in a container with the
-# Node major Volumio ships.
+# Node major Volumio ships. A zip without them is no plugin: the install must succeed,
+# and every module package.json names must be there.
 if command -v npm >/dev/null 2>&1; then
   ( cd "$STAGE" && npm install --omit=dev --no-audit --no-fund --loglevel=error >/dev/null )
 else
   docker run --rm -v "$STAGE:/plugin" -w /plugin node:20-bookworm-slim sh -c \
-    "npm install --omit=dev --no-audit --no-fund --loglevel=error >/dev/null && chown -R $(id -u):$(id -g) /plugin/node_modules /plugin/package-lock.json 2>/dev/null || true"
+    "npm install --omit=dev --no-audit --no-fund --loglevel=error >/dev/null; rc=\$?; chown -R $(id -u):$(id -g) /plugin/node_modules /plugin/package-lock.json 2>/dev/null; exit \$rc" \
+    || { echo "package: npm install failed; the zip was not made" >&2; exit 1; }
 fi
 rm -f "$STAGE/package-lock.json"
+for module in $(sed -n '/"dependencies"/,/}/p' "$STAGE/package.json" | sed -n 's/^ *"\([^"]*\)": *"[^"]*",*$/\1/p'); do
+  [ -f "$STAGE/node_modules/$module/package.json" ] || { echo "package: the module $module is not in the stage; the zip was not made" >&2; exit 1; }
+done
 
 ZIP=$ROOT/dist/$NAME-$VERSION.zip
 rm -f "$ZIP"
