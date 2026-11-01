@@ -1,0 +1,27 @@
+{
+  "name": "outcast",
+  "version": "0.0.0",
+  "description": "Casts whatever the player plays out to any uplink: Icecast, SHOUTcast, RTMP, SRT, HLS, the LAN or a file. An evo framework plugin built on evotap.",
+  "main": "index.js",
+  "author": "Just a Nerd",
+  "license": "MIT",
+  "repository": "https://github.com/foonerd/outcast",
+  "engines": {
+    "node": ">=20",
+    "volumio": ">=4"
+  },
+  "volumio_info": {
+    "prettyName": "Outcast Uplink",
+    "icon": "fa-rss",
+    "plugin_type": "audio_interface",
+    "has_alsa_contribution": true,
+    "os": ["bookworm"],
+    "architectures": ["armhf", "amd64"],
+    "details": "Streams whatever the player plays, from any service, to Icecast, SHOUTcast, RTMP, SRT, HLS, the LAN or a file, with the screen's title. Built on evotap.",
+    "changelog": "No release yet."
+  },
+  "dependencies": {
+    "kew": "^0.7.0",
+    "v-conf": "^1.5.0"
+  }
+}
