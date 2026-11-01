@@ -1,0 +1,149 @@
+//! What the daemon knows, as the plugin's page and the control socket see
+//! it: the ring being followed, the segments and bytes so far, the title
+//! the player last gave, and each uplink's state.
+
+use std::path::Path;
+use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use serde::Serialize;
+
+/// The ring being followed, as its header says.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+pub struct Ring {
+    pub path: String,
+    pub writer_pid: u32,
+    pub rate: u32,
+    pub channels: u32,
+    /// ALSA's name for the format, as `S32_LE`.
+    pub format: String,
+    /// FFmpeg's name for the raw bytes, where it has one.
+    pub ffmpeg: Option<String>,
+    pub frame_bytes: u32,
+    pub one_bit: bool,
+    /// Bytes the tap dropped on the audio thread (a transfer longer than the ring).
+    pub dropped: u64,
+    /// Times the tap made the ring again after finding it gone.
+    pub healed: u32,
+}
+
+/// The whole of it.
+#[derive(Clone, Debug, Serialize)]
+pub struct Status {
+    pub version: &'static str,
+    pub pid: u32,
+    pub tag: String,
+    /// Seconds since the epoch when the daemon started.
+    pub started: u64,
+    /// Seconds since the epoch of the last change.
+    pub updated: u64,
+    /// The ring being followed; none when nothing is playing.
+    pub ring: Option<Ring>,
+    /// Segments followed so far: one per ring, one ring per shape.
+    pub segments: u64,
+    /// Bytes of the stream taken from the rings so far.
+    pub bytes: u64,
+    /// Bytes of the stream lost to this reader (it fell behind the tap).
+    pub lost: u64,
+    /// The title the player last gave, what its screen shows.
+    pub title: String,
+    /// The uplinks, each with its own state; none yet.
+    pub uplinks: Vec<Uplink>,
+}
+
+/// One uplink's state, as the page shows it.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+pub struct Uplink {
+    pub id: String,
+    pub kind: String,
+    pub state: String,
+}
+
+pub fn now() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+impl Status {
+    pub fn new(tag: &str) -> Self {
+        let started = now();
+        Self {
+            version: env!("CARGO_PKG_VERSION"),
+            pid: std::process::id(),
+            tag: tag.to_string(),
+            started,
+            updated: started,
+            ring: None,
+            segments: 0,
+            bytes: 0,
+            lost: 0,
+            title: String::new(),
+            uplinks: Vec::new(),
+        }
+    }
+
+    pub fn touch(&mut self) {
+        self.updated = now();
+    }
+}
+
+/// The status as one JSON document.
+pub fn render(shared: &Arc<Mutex<Status>>) -> String {
+    let status = shared.lock().unwrap_or_else(|e| e.into_inner());
+    serde_json::to_string_pretty(&*status).unwrap_or_else(|_| "{}".to_string()) + "\n"
+}
+
+/// The file written whole and moved into place, so a reader never sees half.
+pub fn write_file(path: &Path, text: &str) -> std::io::Result<()> {
+    let part = path.with_extension("part");
+    std::fs::write(&part, text)?;
+    std::fs::rename(&part, path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn renders_as_json_with_the_fields_the_page_reads() {
+        let shared = Arc::new(Mutex::new(Status::new("outcast")));
+        {
+            let mut s = shared.lock().unwrap();
+            s.ring = Some(Ring {
+                path: "/dev/shm/evoaudio.outcast.1.1".into(),
+                rate: 48000,
+                channels: 2,
+                format: "S32_LE".into(),
+                ffmpeg: Some("s32le".into()),
+                frame_bytes: 8,
+                ..Ring::default()
+            });
+            s.segments = 3;
+            s.bytes = 1024;
+            s.title = "Artist - Title".into();
+        }
+        let text = render(&shared);
+        let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(v["tag"], "outcast");
+        assert_eq!(v["ring"]["rate"], 48000);
+        assert_eq!(v["ring"]["ffmpeg"], "s32le");
+        assert_eq!(v["segments"], 3);
+        assert_eq!(v["bytes"], 1024);
+        assert_eq!(v["title"], "Artist - Title");
+        assert!(v["uplinks"].as_array().unwrap().is_empty());
+        assert!(text.ends_with('\n'));
+    }
+
+    #[test]
+    fn the_file_is_written_whole() {
+        let dir = std::env::temp_dir().join(format!("outcast-status-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("status.json");
+        write_file(&file, "{\"a\":1}\n").unwrap();
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "{\"a\":1}\n");
+        assert!(!dir.join("status.part").exists());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+}

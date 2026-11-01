@@ -1,0 +1,25 @@
+[Unit]
+Description=Outcast Uplink core (outcast plugin)
+Documentation=https://github.com/foonerd/outcast
+After=network-online.target sound.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=volumio
+Group=volumio
+RuntimeDirectory=outcast
+RuntimeDirectoryMode=0755
+ExecStart=/data/plugins/audio_interface/outcast/bin/outcast --run /run/outcast
+Restart=always
+RestartSec=3
+KillSignal=SIGTERM
+TimeoutStopSec=5
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/run/outcast /data/INTERNAL/outcast
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

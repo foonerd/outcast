@@ -1,0 +1,8 @@
+/target/
+/target-*/
+/bin/
+/dist/
+node_modules/
+/plugin/asound/*.conf
+/plugin/node_modules/
+/plugin/package-lock.json

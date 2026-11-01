@@ -1,0 +1,21 @@
+{
+  "OUTCAST": {
+    "PLUGIN_NAME": "Outcast Uplink",
+    "PAGE_TITLE": "Outcast Uplink",
+    "STATUS_SECTION": "Status",
+    "STATUS_SECTION_DESC": "What the player is playing as the tap sees it, and the state of every uplink.",
+    "STATUS_BUTTON": "Show status",
+    "STATUS_TITLE": "Outcast Uplink status",
+    "STATUS_CORE_DOWN": "The core is not running.",
+    "STATUS_PLAYING": "Playing: {{rate}} Hz, {{channels}} channels, {{format}}; {{segments}} streams so far, {{mb}} MB carried.",
+    "STATUS_IDLE": "Nothing is playing.",
+    "STATUS_TAP_READY": "The tap is in the audio chain.",
+    "STATUS_TAP_FAILED": "The tap is not in the audio chain: {{error}}",
+    "STATUS_TAP_LOST": "The tap was taken out of the audio chain by a later change; disable and enable the plugin to put it back.",
+    "STATUS_NO_UPLINKS": "No uplink is set up.",
+    "ERR_LIBRARY": "The tap library for this player's architecture is missing from the plugin.",
+    "ERR_PREFLIGHT": "The player's ALSA could not load the tap: {{error}}",
+    "ERR_CHAIN": "The audio chain did not take the tap; the change was taken back: {{error}}",
+    "ERR_CORE": "The core could not be started: {{error}}"
+  }
+}

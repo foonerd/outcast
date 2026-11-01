@@ -1,0 +1,24 @@
+{
+  "page": {
+    "label": "TRANSLATE.OUTCAST.PAGE_TITLE"
+  },
+  "sections": [
+    {
+      "id": "status_section",
+      "element": "section",
+      "label": "TRANSLATE.OUTCAST.STATUS_SECTION",
+      "icon": "fa-rss",
+      "description": "TRANSLATE.OUTCAST.STATUS_SECTION_DESC",
+      "onSave": {
+        "type": "controller",
+        "endpoint": "audio_interface/outcast",
+        "method": "showStatus"
+      },
+      "saveButton": {
+        "label": "TRANSLATE.OUTCAST.STATUS_BUTTON",
+        "data": []
+      },
+      "content": []
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+# evotap, the audio tap of the evo framework: the ALSA plugin the player's sound passes
+# through and the reader of its ring. Shipped from its own release, one archive per
+# architecture, verified against the evo release key (keys/release-signing.pub) before
+# anything of it is packed. The core's `tap` crate is pinned to the Glass tag this
+# release was built from (bins/outcast/Cargo.toml).
+NAME=evotap
+VERSION=0.1.0
+REPOSITORY=foonerd/evotap

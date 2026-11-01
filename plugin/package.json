@@ -1,8 +1,11 @@
 {
   "name": "outcast",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Casts whatever the player plays out to any uplink: Icecast, SHOUTcast, RTMP, SRT, HLS, the LAN or a file. An evo framework plugin built on evotap.",
   "main": "index.js",
+  "scripts": {
+    "test": "node --test test/"
+  },
   "author": "Just a Nerd",
   "license": "MIT",
   "repository": "https://github.com/foonerd/outcast",

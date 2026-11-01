@@ -1,0 +1,18 @@
+[package]
+name = "outcast"
+description = "The core of Outcast Uplink: follows the player's audio ring and carries the sound to every uplink"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+# The audio ring's reader and the sample layouts, from the Glass release that
+# built the evotap the plugin ships (components/evotap.lock).
+tap = { git = "https://github.com/foonerd/glass", tag = "v0.11.0" }
+libc = "0.2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[lints]
+workspace = true
