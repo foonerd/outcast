@@ -24,9 +24,14 @@ echo "check: shell scripts"
 for script in scripts/*.sh plugin/*.sh; do
   sh -n "$script" || { echo "check: $script does not parse" >&2; exit 1; }
 done
-# The scripts the player runs go through its sh: POSIX sh, no bash.
-shellcheck -S warning -s sh plugin/install.sh plugin/uninstall.sh
-shellcheck -S warning scripts/*.sh
+# The scripts the player runs go through its sh: POSIX sh, no bash. The builder image
+# has no shellcheck; CI's shell job runs the same lint on the bare runner, which has.
+if command -v shellcheck >/dev/null 2>&1; then
+  shellcheck -S warning -s sh plugin/install.sh plugin/uninstall.sh
+  shellcheck -S warning scripts/*.sh
+else
+  echo "check: shellcheck is not installed here; CI's shell job runs it"
+fi
 
 echo "check: ALSA template"
 scripts/asound_check.sh
