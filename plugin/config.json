@@ -1,2 +1,33 @@
 {
+  "ice_enabled": { "type": "boolean", "value": false },
+  "ice_host": { "type": "string", "value": "" },
+  "ice_port": { "type": "string", "value": "8000" },
+  "ice_mount": { "type": "string", "value": "/volumio.mp3" },
+  "ice_user": { "type": "string", "value": "source" },
+  "ice_password": { "type": "string", "value": "" },
+  "ice_codec": { "type": "string", "value": "mp3" },
+  "ice_bitrate": { "type": "string", "value": "192" },
+  "ice_rate": { "type": "string", "value": "44100" },
+  "ice_name": { "type": "string", "value": "Volumio" },
+  "ice_more": { "type": "boolean", "value": false },
+  "ice_description": { "type": "string", "value": "" },
+  "ice_genre": { "type": "string", "value": "" },
+  "ice_url": { "type": "string", "value": "" },
+  "ice_public": { "type": "boolean", "value": false },
+
+  "lan_enabled": { "type": "boolean", "value": false },
+  "lan_port": { "type": "string", "value": "8000" },
+  "lan_codec": { "type": "string", "value": "mp3" },
+  "lan_bitrate": { "type": "string", "value": "192" },
+  "lan_rate": { "type": "string", "value": "44100" },
+  "lan_name": { "type": "string", "value": "Volumio" },
+  "lan_max_listeners": { "type": "string", "value": "5" },
+
+  "rec_enabled": { "type": "boolean", "value": false },
+  "rec_folder": { "type": "string", "value": "/data/INTERNAL/outcast/recordings" },
+  "rec_codec": { "type": "string", "value": "flac" },
+  "rec_bitrate": { "type": "string", "value": "192" },
+  "rec_rate": { "type": "string", "value": "0" },
+  "rec_split": { "type": "string", "value": "track" },
+  "rec_title_in_name": { "type": "boolean", "value": true }
 }

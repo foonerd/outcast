@@ -2,8 +2,8 @@
 // Outcast Uplink: the plugin shell. It owns the audio path (the tap's ALSA contribution,
 // proved with the player's own ALSA before it is registered and taken back when the
 // chain does not take it), the core's service, the title from the player's state, and
-// the settings page. Each uplink's settings and status come with its stage; the core
-// (bin/outcast) carries the sound.
+// the settings page, whose settings it hands to the core as one file. The core
+// (bin/outcast) carries the sound to the uplinks.
 
 const libQ = require('kew');
 const fs = require('fs');
@@ -11,7 +11,7 @@ const net = require('net');
 const path = require('path');
 const { execFile } = require('child_process');
 const VConf = require('v-conf');
-const { screenTitle, checkConfig, chainHasTap, summarize, fill } = require('./helpers');
+const h = require('./helpers');
 
 const LOG = 'outcast: ';
 const CONTRIBUTION = 'Outcast.postOutcast.5.conf';
@@ -46,6 +46,7 @@ function Outcast(context) {
     this.audioPath = 'off';
     this.audioPathError = '';
     this.lastLoggedTitle = '';
+    this.uplinksFile = null;
 }
 
 // ----------------------------------------------------------------- lifecycle
@@ -53,6 +54,8 @@ function Outcast(context) {
 Outcast.prototype.onVolumioStart = function () {
     this.configFile = this.commandRouter.pluginManager.getConfigurationFile(this.context, 'config.json');
     this.config.loadFile(this.configFile);
+    // The uplinks, as the core reads them, beside the configuration.
+    this.uplinksFile = path.join(path.dirname(this.configFile), 'uplinks.json');
     return libQ.resolve();
 };
 
@@ -61,7 +64,9 @@ Outcast.prototype.onStart = function () {
     self.active = true;
     self.commandRouter.loadI18nStrings();
     self.subscribeState();
-    // The core runs whatever the audio path's fate: its status says what it sees.
+    // The core reads the uplinks at its start: the file is written first, whatever the
+    // audio path's fate; the core's status says what it sees.
+    try { self.writeUplinks(); } catch (e) { self.logger.error(LOG + 'uplinks: ' + msg(e)); }
     return self.installAudioPath()
         .fail(() => undefined)
         .then(() => self.startCore())
@@ -140,7 +145,7 @@ Outcast.prototype.preflight = function () {
     const self = this;
     const defer = libQ.defer();
     try {
-        fs.writeFileSync(CHECK_CONF, checkConfig(LIBRARY, CHECK_TAG));
+        fs.writeFileSync(CHECK_CONF, h.checkConfig(LIBRARY, CHECK_TAG));
     } catch (e) {
         return libQ.reject(keyed('ERR_PREFLIGHT', e));
     }
@@ -193,7 +198,7 @@ Outcast.prototype.verifyChain = function () {
     const defer = libQ.defer();
     let text = '';
     try { text = fs.readFileSync(ALSA_FILE, 'utf8'); } catch (e) { return libQ.reject(keyed('ERR_CHAIN', e)); }
-    if (!chainHasTap(text)) {
+    if (!h.chainHasTap(text)) {
         return libQ.reject(keyed('ERR_CHAIN', new Error('the player did not take the contribution into ' + ALSA_FILE)));
     }
     execFile('/usr/bin/aplay', ['-L'], { timeout: 15000 }, (error, stdout, stderr) => {
@@ -223,7 +228,7 @@ Outcast.prototype.watchChain = function () {
         if (!curr || !prev || curr.mtimeMs === prev.mtimeMs) return;
         let text = '';
         try { text = fs.readFileSync(ALSA_FILE, 'utf8'); } catch (e) { return; }
-        if (chainHasTap(text)) {
+        if (h.chainHasTap(text)) {
             if (self.audioPath === 'lost') { self.audioPath = 'ready'; self.logger.info(LOG + 'the tap is in the audio chain again'); }
         } else if (self.audioPath === 'ready') {
             self.audioPath = 'lost';
@@ -279,6 +284,16 @@ Outcast.prototype.tellCore = function (request) {
     c.end(JSON.stringify(request) + '\n');
 };
 
+// The uplinks as the core reads them, from the configuration, written whole and moved
+// into place; the file holds the source password, so it is the plugin's alone.
+Outcast.prototype.writeUplinks = function () {
+    const self = this;
+    const text = JSON.stringify(h.uplinksFrom((k, d) => self.config.get(k, d)), null, 2) + '\n';
+    const part = self.uplinksFile + '.part';
+    fs.writeFileSync(part, text, { mode: 0o600 });
+    fs.renameSync(part, self.uplinksFile);
+};
+
 // ----------------------------------------------------------------- the title
 
 Outcast.prototype.subscribeState = function () {
@@ -296,11 +311,11 @@ Outcast.prototype.unsubscribeState = function () {
     this.stateCallback = null;
 };
 
-// Every state push while playing is handed to the core, which sends a title on only
-// where it differs from the one an uplink carries.
+// Every state push while playing is handed to the core, which carries a title on only
+// where it differs from the one an uplink has.
 Outcast.prototype.onVolumioState = function (state) {
     if (!this.active || !state || state.status !== 'play') return;
-    const title = screenTitle(state);
+    const title = h.screenTitle(state);
     if (!title) return;
     if (title !== this.lastLoggedTitle) {
         this.lastLoggedTitle = title;
@@ -311,14 +326,57 @@ Outcast.prototype.onVolumioState = function (state) {
 
 // ------------------------------------------------------------------ the page
 
+function setValue(content, id, value) {
+    const item = content.find((c) => c.id === id);
+    if (item) item.value = value;
+}
+
+function setSelect(content, id, value) {
+    const item = content.find((c) => c.id === id);
+    if (!item) return;
+    const option = (item.options || []).find((o) => String(o.value) === String(value));
+    if (option) item.value = { value: option.value, label: option.label };
+}
+
 Outcast.prototype.getUIConfig = function () {
     const self = this;
     const defer = libQ.defer();
     const lang = self.commandRouter.sharedVars.get('language_code');
+    const c = self.config;
     self.commandRouter.i18nJson(path.join(__dirname, 'i18n', 'strings_' + lang + '.json'),
         path.join(__dirname, 'i18n', 'strings_en.json'),
         path.join(__dirname, 'UIConfig.json'))
-        .then((uiconf) => defer.resolve(uiconf))
+        .then((uiconf) => {
+            const section = (id) => (uiconf.sections.find((s) => s.id === id) || { content: [] }).content;
+            const ice = section('icecast_section');
+            setValue(ice, 'ice_enabled', c.get('ice_enabled', false) === true);
+            ['ice_host', 'ice_port', 'ice_mount', 'ice_user', 'ice_password', 'ice_name', 'ice_description', 'ice_genre', 'ice_url']
+                .forEach((k) => setValue(ice, k, String(c.get(k, ''))));
+            setSelect(ice, 'ice_codec', c.get('ice_codec', 'mp3'));
+            setSelect(ice, 'ice_bitrate', c.get('ice_bitrate', '192'));
+            setSelect(ice, 'ice_rate', c.get('ice_rate', '44100'));
+            setValue(ice, 'ice_more', c.get('ice_more', false) === true);
+            setValue(ice, 'ice_public', c.get('ice_public', false) === true);
+
+            const lan = section('lan_section');
+            setValue(lan, 'lan_enabled', c.get('lan_enabled', false) === true);
+            setValue(lan, 'lan_port', String(c.get('lan_port', '8000')));
+            setSelect(lan, 'lan_codec', c.get('lan_codec', 'mp3'));
+            setSelect(lan, 'lan_bitrate', c.get('lan_bitrate', '192'));
+            setSelect(lan, 'lan_rate', c.get('lan_rate', '44100'));
+            setValue(lan, 'lan_name', String(c.get('lan_name', 'Volumio')));
+            setValue(lan, 'lan_max_listeners', String(c.get('lan_max_listeners', '5')));
+
+            const rec = section('record_section');
+            setValue(rec, 'rec_enabled', c.get('rec_enabled', false) === true);
+            setValue(rec, 'rec_folder', String(c.get('rec_folder', '/data/INTERNAL/outcast/recordings')));
+            setSelect(rec, 'rec_codec', c.get('rec_codec', 'flac'));
+            setSelect(rec, 'rec_bitrate', c.get('rec_bitrate', '192'));
+            setSelect(rec, 'rec_rate', c.get('rec_rate', '0'));
+            setSelect(rec, 'rec_split', c.get('rec_split', 'track'));
+            setValue(rec, 'rec_title_in_name', c.get('rec_title_in_name', true) !== false);
+            defer.resolve(uiconf);
+        })
         .fail((e) => {
             self.logger.error(LOG + 'getUIConfig: ' + msg(e));
             defer.reject(new Error());
@@ -326,17 +384,52 @@ Outcast.prototype.getUIConfig = function () {
     return defer.promise;
 };
 
+// A section saved: checked, kept, written for the core, and the core told.
+Outcast.prototype.saveSection = function (data, validate, apply) {
+    const self = this;
+    const err = validate(data, (k, v) => self.i18n(k, v));
+    if (err) {
+        self.toast('error', err);
+        return libQ.reject(new Error(err));
+    }
+    try {
+        apply(data, (k, v) => self.config.set(k, v));
+        self.writeUplinks();
+    } catch (e) {
+        self.logger.error(LOG + 'save: ' + msg(e));
+        self.toast('error', 'ERR_SAVE', { error: msg(e) });
+        return libQ.reject(e);
+    }
+    self.tellCore({ op: 'reload' });
+    self.toast('success', 'SAVED');
+    return libQ.resolve();
+};
+
+Outcast.prototype.updateIcecast = function (data) {
+    return this.saveSection(data, h.validateIcecast, h.applyIcecast);
+};
+
+Outcast.prototype.updateLan = function (data) {
+    return this.saveSection(data, h.validateLan, h.applyLan);
+};
+
+Outcast.prototype.updateRecord = function (data) {
+    return this.saveSection(data, h.validateRecord, h.applyRecord);
+};
+
 Outcast.prototype.showStatus = function () {
     const self = this;
-    const lines = summarize(self.readStatus(), self.audioPath, self.audioPathError, (key, vars) => self.i18n(key, vars));
+    const lines = h.summarize(self.readStatus(), self.audioPath, self.audioPathError, (key, vars) => self.i18n(key, vars));
     self.commandRouter.pushToastMessage('info', self.i18n('STATUS_TITLE'), lines.join(' '));
     return libQ.resolve();
 };
 
+// A string of the plugin's own dictionary, with its variables filled; a string that is
+// not a key (a validation message already made) passes as it is.
 Outcast.prototype.i18n = function (key, vars) {
     let s = this.commandRouter.getI18nString('OUTCAST.' + key);
     if (!s || s === 'OUTCAST.' + key) s = key;
-    return fill(s, vars);
+    return h.fill(s, vars);
 };
 
 Outcast.prototype.toast = function (type, key, vars) {

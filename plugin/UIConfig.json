@@ -4,20 +4,104 @@
   },
   "sections": [
     {
+      "id": "icecast_section",
+      "element": "section",
+      "label": "TRANSLATE.OUTCAST.ICE_SECTION",
+      "icon": "fa-rss",
+      "description": "TRANSLATE.OUTCAST.ICE_SECTION_DESC",
+      "onSave": { "type": "controller", "endpoint": "audio_interface/outcast", "method": "updateIcecast" },
+      "saveButton": {
+        "label": "TRANSLATE.OUTCAST.SAVE",
+        "data": ["ice_enabled", "ice_host", "ice_port", "ice_mount", "ice_user", "ice_password", "ice_codec", "ice_bitrate", "ice_rate", "ice_name", "ice_more", "ice_description", "ice_genre", "ice_url", "ice_public"]
+      },
+      "content": [
+        { "id": "ice_enabled", "element": "switch", "label": "TRANSLATE.OUTCAST.ICE_ENABLE", "doc": "TRANSLATE.OUTCAST.ICE_ENABLE_DESC", "value": false },
+        { "id": "ice_host", "element": "input", "label": "TRANSLATE.OUTCAST.ICE_HOST", "doc": "TRANSLATE.OUTCAST.ICE_HOST_DESC", "value": "", "visibleIf": { "field": "ice_enabled", "value": true } },
+        { "id": "ice_port", "element": "input", "label": "TRANSLATE.OUTCAST.ICE_PORT", "doc": "TRANSLATE.OUTCAST.ICE_PORT_DESC", "value": "8000", "visibleIf": { "field": "ice_enabled", "value": true } },
+        { "id": "ice_mount", "element": "input", "label": "TRANSLATE.OUTCAST.ICE_MOUNT", "doc": "TRANSLATE.OUTCAST.ICE_MOUNT_DESC", "value": "/volumio.mp3", "visibleIf": { "field": "ice_enabled", "value": true } },
+        { "id": "ice_user", "element": "input", "label": "TRANSLATE.OUTCAST.ICE_USER", "doc": "TRANSLATE.OUTCAST.ICE_USER_DESC", "value": "source", "visibleIf": { "field": "ice_enabled", "value": true } },
+        { "id": "ice_password", "element": "input", "type": "password", "label": "TRANSLATE.OUTCAST.ICE_PASSWORD", "doc": "TRANSLATE.OUTCAST.ICE_PASSWORD_DESC", "value": "", "visibleIf": { "field": "ice_enabled", "value": true } },
+        { "id": "ice_codec", "element": "select", "label": "TRANSLATE.OUTCAST.CODEC", "doc": "TRANSLATE.OUTCAST.ICE_CODEC_DESC", "value": { "value": "mp3", "label": "MP3" },
+          "options": [ { "value": "mp3", "label": "MP3" }, { "value": "aac", "label": "AAC" }, { "value": "opus", "label": "Opus" }, { "value": "vorbis", "label": "Ogg Vorbis" } ],
+          "visibleIf": { "field": "ice_enabled", "value": true } },
+        { "id": "ice_bitrate", "element": "select", "label": "TRANSLATE.OUTCAST.BITRATE", "doc": "TRANSLATE.OUTCAST.BITRATE_DESC", "value": { "value": "192", "label": "192 kbit/s" },
+          "options": [ { "value": "96", "label": "96 kbit/s" }, { "value": "128", "label": "128 kbit/s" }, { "value": "160", "label": "160 kbit/s" }, { "value": "192", "label": "192 kbit/s" }, { "value": "256", "label": "256 kbit/s" }, { "value": "320", "label": "320 kbit/s" } ],
+          "visibleIf": { "field": "ice_enabled", "value": true } },
+        { "id": "ice_rate", "element": "select", "label": "TRANSLATE.OUTCAST.RATE", "doc": "TRANSLATE.OUTCAST.RATE_DESC", "value": { "value": "44100", "label": "44.1 kHz" },
+          "options": [ { "value": "44100", "label": "44.1 kHz" }, { "value": "48000", "label": "48 kHz" } ],
+          "visibleIf": { "field": "ice_enabled", "value": true } },
+        { "id": "ice_name", "element": "input", "label": "TRANSLATE.OUTCAST.STREAM_NAME", "doc": "TRANSLATE.OUTCAST.STREAM_NAME_DESC", "value": "Volumio", "visibleIf": { "field": "ice_enabled", "value": true } },
+        { "id": "ice_more", "element": "switch", "label": "TRANSLATE.OUTCAST.ICE_MORE", "doc": "TRANSLATE.OUTCAST.ICE_MORE_DESC", "value": false, "visibleIf": { "field": "ice_enabled", "value": true } },
+        { "id": "ice_description", "element": "input", "label": "TRANSLATE.OUTCAST.ICE_DESCRIPTION", "doc": "TRANSLATE.OUTCAST.ICE_DESCRIPTION_DESC", "value": "", "visibleIf": { "field": "ice_more", "value": true } },
+        { "id": "ice_genre", "element": "input", "label": "TRANSLATE.OUTCAST.ICE_GENRE", "doc": "TRANSLATE.OUTCAST.ICE_GENRE_DESC", "value": "", "visibleIf": { "field": "ice_more", "value": true } },
+        { "id": "ice_url", "element": "input", "label": "TRANSLATE.OUTCAST.ICE_URL", "doc": "TRANSLATE.OUTCAST.ICE_URL_DESC", "value": "", "visibleIf": { "field": "ice_more", "value": true } },
+        { "id": "ice_public", "element": "switch", "label": "TRANSLATE.OUTCAST.ICE_PUBLIC", "doc": "TRANSLATE.OUTCAST.ICE_PUBLIC_DESC", "value": false, "visibleIf": { "field": "ice_more", "value": true } }
+      ]
+    },
+    {
+      "id": "lan_section",
+      "element": "section",
+      "label": "TRANSLATE.OUTCAST.LAN_SECTION",
+      "icon": "fa-wifi",
+      "description": "TRANSLATE.OUTCAST.LAN_SECTION_DESC",
+      "onSave": { "type": "controller", "endpoint": "audio_interface/outcast", "method": "updateLan" },
+      "saveButton": {
+        "label": "TRANSLATE.OUTCAST.SAVE",
+        "data": ["lan_enabled", "lan_port", "lan_codec", "lan_bitrate", "lan_rate", "lan_name", "lan_max_listeners"]
+      },
+      "content": [
+        { "id": "lan_enabled", "element": "switch", "label": "TRANSLATE.OUTCAST.LAN_ENABLE", "doc": "TRANSLATE.OUTCAST.LAN_ENABLE_DESC", "value": false },
+        { "id": "lan_port", "element": "input", "label": "TRANSLATE.OUTCAST.LAN_PORT", "doc": "TRANSLATE.OUTCAST.LAN_PORT_DESC", "value": "8000", "visibleIf": { "field": "lan_enabled", "value": true } },
+        { "id": "lan_codec", "element": "select", "label": "TRANSLATE.OUTCAST.CODEC", "doc": "TRANSLATE.OUTCAST.LAN_CODEC_DESC", "value": { "value": "mp3", "label": "MP3" },
+          "options": [ { "value": "mp3", "label": "MP3" }, { "value": "aac", "label": "AAC" }, { "value": "opus", "label": "Opus" }, { "value": "vorbis", "label": "Ogg Vorbis" }, { "value": "flac", "label": "FLAC (lossless)" } ],
+          "visibleIf": { "field": "lan_enabled", "value": true } },
+        { "id": "lan_bitrate", "element": "select", "label": "TRANSLATE.OUTCAST.BITRATE", "doc": "TRANSLATE.OUTCAST.BITRATE_DESC", "value": { "value": "192", "label": "192 kbit/s" },
+          "options": [ { "value": "96", "label": "96 kbit/s" }, { "value": "128", "label": "128 kbit/s" }, { "value": "160", "label": "160 kbit/s" }, { "value": "192", "label": "192 kbit/s" }, { "value": "256", "label": "256 kbit/s" }, { "value": "320", "label": "320 kbit/s" } ],
+          "visibleIf": { "field": "lan_enabled", "value": true } },
+        { "id": "lan_rate", "element": "select", "label": "TRANSLATE.OUTCAST.RATE", "doc": "TRANSLATE.OUTCAST.RATE_DESC", "value": { "value": "44100", "label": "44.1 kHz" },
+          "options": [ { "value": "44100", "label": "44.1 kHz" }, { "value": "48000", "label": "48 kHz" }, { "value": "0", "label": "TRANSLATE.OUTCAST.RATE_SOURCE" } ],
+          "visibleIf": { "field": "lan_enabled", "value": true } },
+        { "id": "lan_name", "element": "input", "label": "TRANSLATE.OUTCAST.STREAM_NAME", "doc": "TRANSLATE.OUTCAST.STREAM_NAME_DESC", "value": "Volumio", "visibleIf": { "field": "lan_enabled", "value": true } },
+        { "id": "lan_max_listeners", "element": "input", "label": "TRANSLATE.OUTCAST.LAN_MAX", "doc": "TRANSLATE.OUTCAST.LAN_MAX_DESC", "value": "5", "visibleIf": { "field": "lan_enabled", "value": true } }
+      ]
+    },
+    {
+      "id": "record_section",
+      "element": "section",
+      "label": "TRANSLATE.OUTCAST.REC_SECTION",
+      "icon": "fa-circle",
+      "description": "TRANSLATE.OUTCAST.REC_SECTION_DESC",
+      "onSave": { "type": "controller", "endpoint": "audio_interface/outcast", "method": "updateRecord" },
+      "saveButton": {
+        "label": "TRANSLATE.OUTCAST.SAVE",
+        "data": ["rec_enabled", "rec_folder", "rec_codec", "rec_bitrate", "rec_rate", "rec_split", "rec_title_in_name"]
+      },
+      "content": [
+        { "id": "rec_enabled", "element": "switch", "label": "TRANSLATE.OUTCAST.REC_ENABLE", "doc": "TRANSLATE.OUTCAST.REC_ENABLE_DESC", "value": false },
+        { "id": "rec_folder", "element": "input", "label": "TRANSLATE.OUTCAST.REC_FOLDER", "doc": "TRANSLATE.OUTCAST.REC_FOLDER_DESC", "value": "/data/INTERNAL/outcast/recordings", "visibleIf": { "field": "rec_enabled", "value": true } },
+        { "id": "rec_codec", "element": "select", "label": "TRANSLATE.OUTCAST.CODEC", "doc": "TRANSLATE.OUTCAST.REC_CODEC_DESC", "value": { "value": "flac", "label": "FLAC (lossless)" },
+          "options": [ { "value": "flac", "label": "FLAC (lossless)" }, { "value": "wav", "label": "WAV (lossless)" }, { "value": "mp3", "label": "MP3" }, { "value": "aac", "label": "AAC" }, { "value": "opus", "label": "Opus" }, { "value": "vorbis", "label": "Ogg Vorbis" } ],
+          "visibleIf": { "field": "rec_enabled", "value": true } },
+        { "id": "rec_bitrate", "element": "select", "label": "TRANSLATE.OUTCAST.BITRATE", "doc": "TRANSLATE.OUTCAST.REC_BITRATE_DESC", "value": { "value": "192", "label": "192 kbit/s" },
+          "options": [ { "value": "96", "label": "96 kbit/s" }, { "value": "128", "label": "128 kbit/s" }, { "value": "160", "label": "160 kbit/s" }, { "value": "192", "label": "192 kbit/s" }, { "value": "256", "label": "256 kbit/s" }, { "value": "320", "label": "320 kbit/s" } ],
+          "visibleIf": { "field": "rec_enabled", "value": true } },
+        { "id": "rec_rate", "element": "select", "label": "TRANSLATE.OUTCAST.RATE", "doc": "TRANSLATE.OUTCAST.REC_RATE_DESC", "value": { "value": "0", "label": "TRANSLATE.OUTCAST.RATE_SOURCE" },
+          "options": [ { "value": "0", "label": "TRANSLATE.OUTCAST.RATE_SOURCE" }, { "value": "44100", "label": "44.1 kHz" }, { "value": "48000", "label": "48 kHz" } ],
+          "visibleIf": { "field": "rec_enabled", "value": true } },
+        { "id": "rec_split", "element": "select", "label": "TRANSLATE.OUTCAST.REC_SPLIT", "doc": "TRANSLATE.OUTCAST.REC_SPLIT_DESC", "value": { "value": "track", "label": "TRANSLATE.OUTCAST.REC_SPLIT_TRACK" },
+          "options": [ { "value": "track", "label": "TRANSLATE.OUTCAST.REC_SPLIT_TRACK" }, { "value": "stream", "label": "TRANSLATE.OUTCAST.REC_SPLIT_STREAM" } ],
+          "visibleIf": { "field": "rec_enabled", "value": true } },
+        { "id": "rec_title_in_name", "element": "switch", "label": "TRANSLATE.OUTCAST.REC_TITLE_IN_NAME", "doc": "TRANSLATE.OUTCAST.REC_TITLE_IN_NAME_DESC", "value": true, "visibleIf": { "field": "rec_enabled", "value": true } }
+      ]
+    },
+    {
       "id": "status_section",
       "element": "section",
       "label": "TRANSLATE.OUTCAST.STATUS_SECTION",
-      "icon": "fa-rss",
+      "icon": "fa-info-circle",
       "description": "TRANSLATE.OUTCAST.STATUS_SECTION_DESC",
-      "onSave": {
-        "type": "controller",
-        "endpoint": "audio_interface/outcast",
-        "method": "showStatus"
-      },
-      "saveButton": {
-        "label": "TRANSLATE.OUTCAST.STATUS_BUTTON",
-        "data": []
-      },
+      "onSave": { "type": "controller", "endpoint": "audio_interface/outcast", "method": "showStatus" },
+      "saveButton": { "label": "TRANSLATE.OUTCAST.STATUS_BUTTON", "data": [] },
       "content": []
     }
   ]

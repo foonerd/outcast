@@ -47,7 +47,10 @@ pub struct Status {
     pub lost: u64,
     /// The title the player last gave, what its screen shows.
     pub title: String,
-    /// The uplinks, each with its own state; none yet.
+    /// The last thing that went wrong outside an uplink: a configuration
+    /// that did not read, for one.
+    pub last_error: String,
+    /// The uplinks, each with its own state.
     pub uplinks: Vec<Uplink>,
 }
 
@@ -56,7 +59,26 @@ pub struct Status {
 pub struct Uplink {
     pub id: String,
     pub kind: String,
+    /// `starting`, `idle`, `connecting`, `waiting`, `connected`, `listening`,
+    /// `streaming`, `recording`, `error`, `off`.
     pub state: String,
+    /// Where it goes: the mount, the port, the file.
+    pub detail: String,
+    /// Seconds since the epoch when the state last changed.
+    pub since: u64,
+    /// Encoded bytes sent or written.
+    pub bytes: u64,
+    /// Connections made again after the first.
+    pub reconnects: u32,
+    /// Pieces of the stream this uplink lost for not keeping up.
+    pub dropped: u64,
+    pub last_error: String,
+    /// Listeners on a LAN stream.
+    pub listeners: u32,
+    /// Files a recording wrote.
+    pub files: u64,
+    /// The title it carries now.
+    pub title: String,
 }
 
 pub fn now() -> u64 {
@@ -80,6 +102,7 @@ impl Status {
             bytes: 0,
             lost: 0,
             title: String::new(),
+            last_error: String::new(),
             uplinks: Vec::new(),
         }
     }
@@ -123,6 +146,13 @@ mod tests {
             s.segments = 3;
             s.bytes = 1024;
             s.title = "Artist - Title".into();
+            s.uplinks.push(Uplink {
+                id: "icecast".into(),
+                kind: "icecast".into(),
+                state: "connected".into(),
+                detail: "ice.example.com:8000/volumio.mp3".into(),
+                ..Uplink::default()
+            });
         }
         let text = render(&shared);
         let v: serde_json::Value = serde_json::from_str(&text).unwrap();
@@ -132,7 +162,8 @@ mod tests {
         assert_eq!(v["segments"], 3);
         assert_eq!(v["bytes"], 1024);
         assert_eq!(v["title"], "Artist - Title");
-        assert!(v["uplinks"].as_array().unwrap().is_empty());
+        assert_eq!(v["uplinks"][0]["state"], "connected");
+        assert_eq!(v["uplinks"][0]["listeners"], 0);
         assert!(text.ends_with('\n'));
     }
 
