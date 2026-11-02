@@ -65,33 +65,44 @@ impl Hub {
     pub fn reload(&mut self) -> Result<(), String> {
         let uplinks = Uplinks::load(&self.config)?;
         self.stop_all();
+        // The entries are in the status before any worker runs, since a worker
+        // says its state at once and would be written over.
         let mut listed = Vec::new();
-        if uplinks.icecast.enabled {
+        let icecast = uplinks.icecast.enabled.then(|| {
             let cfg = uplinks.icecast.clone();
             let ctx = self.ctx("icecast", "icecast");
             listed.push(ctx.entry(&format!("{}:{}{}", cfg.host, cfg.port, cfg.mount)));
-            self.start("icecast", move |ctl, pcm| {
-                uplink::icecast::run(cfg, ctx, ctl, pcm)
-            });
-        }
-        if uplinks.lan.enabled {
+            (cfg, ctx)
+        });
+        let lan = uplinks.lan.enabled.then(|| {
             let cfg = uplinks.lan.clone();
             let ctx = self.ctx("lan", "lan");
             listed.push(ctx.entry(&format!("port {}", cfg.port)));
-            self.start("lan", move |ctl, pcm| uplink::lan::run(cfg, ctx, ctl, pcm));
-        }
-        if uplinks.record.enabled {
+            (cfg, ctx)
+        });
+        let record = uplinks.record.enabled.then(|| {
             let cfg = uplinks.record.clone();
             let ctx = self.ctx("record", "record");
             listed.push(ctx.entry(&cfg.folder.clone()));
-            self.start("record", move |ctl, pcm| {
-                uplink::record::run(cfg, ctx, ctl, pcm)
-            });
-        }
+            (cfg, ctx)
+        });
         {
             let mut s = self.status.lock().unwrap_or_else(|e| e.into_inner());
             s.uplinks = listed;
             s.touch();
+        }
+        if let Some((cfg, ctx)) = icecast {
+            self.start("icecast", move |ctl, pcm| {
+                uplink::icecast::run(cfg, ctx, ctl, pcm)
+            });
+        }
+        if let Some((cfg, ctx)) = lan {
+            self.start("lan", move |ctl, pcm| uplink::lan::run(cfg, ctx, ctl, pcm));
+        }
+        if let Some((cfg, ctx)) = record {
+            self.start("record", move |ctl, pcm| {
+                uplink::record::run(cfg, ctx, ctl, pcm)
+            });
         }
         if !self.title.is_empty() {
             self.broadcast(Event::Title(self.title.clone()));

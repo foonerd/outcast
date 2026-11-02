@@ -109,15 +109,29 @@ Outcast.prototype.getI18nFile = function (langCode) {
 // loads it and plays a second through it into nothing; the contribution is written and
 // the player asked to write its chain; the chain as written carries the tap and parses.
 // A step that fails takes the contribution back, so nothing of the plugin stays in the
-// chain, and says why.
+// chain, and says why. The player gathers contributions from the plugins it has marked
+// enabled, and on the first start after an install it starts the plugin before the
+// mark lands: a chain written without the tap is asked for again, a few times, before
+// it counts as refused.
+const CHAIN_TRIES = 5;
+const CHAIN_RETRY_MS = 3000;
+
 Outcast.prototype.installAudioPath = function () {
     const self = this;
     const start = fs.existsSync(LIBRARY) ? libQ.resolve() : libQ.reject(keyed('ERR_LIBRARY', new Error(LIBRARY + ' is missing')));
+    const attempt = (left) => self.updateChain()
+        .then(() => self.verifyChain())
+        .fail((e) => {
+            if (left <= 1 || !(e && e.key === 'ERR_CHAIN')) throw e;
+            self.logger.info(LOG + 'the chain was written without the tap; asked again in ' + (CHAIN_RETRY_MS / 1000) + ' s (' + (left - 1) + ' left)');
+            const defer = libQ.defer();
+            setTimeout(() => defer.resolve(), CHAIN_RETRY_MS);
+            return defer.promise.then(() => attempt(left - 1));
+        });
     return start
         .then(() => self.preflight())
         .then(() => self.writeContribution())
-        .then(() => self.updateChain())
-        .then(() => self.verifyChain())
+        .then(() => attempt(CHAIN_TRIES))
         .then(() => {
             self.audioPath = 'ready';
             self.audioPathError = '';

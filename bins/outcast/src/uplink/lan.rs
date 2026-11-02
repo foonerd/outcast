@@ -475,8 +475,28 @@ fn stream_to(
     if !header.is_empty() {
         write(stream, &header)?;
     }
-    while let Ok(piece) = rx.recv() {
-        write(stream, &piece)?;
+    // A listener that leaves while nothing plays would never be written to and never
+    // noticed: between pieces its socket is looked at, and one closed ends it.
+    let _ = stream.set_read_timeout(Some(Duration::from_millis(10)));
+    let mut probe = [0u8; 1];
+    loop {
+        match rx.recv_timeout(Duration::from_millis(500)) {
+            Ok(piece) => write(stream, &piece)?,
+            Err(mpsc::RecvTimeoutError::Disconnected) => break,
+            Err(mpsc::RecvTimeoutError::Timeout) => match stream.peek(&mut probe) {
+                Ok(0) => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::ConnectionAborted,
+                        "closed by the listener",
+                    ))
+                }
+                Ok(_) => {}
+                Err(e)
+                    if e.kind() == io::ErrorKind::WouldBlock
+                        || e.kind() == io::ErrorKind::TimedOut => {}
+                Err(e) => return Err(e),
+            },
+        }
     }
     Ok(())
 }
