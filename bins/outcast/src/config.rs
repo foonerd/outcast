@@ -90,6 +90,10 @@ pub struct Icecast {
     pub url: String,
     #[serde(default)]
     pub public: bool,
+    /// The mount kept up with silence while the player pauses or stops, and
+    /// from the moment the uplink is on; off, the connection follows the stream.
+    #[serde(default = "default_true")]
+    pub keep_alive: bool,
 }
 
 impl Icecast {
@@ -133,6 +137,7 @@ impl Default for Icecast {
             genre: String::new(),
             url: String::new(),
             public: false,
+            keep_alive: true,
         }
     }
 }
@@ -154,6 +159,9 @@ pub struct Lan {
     pub name: String,
     #[serde(default = "Lan::default_max_listeners")]
     pub max_listeners: u32,
+    /// The stream kept going with silence while the player pauses or stops.
+    #[serde(default = "default_true")]
+    pub keep_alive: bool,
 }
 
 impl Lan {
@@ -187,6 +195,7 @@ impl Default for Lan {
             rate: Self::default_rate(),
             name: Self::default_name(),
             max_listeners: Self::default_max_listeners(),
+            keep_alive: true,
         }
     }
 }
@@ -333,7 +342,11 @@ mod tests {
         assert_eq!(u.icecast.port, 8000);
         assert_eq!(u.icecast.codec, Codec::Opus);
         assert_eq!(u.icecast.bitrate, 192);
+        assert!(u.icecast.keep_alive);
         assert_eq!(u.lan, Lan::default());
+        let off: Uplinks =
+            serde_json::from_str(r#"{"lan":{"enabled":true,"keep_alive":false}}"#).unwrap();
+        assert!(!off.lan.keep_alive);
     }
 
     #[test]

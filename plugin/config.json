@@ -14,6 +14,7 @@
   "ice_genre": { "type": "string", "value": "" },
   "ice_url": { "type": "string", "value": "" },
   "ice_public": { "type": "boolean", "value": false },
+  "ice_keep_alive": { "type": "boolean", "value": true },
 
   "lan_enabled": { "type": "boolean", "value": false },
   "lan_port": { "type": "string", "value": "8000" },
@@ -22,6 +23,7 @@
   "lan_rate": { "type": "string", "value": "44100" },
   "lan_name": { "type": "string", "value": "Volumio" },
   "lan_max_listeners": { "type": "string", "value": "5" },
+  "lan_keep_alive": { "type": "boolean", "value": true },
 
   "rec_enabled": { "type": "boolean", "value": false },
   "rec_folder": { "type": "string", "value": "/data/INTERNAL/outcast/recordings" },

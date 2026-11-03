@@ -9,9 +9,9 @@ pub mod record;
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, RecvTimeoutError, TryRecvError};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use crate::feed::Event;
+use crate::feed::{Event, Segment};
 use crate::status::{self, Status};
 
 /// What every uplink worker is given.
@@ -78,6 +78,64 @@ pub fn next(ctl: &Receiver<Event>, pcm: &Receiver<Arc<Vec<u8>>>, wait: Duration)
 
 /// The time an encoder gets to write what it holds when its input closes.
 pub const GRACE: Duration = Duration::from_secs(5);
+
+/// A live ring that brings no bytes for this long is a paused player: the
+/// uplink that keeps its stream alive fills with silence from here on.
+pub const STILL: Duration = Duration::from_millis(300);
+
+/// The shape an uplink streams when the player has played nothing yet: two
+/// channels of 16-bit samples at the uplink's own rate, or 44.1 kHz.
+pub fn idle_segment(rate: u32) -> Segment {
+    Segment {
+        format: "s16le",
+        rate: if rate == 0 { 44100 } else { rate },
+        channels: 2,
+        frame_bytes: 4,
+        dsd_silence: false,
+    }
+}
+
+/// Silence at a shape, paced by the clock: as many zero frames as the time
+/// since the last call is worth, so an encoder fed from here runs at the
+/// stream's own pace while the player stands still.
+pub struct Silence {
+    rate: u32,
+    frame_bytes: usize,
+    last: Instant,
+    zeros: Vec<u8>,
+}
+
+impl Silence {
+    pub fn new(shape: &Segment) -> Self {
+        Self {
+            rate: shape.rate.max(1),
+            frame_bytes: shape.frame_bytes.max(1) as usize,
+            last: Instant::now(),
+            zeros: Vec::new(),
+        }
+    }
+
+    /// The zeros due since the last call, in whole frames, when at least
+    /// 20 ms of them are due; never more than a second's worth, so a thread
+    /// held up does not pour a backlog into the encoder.
+    pub fn due(&mut self) -> Option<&[u8]> {
+        let elapsed = self.last.elapsed().as_secs_f64();
+        let frames = (elapsed * f64::from(self.rate)) as usize;
+        if frames < self.rate as usize / 50 {
+            return None;
+        }
+        let frames = frames.min(self.rate as usize);
+        self.last += Duration::from_secs_f64(frames as f64 / f64::from(self.rate));
+        self.zeros.clear();
+        self.zeros.resize(frames * self.frame_bytes, 0);
+        Some(&self.zeros)
+    }
+}
+
+/// Whether two segments ask the same of an encoder.
+pub fn same_shape(a: &Segment, b: &Segment) -> bool {
+    a.format == b.format && a.rate == b.rate && a.channels == b.channels
+}
 
 /// A value fit for one header line: every run of line breaks is one space,
 /// so nothing a user typed can end the line and start another header.

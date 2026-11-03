@@ -79,6 +79,8 @@ pub struct Uplink {
     pub files: u64,
     /// The title it carries now.
     pub title: String,
+    /// The stream is silence of the uplink's making: the player stands still.
+    pub silence: bool,
 }
 
 pub fn now() -> u64 {

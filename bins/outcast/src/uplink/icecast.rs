@@ -19,7 +19,7 @@ use std::time::{Duration, Instant};
 use crate::config::Icecast;
 use crate::encoder::{Encoder, Output, Recipe};
 use crate::feed::{Event, Segment};
-use crate::uplink::{self, clean_line, Ctx, Next, GRACE};
+use crate::uplink::{self, clean_line, idle_segment, same_shape, Ctx, Next, Silence, GRACE, STILL};
 
 /// A write that makes no progress for this long means the peer is gone.
 const STALL: Duration = Duration::from_secs(8);
@@ -283,11 +283,85 @@ struct Connection {
     stream: TcpStream,
     encoder: Option<Encoder>,
     encoded: Option<Receiver<Arc<Vec<u8>>>>,
+    /// The shape the encoder was started for; a stream of the same shape
+    /// goes on through it without a seam.
+    shape: Option<Segment>,
     bytes: u64,
     /// Bytes the kernel may hold unsent before the peer counts as not taking them.
     threshold: u64,
     /// Since when the unsent bytes have stood above the threshold.
     stall_since: Option<Instant>,
+}
+
+/// What went wrong on the way to the server.
+enum Trouble {
+    /// The encoder child is gone; a new one is started.
+    Encoder(String),
+    /// The connection is lost; it is made again after the backoff.
+    Connection(String),
+}
+
+/// Bytes of the stream into the encoder, and what it made so far onto the socket.
+fn carry(c: &mut Connection, bytes: &[u8]) -> Result<(), Trouble> {
+    let Some(e) = c.encoder.as_mut() else {
+        return Ok(());
+    };
+    if let Err(err) = e.feed(bytes) {
+        return Err(Trouble::Encoder(err.to_string()));
+    }
+    if let Some(rx) = c.encoded.as_ref() {
+        match pump(&mut c.stream, rx, &mut c.bytes) {
+            Err(err)
+                if err.kind() == io::ErrorKind::WouldBlock
+                    || err.kind() == io::ErrorKind::TimedOut =>
+            {
+                return Err(Trouble::Connection("peer stalled".to_string()))
+            }
+            Err(err) => return Err(Trouble::Connection(err.to_string())),
+            Ok(()) => {}
+        }
+    }
+    if stalled(c) {
+        return Err(Trouble::Connection(format!(
+            "peer stalled: {} bytes not taken for {} s",
+            unsent(&c.stream),
+            STALL.as_secs()
+        )));
+    }
+    Ok(())
+}
+
+/// The encoder ended and what it still held written out; an error means the
+/// connection is gone.
+fn end_encoder(c: &mut Connection) -> io::Result<()> {
+    c.shape = None;
+    if let Some(e) = c.encoder.take() {
+        e.finish(GRACE);
+        if let Some(rx) = c.encoded.take() {
+            drain(&mut c.stream, &rx, &mut c.bytes)?;
+        }
+    }
+    Ok(())
+}
+
+/// The connection given up, the retry scheduled.
+fn lose(
+    conn: &mut Option<Connection>,
+    ctx: &Ctx,
+    reason: &str,
+    attempt: &mut u32,
+    next_try: &mut Instant,
+) {
+    ctx.log(&format!("connection lost: {reason}"));
+    ctx.state("waiting", Some(reason));
+    ctx.update(|u| u.reconnects += 1);
+    if let Some(mut c) = conn.take() {
+        if let Some(enc) = c.encoder.take() {
+            enc.kill();
+        }
+    }
+    *attempt += 1;
+    *next_try = Instant::now() + Duration::from_secs(BACKOFF_MAX.min(1u64 << (*attempt).min(6)));
 }
 
 /// Bytes written to the socket and not yet taken by the peer, as the kernel
@@ -358,15 +432,23 @@ pub fn run(cfg: Icecast, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u
     let mut attempt: u32 = 0;
     let mut next_try = Instant::now();
     let mut ended_at: Option<Instant> = None;
+    // The silence that keeps the mount alive while the player stands still.
+    let mut silence: Option<Silence> = None;
+    let mut last_pcm = Instant::now();
     ctx.state("idle", None);
     ctx.log(&format!(
-        "{}:{}{} as {}",
-        cfg.host, cfg.port, cfg.mount, content_type
+        "{}:{}{} as {}{}",
+        cfg.host,
+        cfg.port,
+        cfg.mount,
+        content_type,
+        if cfg.keep_alive { ", kept alive" } else { "" }
     ));
 
     loop {
-        // A stream is playing and there is no connection: one is tried when its time comes.
-        if segment.is_some() && conn.is_none() && Instant::now() >= next_try {
+        // A connection is wanted while a stream plays, or always where the
+        // mount is kept alive; one is tried when its time comes.
+        if (segment.is_some() || cfg.keep_alive) && conn.is_none() && Instant::now() >= next_try {
             ctx.state("connecting", None);
             match connect(&cfg, content_type) {
                 Ok(stream) => {
@@ -381,6 +463,7 @@ pub fn run(cfg: Icecast, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u
                         stream,
                         encoder: None,
                         encoded: None,
+                        shape: None,
                         bytes: 0,
                         threshold: stall_threshold(&cfg),
                         stall_since: None,
@@ -399,46 +482,56 @@ pub fn run(cfg: Icecast, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u
                 }
             }
         }
-        // Connected with a stream playing and no encoder: one is started.
-        if let (Some(c), Some(seg)) = (conn.as_mut(), segment.as_ref()) {
+        // Connected and no encoder: one for the stream's shape, or for the idle
+        // shape where the mount is kept alive and nothing plays.
+        if let Some(c) = conn.as_mut() {
             if c.encoder.is_none() {
-                let (tx, rx) = mpsc::sync_channel(ENCODED_QUEUE);
-                let recipe = Recipe {
-                    codec: cfg.codec,
-                    bitrate: cfg.bitrate,
-                    rate: cfg.rate,
-                    title: if cfg.codec.in_band_titles() {
-                        title.clone()
-                    } else {
-                        String::new()
-                    },
-                    output: Output::Pipe,
-                };
-                match Encoder::start(&ctx.evopeg, seg, &recipe, Some(tx), &ctx.id) {
-                    Ok(e) => {
-                        c.encoder = Some(e);
-                        c.encoded = Some(rx);
-                    }
-                    Err(e) => {
-                        ctx.state("error", Some(&format!("encoder: {e}")));
-                        ctx.log(&format!("encoder: {e}"));
-                        std::thread::sleep(Duration::from_secs(2));
-                    }
-                }
-                if !cfg.codec.in_band_titles() && !title.is_empty() && pushed != title {
-                    match push_title(&cfg, &title) {
-                        Ok(()) => {
-                            pushed = title.clone();
-                            ctx.update(|u| u.title = title.clone());
+                let shape = segment.or_else(|| cfg.keep_alive.then(|| idle_segment(cfg.rate)));
+                if let Some(shape) = shape {
+                    let (tx, rx) = mpsc::sync_channel(ENCODED_QUEUE);
+                    let recipe = Recipe {
+                        codec: cfg.codec,
+                        bitrate: cfg.bitrate,
+                        rate: cfg.rate,
+                        title: if cfg.codec.in_band_titles() {
+                            title.clone()
+                        } else {
+                            String::new()
+                        },
+                        output: Output::Pipe,
+                    };
+                    match Encoder::start(&ctx.evopeg, &shape, &recipe, Some(tx), &ctx.id) {
+                        Ok(e) => {
+                            c.encoder = Some(e);
+                            c.encoded = Some(rx);
+                            c.shape = Some(shape);
+                            if segment.is_none() && silence.is_none() {
+                                silence = Some(Silence::new(&shape));
+                                ctx.update(|u| u.silence = true);
+                            }
                         }
-                        Err(e) => ctx.log(&format!("title not taken: {e}")),
+                        Err(e) => {
+                            ctx.state("error", Some(&format!("encoder: {e}")));
+                            ctx.log(&format!("encoder: {e}"));
+                            std::thread::sleep(Duration::from_secs(2));
+                        }
+                    }
+                    if !cfg.codec.in_band_titles() && !title.is_empty() && pushed != title {
+                        match push_title(&cfg, &title) {
+                            Ok(()) => {
+                                pushed = title.clone();
+                                ctx.update(|u| u.title = title.clone());
+                            }
+                            Err(e) => ctx.log(&format!("title not taken: {e}")),
+                        }
                     }
                 }
             }
         }
-        // A stream that ended: the connection lingers for the next, then goes.
+        // A stream that ended, where the mount is not kept alive: the connection
+        // lingers for the next, then goes.
         if let Some(at) = ended_at {
-            if segment.is_none() && at.elapsed() > LINGER {
+            if !cfg.keep_alive && segment.is_none() && at.elapsed() > LINGER {
                 if let Some(c) = conn.take() {
                     ctx.log("stream ended; the connection closed");
                     drop(c);
@@ -450,20 +543,56 @@ pub fn run(cfg: Icecast, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u
 
         match uplink::next(&ctl, &pcm, Duration::from_millis(20)) {
             Next::Gone => break,
-            Next::Nothing => {}
             Next::Event(Event::Stop) => break,
+            Next::Nothing => {
+                // Nothing from the player: where the mount is kept alive and the
+                // player stands still, silence of the encoder's shape flows.
+                if !cfg.keep_alive {
+                    continue;
+                }
+                let still = segment.is_none() || last_pcm.elapsed() > STILL;
+                let Some(c) = conn.as_mut() else { continue };
+                let Some(shape) = c.shape else { continue };
+                if !still {
+                    continue;
+                }
+                if silence.is_none() {
+                    silence = Some(Silence::new(&shape));
+                    ctx.update(|u| u.silence = true);
+                }
+                let zeros = silence.as_mut().and_then(|s| s.due().map(<[u8]>::to_vec));
+                let Some(zeros) = zeros else { continue };
+                match carry(c, &zeros) {
+                    Ok(()) => {
+                        let bytes = c.bytes;
+                        ctx.update(|u| u.bytes = bytes);
+                    }
+                    Err(Trouble::Encoder(err)) => {
+                        ctx.log(&format!("encoder gone: {err}"));
+                        if let Some(enc) = c.encoder.take() {
+                            enc.kill();
+                        }
+                        c.encoded = None;
+                        c.shape = None;
+                    }
+                    Err(Trouble::Connection(reason)) => {
+                        lose(&mut conn, &ctx, &reason, &mut attempt, &mut next_try);
+                    }
+                }
+            }
             Next::Event(Event::Segment(seg)) => {
                 ended_at = None;
                 segment = Some(seg);
+                last_pcm = Instant::now();
+                if silence.take().is_some() {
+                    ctx.update(|u| u.silence = false);
+                }
                 if let Some(c) = conn.as_mut() {
-                    // A new shape on the same connection: a new encoder.
-                    if let Some(e) = c.encoder.take() {
-                        e.finish(GRACE);
-                        if let Some(rx) = c.encoded.take() {
-                            if drain(&mut c.stream, &rx, &mut c.bytes).is_err() {
-                                conn = None;
-                            }
-                        }
+                    // The same shape goes on through the encoder without a seam; a
+                    // new shape on the same connection is a new encoder.
+                    let same = c.shape.as_ref().is_some_and(|s| same_shape(s, &seg));
+                    if !same && end_encoder(c).is_err() {
+                        conn = None;
                     }
                 }
                 if conn.is_some() {
@@ -472,14 +601,19 @@ pub fn run(cfg: Icecast, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u
             }
             Next::Event(Event::End) => {
                 segment = None;
-                ended_at = Some(Instant::now());
-                if let Some(c) = conn.as_mut() {
-                    if let Some(e) = c.encoder.take() {
-                        e.finish(GRACE);
-                        if let Some(rx) = c.encoded.take() {
-                            if drain(&mut c.stream, &rx, &mut c.bytes).is_err() {
-                                conn = None;
-                            }
+                if cfg.keep_alive {
+                    // The encoder goes on, fed silence until the next stream.
+                    if let Some(c) = conn.as_ref() {
+                        if let (Some(shape), true) = (c.shape, silence.is_none()) {
+                            silence = Some(Silence::new(&shape));
+                            ctx.update(|u| u.silence = true);
+                        }
+                    }
+                } else {
+                    ended_at = Some(Instant::now());
+                    if let Some(c) = conn.as_mut() {
+                        if end_encoder(c).is_err() {
+                            conn = None;
                         }
                     }
                 }
@@ -489,13 +623,8 @@ pub fn run(cfg: Icecast, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u
                 match conn.as_mut() {
                     Some(c) if cfg.codec.in_band_titles() && segment.is_some() => {
                         // A new chain with the new title, on the same connection.
-                        if let Some(e) = c.encoder.take() {
-                            e.finish(GRACE);
-                            if let Some(rx) = c.encoded.take() {
-                                if drain(&mut c.stream, &rx, &mut c.bytes).is_err() {
-                                    conn = None;
-                                }
-                            }
+                        if end_encoder(c).is_err() {
+                            conn = None;
                         }
                         ctx.update(|u| u.title = title.clone());
                     }
@@ -512,50 +641,28 @@ pub fn run(cfg: Icecast, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u
                 }
             }
             Next::Pcm(piece) => {
-                let Some(c) = conn.as_mut() else { continue };
-                let Some(e) = c.encoder.as_mut() else {
-                    continue;
-                };
-                if let Err(err) = e.feed(&piece) {
-                    ctx.log(&format!("encoder gone: {err}"));
-                    if let Some(enc) = c.encoder.take() {
-                        enc.kill();
-                    }
-                    c.encoded = None;
-                    continue;
+                last_pcm = Instant::now();
+                if silence.take().is_some() {
+                    ctx.update(|u| u.silence = false);
                 }
-                if let Some(rx) = c.encoded.as_ref() {
-                    let trouble = match pump(&mut c.stream, rx, &mut c.bytes) {
-                        Err(err)
-                            if err.kind() == io::ErrorKind::WouldBlock
-                                || err.kind() == io::ErrorKind::TimedOut =>
-                        {
-                            Some("peer stalled".to_string())
-                        }
-                        Err(err) => Some(err.to_string()),
-                        Ok(()) if stalled(c) => Some(format!(
-                            "peer stalled: {} bytes not taken for {} s",
-                            unsent(&c.stream),
-                            STALL.as_secs()
-                        )),
-                        Ok(()) => None,
-                    };
-                    if let Some(reason) = trouble {
-                        ctx.log(&format!("connection lost: {reason}"));
-                        ctx.state("waiting", Some(&reason));
-                        ctx.update(|u| u.reconnects += 1);
+                let Some(c) = conn.as_mut() else { continue };
+                match carry(c, &piece) {
+                    Ok(()) => {
+                        let bytes = c.bytes;
+                        ctx.update(|u| u.bytes = bytes);
+                    }
+                    Err(Trouble::Encoder(err)) => {
+                        ctx.log(&format!("encoder gone: {err}"));
                         if let Some(enc) = c.encoder.take() {
                             enc.kill();
                         }
-                        conn = None;
-                        attempt += 1;
-                        next_try = Instant::now()
-                            + Duration::from_secs(BACKOFF_MAX.min(1u64 << attempt.min(6)));
-                        continue;
+                        c.encoded = None;
+                        c.shape = None;
+                    }
+                    Err(Trouble::Connection(reason)) => {
+                        lose(&mut conn, &ctx, &reason, &mut attempt, &mut next_try);
                     }
                 }
-                let bytes = c.bytes;
-                ctx.update(|u| u.bytes = bytes);
             }
         }
     }
@@ -606,6 +713,7 @@ mod tests {
             genre: String::new(),
             url: String::new(),
             public: false,
+            keep_alive: true,
         }
     }
 

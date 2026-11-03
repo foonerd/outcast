@@ -371,6 +371,7 @@ Outcast.prototype.getUIConfig = function () {
             setSelect(ice, 'ice_rate', c.get('ice_rate', '44100'));
             setValue(ice, 'ice_more', c.get('ice_more', false) === true);
             setValue(ice, 'ice_public', c.get('ice_public', false) === true);
+            setValue(ice, 'ice_keep_alive', c.get('ice_keep_alive', true) !== false);
 
             const lan = section('lan_section');
             setValue(lan, 'lan_enabled', c.get('lan_enabled', false) === true);
@@ -380,6 +381,7 @@ Outcast.prototype.getUIConfig = function () {
             setSelect(lan, 'lan_rate', c.get('lan_rate', '44100'));
             setValue(lan, 'lan_name', String(c.get('lan_name', 'Volumio')));
             setValue(lan, 'lan_max_listeners', String(c.get('lan_max_listeners', '5')));
+            setValue(lan, 'lan_keep_alive', c.get('lan_keep_alive', true) !== false);
 
             const rec = section('record_section');
             setValue(rec, 'rec_enabled', c.get('rec_enabled', false) === true);

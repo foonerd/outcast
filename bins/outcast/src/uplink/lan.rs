@@ -10,12 +10,12 @@ use std::io::{self, Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
 use std::sync::mpsc::{self, Receiver, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::config::{Codec, Lan};
 use crate::encoder::{Encoder, Output, Recipe};
 use crate::feed::{Event, Segment};
-use crate::uplink::{self, clean_line, Ctx, Next, GRACE};
+use crate::uplink::{self, clean_line, idle_segment, same_shape, Ctx, Next, Silence, GRACE, STILL};
 
 /// Bytes of audio between two metadata blocks, for a listener that asked.
 pub const METAINT: usize = 8192;
@@ -219,53 +219,120 @@ pub fn run(cfg: Lan, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u8>>>
     let mut segment: Option<Segment> = None;
     let mut encoder: Option<Encoder> = None;
     let mut encoded: Option<Receiver<Arc<Vec<u8>>>> = None;
+    // The shape the encoder runs at; a stream of the same shape goes on without a seam.
+    let mut shape: Option<Segment> = None;
     let mut title = String::new();
     let mut bytes: u64 = 0;
+    // The silence that keeps the stream going while the player stands still.
+    let mut silence: Option<Silence> = None;
+    let mut last_pcm = Instant::now();
 
     loop {
-        if let (Some(seg), None) = (segment.as_ref(), encoder.as_ref()) {
-            let (tx, rx) = mpsc::sync_channel(ENCODED_QUEUE);
-            let recipe = Recipe {
-                codec: cfg.codec,
-                bitrate: cfg.bitrate,
-                rate: cfg.rate,
-                title: if ogg { title.clone() } else { String::new() },
-                output: Output::Pipe,
-            };
-            match Encoder::start(&ctx.evopeg, seg, &recipe, Some(tx), &ctx.id) {
-                Ok(e) => {
-                    encoder = Some(e);
-                    encoded = Some(rx);
-                    ctx.state("streaming", None);
-                }
-                Err(e) => {
-                    ctx.state("error", Some(&format!("encoder: {e}")));
-                    ctx.log(&format!("encoder: {e}"));
-                    std::thread::sleep(Duration::from_secs(2));
+        // No encoder: one for the stream's shape, or for the idle shape where the
+        // stream is kept alive and nothing plays.
+        if encoder.is_none() {
+            if let Some(wanted) = segment.or_else(|| cfg.keep_alive.then(|| idle_segment(cfg.rate)))
+            {
+                let (tx, rx) = mpsc::sync_channel(ENCODED_QUEUE);
+                let recipe = Recipe {
+                    codec: cfg.codec,
+                    bitrate: cfg.bitrate,
+                    rate: cfg.rate,
+                    title: if ogg { title.clone() } else { String::new() },
+                    output: Output::Pipe,
+                };
+                match Encoder::start(&ctx.evopeg, &wanted, &recipe, Some(tx), &ctx.id) {
+                    Ok(e) => {
+                        encoder = Some(e);
+                        encoded = Some(rx);
+                        shape = Some(wanted);
+                        if segment.is_none() && silence.is_none() {
+                            silence = Some(Silence::new(&wanted));
+                            ctx.update(|u| u.silence = true);
+                        }
+                        ctx.state("streaming", None);
+                    }
+                    Err(e) => {
+                        ctx.state("error", Some(&format!("encoder: {e}")));
+                        ctx.log(&format!("encoder: {e}"));
+                        std::thread::sleep(Duration::from_secs(2));
+                    }
                 }
             }
         }
         match uplink::next(&ctl, &pcm, Duration::from_millis(20)) {
             Next::Gone | Next::Event(Event::Stop) => break,
-            Next::Nothing => {}
-            Next::Event(Event::Segment(seg)) => {
-                if let Some(e) = encoder.take() {
-                    e.finish(GRACE);
-                    if let Some(rx) = encoded.take() {
-                        drain(&rx, &mut pages, ogg, &shared, &mut bytes);
+            Next::Nothing => {
+                // Where the stream is kept alive and the player stands still,
+                // silence of the encoder's shape flows.
+                if !cfg.keep_alive {
+                    continue;
+                }
+                let still = segment.is_none() || last_pcm.elapsed() > STILL;
+                let (Some(e), Some(s)) = (encoder.as_mut(), shape) else {
+                    continue;
+                };
+                if !still {
+                    continue;
+                }
+                if silence.is_none() {
+                    silence = Some(Silence::new(&s));
+                    ctx.update(|u| u.silence = true);
+                }
+                let zeros = silence.as_mut().and_then(|z| z.due().map(<[u8]>::to_vec));
+                let Some(zeros) = zeros else { continue };
+                if let Err(err) = e.feed(&zeros) {
+                    ctx.log(&format!("encoder gone: {err}"));
+                    if let Some(enc) = encoder.take() {
+                        enc.kill();
                     }
+                    encoded = None;
+                    shape = None;
+                    continue;
+                }
+                if let Some(rx) = encoded.as_ref() {
+                    while let Ok(out) = rx.try_recv() {
+                        publish(&out, &mut pages, ogg, &shared, &mut bytes);
+                    }
+                }
+                let b = bytes;
+                ctx.update(|u| u.bytes = b);
+            }
+            Next::Event(Event::Segment(seg)) => {
+                last_pcm = Instant::now();
+                if silence.take().is_some() {
+                    ctx.update(|u| u.silence = false);
+                }
+                // The same shape goes on through the encoder without a seam.
+                let same = shape.as_ref().is_some_and(|s| same_shape(s, &seg));
+                if !same {
+                    if let Some(e) = encoder.take() {
+                        e.finish(GRACE);
+                        if let Some(rx) = encoded.take() {
+                            drain(&rx, &mut pages, ogg, &shared, &mut bytes);
+                        }
+                    }
+                    shape = None;
                 }
                 segment = Some(seg);
             }
             Next::Event(Event::End) => {
-                if let Some(e) = encoder.take() {
-                    e.finish(GRACE);
-                    if let Some(rx) = encoded.take() {
-                        drain(&rx, &mut pages, ogg, &shared, &mut bytes);
-                    }
-                }
                 segment = None;
-                ctx.state("listening", None);
+                if cfg.keep_alive {
+                    if let (Some(s), true) = (shape, silence.is_none()) {
+                        silence = Some(Silence::new(&s));
+                        ctx.update(|u| u.silence = true);
+                    }
+                } else {
+                    if let Some(e) = encoder.take() {
+                        e.finish(GRACE);
+                        if let Some(rx) = encoded.take() {
+                            drain(&rx, &mut pages, ogg, &shared, &mut bytes);
+                        }
+                    }
+                    shape = None;
+                    ctx.state("listening", None);
+                }
             }
             Next::Event(Event::Title(t)) => {
                 title = t.clone();
@@ -279,9 +346,14 @@ pub fn run(cfg: Lan, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u8>>>
                             drain(&rx, &mut pages, ogg, &shared, &mut bytes);
                         }
                     }
+                    shape = None;
                 }
             }
             Next::Pcm(piece) => {
+                last_pcm = Instant::now();
+                if silence.take().is_some() {
+                    ctx.update(|u| u.silence = false);
+                }
                 let Some(e) = encoder.as_mut() else { continue };
                 if let Err(err) = e.feed(&piece) {
                     ctx.log(&format!("encoder gone: {err}"));
@@ -289,6 +361,7 @@ pub fn run(cfg: Lan, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u8>>>
                         enc.kill();
                     }
                     encoded = None;
+                    shape = None;
                     continue;
                 }
                 if let Some(rx) = encoded.as_ref() {

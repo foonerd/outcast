@@ -12,7 +12,7 @@
       "onSave": { "type": "controller", "endpoint": "audio_interface/outcast", "method": "updateIcecast" },
       "saveButton": {
         "label": "TRANSLATE.OUTCAST.SAVE",
-        "data": ["ice_enabled", "ice_host", "ice_port", "ice_mount", "ice_user", "ice_password", "ice_codec", "ice_bitrate", "ice_rate", "ice_name", "ice_more", "ice_description", "ice_genre", "ice_url", "ice_public"]
+        "data": ["ice_enabled", "ice_host", "ice_port", "ice_mount", "ice_user", "ice_password", "ice_codec", "ice_bitrate", "ice_rate", "ice_name", "ice_keep_alive", "ice_more", "ice_description", "ice_genre", "ice_url", "ice_public"]
       },
       "content": [
         { "id": "ice_enabled", "element": "switch", "label": "TRANSLATE.OUTCAST.ICE_ENABLE", "doc": "TRANSLATE.OUTCAST.ICE_ENABLE_DESC", "value": false },
@@ -31,6 +31,7 @@
           "options": [ { "value": "44100", "label": "44.1 kHz" }, { "value": "48000", "label": "48 kHz" } ],
           "visibleIf": { "field": "ice_enabled", "value": true } },
         { "id": "ice_name", "element": "input", "label": "TRANSLATE.OUTCAST.STREAM_NAME", "doc": "TRANSLATE.OUTCAST.STREAM_NAME_DESC", "value": "Volumio", "visibleIf": { "field": "ice_enabled", "value": true } },
+        { "id": "ice_keep_alive", "element": "switch", "label": "TRANSLATE.OUTCAST.KEEP_ALIVE", "doc": "TRANSLATE.OUTCAST.ICE_KEEP_ALIVE_DESC", "value": true, "visibleIf": { "field": "ice_enabled", "value": true } },
         { "id": "ice_more", "element": "switch", "label": "TRANSLATE.OUTCAST.ICE_MORE", "doc": "TRANSLATE.OUTCAST.ICE_MORE_DESC", "value": false, "visibleIf": { "field": "ice_enabled", "value": true } },
         { "id": "ice_description", "element": "input", "label": "TRANSLATE.OUTCAST.ICE_DESCRIPTION", "doc": "TRANSLATE.OUTCAST.ICE_DESCRIPTION_DESC", "value": "", "visibleIf": { "field": "ice_more", "value": true } },
         { "id": "ice_genre", "element": "input", "label": "TRANSLATE.OUTCAST.ICE_GENRE", "doc": "TRANSLATE.OUTCAST.ICE_GENRE_DESC", "value": "", "visibleIf": { "field": "ice_more", "value": true } },
@@ -47,7 +48,7 @@
       "onSave": { "type": "controller", "endpoint": "audio_interface/outcast", "method": "updateLan" },
       "saveButton": {
         "label": "TRANSLATE.OUTCAST.SAVE",
-        "data": ["lan_enabled", "lan_port", "lan_codec", "lan_bitrate", "lan_rate", "lan_name", "lan_max_listeners"]
+        "data": ["lan_enabled", "lan_port", "lan_codec", "lan_bitrate", "lan_rate", "lan_name", "lan_max_listeners", "lan_keep_alive"]
       },
       "content": [
         { "id": "lan_enabled", "element": "switch", "label": "TRANSLATE.OUTCAST.LAN_ENABLE", "doc": "TRANSLATE.OUTCAST.LAN_ENABLE_DESC", "value": false },
@@ -62,7 +63,8 @@
           "options": [ { "value": "44100", "label": "44.1 kHz" }, { "value": "48000", "label": "48 kHz" }, { "value": "0", "label": "TRANSLATE.OUTCAST.RATE_SOURCE" } ],
           "visibleIf": { "field": "lan_enabled", "value": true } },
         { "id": "lan_name", "element": "input", "label": "TRANSLATE.OUTCAST.STREAM_NAME", "doc": "TRANSLATE.OUTCAST.STREAM_NAME_DESC", "value": "Volumio", "visibleIf": { "field": "lan_enabled", "value": true } },
-        { "id": "lan_max_listeners", "element": "input", "label": "TRANSLATE.OUTCAST.LAN_MAX", "doc": "TRANSLATE.OUTCAST.LAN_MAX_DESC", "value": "5", "visibleIf": { "field": "lan_enabled", "value": true } }
+        { "id": "lan_max_listeners", "element": "input", "label": "TRANSLATE.OUTCAST.LAN_MAX", "doc": "TRANSLATE.OUTCAST.LAN_MAX_DESC", "value": "5", "visibleIf": { "field": "lan_enabled", "value": true } },
+        { "id": "lan_keep_alive", "element": "switch", "label": "TRANSLATE.OUTCAST.KEEP_ALIVE", "doc": "TRANSLATE.OUTCAST.LAN_KEEP_ALIVE_DESC", "value": true, "visibleIf": { "field": "lan_enabled", "value": true } }
       ]
     },
     {

@@ -116,6 +116,7 @@ function applyIcecast(data, set) {
     set('ice_bitrate', sel(data.ice_bitrate));
     set('ice_rate', sel(data.ice_rate));
     set('ice_name', String(data.ice_name || '').trim());
+    set('ice_keep_alive', data.ice_keep_alive !== false);
     set('ice_more', data.ice_more === true);
     if (data.ice_more === true) {
         set('ice_description', String(data.ice_description || '').trim());
@@ -135,6 +136,7 @@ function applyLan(data, set) {
     set('lan_rate', sel(data.lan_rate));
     set('lan_name', String(data.lan_name || '').trim());
     set('lan_max_listeners', String(data.lan_max_listeners).trim());
+    set('lan_keep_alive', data.lan_keep_alive !== false);
 }
 
 function applyRecord(data, set) {
@@ -169,7 +171,8 @@ function uplinksFrom(get) {
             description: bool('ice_more') ? str('ice_description', '') : '',
             genre: bool('ice_more') ? str('ice_genre', '') : '',
             url: bool('ice_more') ? str('ice_url', '') : '',
-            public: bool('ice_more') && bool('ice_public')
+            public: bool('ice_more') && bool('ice_public'),
+            keep_alive: get('ice_keep_alive', true) !== false
         },
         lan: {
             enabled: bool('lan_enabled'),
@@ -178,7 +181,8 @@ function uplinksFrom(get) {
             bitrate: num(get('lan_bitrate', '192'), 192),
             rate: num(get('lan_rate', '44100'), 44100),
             name: str('lan_name', 'Volumio'),
-            max_listeners: num(get('lan_max_listeners', '5'), 5)
+            max_listeners: num(get('lan_max_listeners', '5'), 5),
+            keep_alive: get('lan_keep_alive', true) !== false
         },
         record: {
             enabled: bool('rec_enabled'),
@@ -221,6 +225,7 @@ function summarize(status, audioPath, audioPathError, t) {
             const name = names[u.kind] ? t(names[u.kind]) : u.id;
             let detail = u.detail || '';
             if (u.kind === 'lan') detail += ', ' + u.listeners + ' listening';
+            if (u.silence) detail += ', silence';
             if (u.kind === 'record' && u.files) detail += ', ' + u.files + ' files';
             if (u.title) detail += ', ' + u.title;
             if (u.last_error && (u.state === 'error' || u.state === 'waiting')) {

@@ -78,8 +78,10 @@ test('a save keeps the page values, and the file the core reads follows', () => 
     assert.equal(kept.rec_folder, '/data/INTERNAL/outcast/rec');
     const get = (k, d) => (k in kept ? kept[k] : d);
     const u = h.uplinksFrom(get);
-    assert.deepEqual(u.icecast, { enabled: true, host: 'ice.example.com', port: 8000, mount: '/live.opus', user: 'source', password: 'pw', codec: 'opus', bitrate: 128, rate: 48000, name: 'Living room', description: 'd', genre: 'g', url: 'u', public: true });
-    assert.deepEqual(u.lan, { enabled: true, port: 8001, codec: 'flac', bitrate: 320, rate: 0, name: 'LAN', max_listeners: 3 });
+    assert.deepEqual(u.icecast, { enabled: true, host: 'ice.example.com', port: 8000, mount: '/live.opus', user: 'source', password: 'pw', codec: 'opus', bitrate: 128, rate: 48000, name: 'Living room', description: 'd', genre: 'g', url: 'u', public: true, keep_alive: true });
+    assert.deepEqual(u.lan, { enabled: true, port: 8001, codec: 'flac', bitrate: 320, rate: 0, name: 'LAN', max_listeners: 3, keep_alive: true });
+    h.applyLan({ lan_enabled: true, lan_port: '8001', lan_codec: 'mp3', lan_bitrate: '192', lan_rate: '44100', lan_name: 'LAN', lan_max_listeners: '3', lan_keep_alive: false }, set);
+    assert.equal(h.uplinksFrom(get).lan.keep_alive, false);
     assert.deepEqual(u.record, { enabled: true, folder: '/data/INTERNAL/outcast/rec', codec: 'wav', bitrate: 192, rate: 48000, split: 'stream', title_in_name: false });
     // Turned off, the extra fields are not carried.
     h.applyIcecast({ ice_enabled: true, ice_host: 'h', ice_port: '1', ice_mount: '/m', ice_password: 'p', ice_codec: 'mp3', ice_bitrate: '192', ice_rate: '44100', ice_name: 'n', ice_more: false }, set);
@@ -87,6 +89,8 @@ test('a save keeps the page values, and the file the core reads follows', () => 
     assert.equal(h.uplinksFrom(get).icecast.public, false);
     const defaults = h.uplinksFrom((k, d) => d);
     assert.equal(defaults.icecast.enabled, false);
+    assert.equal(defaults.icecast.keep_alive, true);
+    assert.equal(defaults.lan.keep_alive, true);
     assert.equal(defaults.record.codec, 'flac');
     assert.equal(defaults.record.rate, 0);
 });
@@ -98,13 +102,13 @@ test('the status summary says the core, the stream, the tap and each uplink', ()
     assert.deepEqual(h.summarize(playing, 'ready', '', t),
         ['STATUS_PLAYING {"rate":48000,"channels":2,"format":"S32_LE","segments":3,"mb":"3.0"}', 'STATUS_TAP_READY', 'STATUS_NO_UPLINKS']);
     const busy = { ring: null, segments: 0, bytes: 0, uplinks: [
-        { id: 'icecast', kind: 'icecast', state: 'connected', detail: 'ice:8000/m', title: 'A - B', last_error: '' },
+        { id: 'icecast', kind: 'icecast', state: 'connected', detail: 'ice:8000/m', title: 'A - B', last_error: '', silence: true },
         { id: 'lan', kind: 'lan', state: 'listening', detail: 'port 8000', listeners: 2, last_error: '' },
         { id: 'record', kind: 'record', state: 'error', detail: '/x', last_error: 'no space', files: 0 }
     ] };
     assert.deepEqual(h.summarize(busy, 'lost', '', t), [
         'STATUS_IDLE', 'STATUS_TAP_LOST',
-        'STATUS_UPLINK {"name":"UPLINK_ICECAST","state":"connected","detail":"ice:8000/m, A - B"}',
+        'STATUS_UPLINK {"name":"UPLINK_ICECAST","state":"connected","detail":"ice:8000/m, silence, A - B"}',
         'STATUS_UPLINK {"name":"UPLINK_LAN","state":"listening","detail":"port 8000, 2 listening"}',
         'STATUS_UPLINK_ERROR {"name":"UPLINK_RECORD","state":"error","error":"no space"}'
     ]);
