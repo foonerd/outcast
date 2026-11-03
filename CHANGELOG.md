@@ -2,6 +2,12 @@
 
 All notable changes to Outcast Uplink. The format follows Keep a Changelog; the versions follow Semantic Versioning.
 
+## [0.1.1] - 2026-11-03
+
+### Changed
+
+- evotap 0.1.1, built from Glass 0.11.10: the tap's measuring path now takes the meters' lead ahead of the sound from the demand file; the audio ring, the sample layouts, the readers and the contract are as they were. Nothing of the uplinks changed.
+
 ## [0.1.0] - 2026-11-03
 
 ### Added
