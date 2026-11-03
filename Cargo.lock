@@ -197,7 +197,7 @@ dependencies = [
 
 [[package]]
 name = "outcast"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "libc",
  "serde",
@@ -208,7 +208,7 @@ dependencies = [
 
 [[package]]
 name = "outcast-lite"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "libc",
  "serde",
@@ -384,7 +384,7 @@ dependencies = [
 
 [[package]]
 name = "stream"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "rubato",
  "tap",

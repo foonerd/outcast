@@ -2,6 +2,16 @@
 
 All notable changes to Outcast Uplink. The format follows Keep a Changelog; the versions follow Semantic Versioning.
 
+## [0.1.5] - 2026-11-03
+
+### Added
+
+- outcast-lite, beside the plugin zip on every release: one small static binary per architecture that reads the tap's ring and serves the player's sound as it is, PCM over a WebSocket, no encoder, for a page or a remote that wants to hear the player where the person is (Glass's Anymote first). A text frame says what the stream is, binary frames of at most 20 ms carry it; a rate cap sends a hi-res stream down at 16-bit for a weak link; the port is said on standard output and the process leaves by itself when nobody has listened for a while. Signed like every evo component, with `docs/outcast-lite.md` for whoever takes it.
+
+### Changed
+
+- The segment, the feed and the conformer are a crate of their own (`crates/stream`), shared by the core and the lite; the core is as it was.
+
 ## [0.1.4] - 2026-11-03
 
 ### Changed
