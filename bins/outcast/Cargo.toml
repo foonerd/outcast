@@ -9,7 +9,7 @@ publish.workspace = true
 [dependencies]
 # The audio ring's reader and the sample layouts, from the Glass release that
 # built the evotap the plugin ships (components/evotap.lock).
-tap = { git = "https://github.com/foonerd/glass", tag = "v0.11.0" }
+tap = { git = "https://github.com/foonerd/glass", tag = "v0.11.10" }
 libc = "0.2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

@@ -4,5 +4,5 @@
 # anything of it is packed. The core's `tap` crate is pinned to the Glass tag this
 # release was built from (bins/outcast/Cargo.toml).
 NAME=evotap
-VERSION=0.1.0
+VERSION=0.1.1
 REPOSITORY=foonerd/evotap
