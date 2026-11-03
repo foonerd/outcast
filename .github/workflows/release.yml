@@ -74,10 +74,29 @@ jobs:
           for module in kew v-conf; do
             unzip -l dist/outcast-*.zip | grep -q " node_modules/$module/package.json\$" || { echo "no module $module in the zip" >&2; exit 1; }
           done
+      - run: scripts/package-lite.sh
+      - name: The lite component for every architecture, and the x64 one runs and says its version
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)
+          for arch in arm armv7 armv8 x64; do
+            t="dist/outcast-lite-$version-$arch.tar.gz"
+            [ -f "$t" ] || { echo "no $t" >&2; exit 1; }
+            for f in bin/outcast-lite README.md LICENSE; do
+              tar -tzf "$t" | grep -q "^outcast-lite-$version-$arch/$f\$" || { echo "no $f in $t" >&2; exit 1; }
+            done
+          done
+          tar -xzf "dist/outcast-lite-$version-x64.tar.gz" -C "$RUNNER_TEMP"
+          said=$("$RUNNER_TEMP/outcast-lite-$version-x64/bin/outcast-lite" --version)
+          [ "$said" = "outcast-lite $version" ] || { echo "the lite says '$said'" >&2; exit 1; }
       - uses: actions/upload-artifact@v7
         with:
           name: release-plugin
           path: dist/outcast-*.zip
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-lite
+          path: dist/outcast-lite-*.tar.gz
           if-no-files-found: error
 
   publish:
@@ -93,8 +112,12 @@ jobs:
         with:
           name: release-plugin
           path: dist
-      # The zip carries MANIFEST, every file's digest, and its Ed25519 signature; beside
-      # it SHA256SUMS and its signature. The private key comes from the repository's
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-lite
+          path: dist
+      # The zip and every lite archive carry MANIFEST, every file's digest, and its
+      # Ed25519 signature; beside them SHA256SUMS and its signature. The private key comes from the repository's
       # secret RELEASE_SIGNING_KEY (the evo release key as PEM); the public key the plugin
       # carries (keys/release-signing.pub) checks every signature before anything is
       # published. A release is never published unsigned.
@@ -113,6 +136,7 @@ jobs:
           {
             scripts/release-notes.sh "$version"
             printf '\nShips evotap %s and evopeg %s.\n\n' "$(sed -n 's/^VERSION=//p' components/evotap.lock)" "$(sed -n 's/^VERSION=//p' components/evopeg.lock)"
+            printf 'Beside the zip, outcast-lite %s for Glass and any other consumer, one archive per architecture, signed the same way; docs/outcast-lite.md says what it is and how it is used.\n\n' "$version"
             cat .github/release-footer.md
           } > dist/notes.md
       # Published as a pre-release: no player is offered it but one asked for it by
@@ -123,4 +147,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file dist/notes.md --prerelease \
-            dist/outcast-*.zip dist/SHA256SUMS dist/SHA256SUMS.sig
+            dist/outcast-*.zip dist/outcast-lite-*.tar.gz dist/SHA256SUMS dist/SHA256SUMS.sig

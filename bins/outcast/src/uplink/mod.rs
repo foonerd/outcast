@@ -11,8 +11,8 @@ use std::sync::mpsc::{Receiver, RecvTimeoutError, TryRecvError};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use crate::feed::{Event, Segment};
 use crate::status::{self, Status};
+use stream::feed::{Event, Segment};
 
 /// What every uplink worker is given.
 #[derive(Clone)]

@@ -17,10 +17,10 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::config::{Codec, Icecast, Protocol};
-use crate::conform::Conformer;
 use crate::encoder::{Encoder, Output, Recipe};
-use crate::feed::{Event, Segment};
 use crate::uplink::{self, clean_line, Ctx, Next, Silence, GRACE, STILL};
+use stream::conform::Conformer;
+use stream::feed::{Event, Segment};
 
 /// A write that makes no progress for this long means the peer is gone.
 const STALL: Duration = Duration::from_secs(8);

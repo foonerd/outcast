@@ -1,0 +1,17 @@
+[package]
+name = "stream"
+description = "What flows from the tap's ring to an encoder or a wire: the segment's shape, the conversion to it, and the conformer that holds a chosen rate and channels"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+# The audio ring's shapes and sample layouts, from the Glass release that built the
+# evotap the plugin ships (components/evotap.lock).
+tap = { git = "https://github.com/foonerd/glass", tag = "v0.11.10" }
+# The resampler behind a held rate: a windowed sinc, pure Rust.
+rubato = "5.0.1"
+
+[lints]
+workspace = true

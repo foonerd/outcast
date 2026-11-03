@@ -13,9 +13,9 @@ use std::time::{Duration, Instant};
 use tap::audio::Shape;
 
 use crate::config::Uplinks;
-use crate::feed::{self, Conversion, Event, Segment};
 use crate::status::{self, Status};
 use crate::uplink::{self, Ctx};
+use stream::feed::{self, Conversion, Event, Segment};
 
 /// Pieces of the stream an uplink may hold unread before it loses the next.
 const QUEUE: usize = 64;

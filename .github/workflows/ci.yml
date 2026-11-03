@@ -69,8 +69,27 @@ jobs:
           for module in kew v-conf; do
             unzip -l dist/outcast-*.zip | grep -q " node_modules/$module/package.json\$" || { echo "no module $module in the zip" >&2; exit 1; }
           done
+      - run: scripts/package-lite.sh
+      - name: The lite component for every architecture, and the x64 one runs and says its version
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)
+          for arch in arm armv7 armv8 x64; do
+            t="dist/outcast-lite-$version-$arch.tar.gz"
+            [ -f "$t" ] || { echo "no $t" >&2; exit 1; }
+            for f in bin/outcast-lite README.md LICENSE; do
+              tar -tzf "$t" | grep -q "^outcast-lite-$version-$arch/$f\$" || { echo "no $f in $t" >&2; exit 1; }
+            done
+          done
+          tar -xzf "dist/outcast-lite-$version-x64.tar.gz" -C "$RUNNER_TEMP"
+          said=$("$RUNNER_TEMP/outcast-lite-$version-x64/bin/outcast-lite" --version)
+          [ "$said" = "outcast-lite $version" ] || { echo "the lite says '$said'" >&2; exit 1; }
       - uses: actions/upload-artifact@v7
         with:
           name: outcast-plugin
           path: dist/outcast-*.zip
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        with:
+          name: outcast-lite
+          path: dist/outcast-lite-*.tar.gz
           if-no-files-found: error

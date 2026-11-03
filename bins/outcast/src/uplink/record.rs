@@ -9,10 +9,10 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::config::{Record, Split};
-use crate::conform::Conformer;
 use crate::encoder::{Encoder, Output, Recipe};
-use crate::feed::{Event, Segment};
 use crate::uplink::{self, Ctx, Next, GRACE};
+use stream::conform::Conformer;
+use stream::feed::{Event, Segment};
 
 /// A file name's part made of a title: no path separators, no control
 /// characters, no leading dots, not longer than a file system likes.

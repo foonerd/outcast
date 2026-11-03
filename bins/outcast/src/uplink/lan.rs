@@ -13,10 +13,10 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use crate::config::{Codec, Lan};
-use crate::conform::Conformer;
 use crate::encoder::{Encoder, Output, Recipe};
-use crate::feed::{Event, Segment};
 use crate::uplink::{self, clean_line, Ctx, Next, Silence, GRACE, STILL};
+use stream::conform::Conformer;
+use stream::feed::{Event, Segment};
 
 /// Bytes of audio between two metadata blocks, for a listener that asked.
 pub const METAINT: usize = 8192;

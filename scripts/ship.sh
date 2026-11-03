@@ -20,16 +20,18 @@ export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=aarch64-linux-gnu-gcc
 ship() {
   local triple=$1 arch=$2
   echo "ship: $arch ($triple)"
-  cargo build --release --locked --target "$triple" -p outcast
+  cargo build --release --locked --target "$triple" -p outcast -p outcast-lite
   install -D -m 755 "target/$triple/release/outcast" "bin/$arch/outcast"
+  install -D -m 755 "target/$triple/release/outcast-lite" "bin/$arch/outcast-lite"
 }
 ship x86_64-unknown-linux-musl x64
 ship armv7-unknown-linux-musleabihf armv7
 ship aarch64-unknown-linux-musl armv8
 install -D -m 755 bin/armv7/outcast bin/arm/outcast
+install -D -m 755 bin/armv7/outcast-lite bin/arm/outcast-lite
 
 echo "ship: static"
-for bin in bin/*/outcast; do
+for bin in bin/*/outcast bin/*/outcast-lite; do
   # x86-64 musl links as a static PIE; file words that differently.
   file "$bin" | grep -qE 'statically linked|static-pie linked' || { echo "ship: $bin is not statically linked" >&2; exit 1; }
   if readelf -W --dyn-syms "$bin" 2>/dev/null | grep -q 'GLIBC_'; then
@@ -37,9 +39,13 @@ for bin in bin/*/outcast; do
   fi
 done
 echo "ship: armv7"
-readelf -A bin/armv7/outcast | grep -q 'Tag_CPU_arch: v7' || { echo "ship: bin/armv7/outcast is not ARMv7 code" >&2; exit 1; }
+for bin in bin/armv7/outcast bin/armv7/outcast-lite; do
+  readelf -A "$bin" | grep -q 'Tag_CPU_arch: v7' || { echo "ship: $bin is not ARMv7 code" >&2; exit 1; }
+done
 echo "ship: version"
-said=$(bin/x64/outcast --version)
 version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)
-[ "$said" = "outcast $version" ] || { echo "ship: the core says '$said', the workspace is $version" >&2; exit 1; }
-file bin/arm/outcast bin/armv7/outcast bin/armv8/outcast bin/x64/outcast
+for name in outcast outcast-lite; do
+  said=$("bin/x64/$name" --version)
+  [ "$said" = "$name $version" ] || { echo "ship: $name says '$said', the workspace is $version" >&2; exit 1; }
+done
+file bin/arm/outcast bin/armv7/outcast bin/armv8/outcast bin/x64/outcast bin/x64/outcast-lite

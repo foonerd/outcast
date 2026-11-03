@@ -13,7 +13,7 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use crate::config::Codec;
-use crate::feed::Segment;
+use stream::feed::Segment;
 
 /// Bytes read from the child's output in one go.
 const READ: usize = 1 << 14;
