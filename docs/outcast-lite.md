@@ -23,7 +23,7 @@ The page hears the player a little behind the room: the ring, the 20 ms frames a
 
 ## Getting it
 
-Every [Outcast release](https://github.com/foonerd/outcast/releases) from 0.1.8 carries two families of archives beside the plugin zip, each signed the same way:
+Every [Outcast release](https://github.com/foonerd/outcast/releases) from 0.1.5 carries two families of archives beside the plugin zip, each signed the same way:
 
 | Archive | Side | What is in it | Platforms |
 | --- | --- | --- | --- |
@@ -208,7 +208,7 @@ The wire's client side is a crate of the outcast workspace, `lite-client`, pure 
 
 ```toml
 [dependencies]
-lite-client = { git = "https://github.com/foonerd/outcast", tag = "v0.1.6" }
+lite-client = { git = "https://github.com/foonerd/outcast", tag = "v0.1.5" }
 ```
 
 ```rust
