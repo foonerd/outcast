@@ -20,7 +20,7 @@ export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=aarch64-linux-gnu-gcc
 ship() {
   local triple=$1 arch=$2
   echo "ship: $arch ($triple)"
-  cargo build --release --locked --target "$triple" -p outcast -p outcast-lite
+  cargo build --release --locked --target "$triple" -p outcast -p outcast-lite -p lite-client --bins --examples
   install -D -m 755 "target/$triple/release/outcast" "bin/$arch/outcast"
   install -D -m 755 "target/$triple/release/outcast-lite" "bin/$arch/outcast-lite"
 }

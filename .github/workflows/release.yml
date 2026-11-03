@@ -75,18 +75,33 @@ jobs:
             [ -f "$f" ] || { echo "no reference client for $abi" >&2; exit 1; }
             file "$f" | grep -q ELF || { echo "$f is not an ELF" >&2; exit 1; }
           done
-      - run: scripts/package-android.sh
-      - name: The Android archive carries the three builds, the crate, the document and the licence
-        run: |
-          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)
-          t="dist/outcast-lite-client-$version-android.tar.gz"
-          for f in arm64-v8a/lite-client armeabi-v7a/lite-client x86_64/lite-client crate/Cargo.toml crate/src/lib.rs crate/examples/lite-client.rs README.md LICENSE; do
-            tar -tzf "$t" | grep -q "^outcast-lite-client-$version-android/$f\$" || { echo "no $f in $t" >&2; exit 1; }
-          done
+      - run: scripts/package-client.sh android
       - uses: actions/upload-artifact@v7
         with:
-          name: release-android
+          name: release-client-android
           path: dist/outcast-lite-client-*-android.tar.gz
+          if-no-files-found: error
+
+  windows:
+    # The lite's reference client for Windows remotes, cross-built with MinGW-w64 in the
+    # builder image, the way Glass builds its Windows display.
+    name: lite-client for Windows
+    runs-on: ubuntu-24.04
+    container: ghcr.io/foonerd/glass-builder@sha256:1d6d085cbf23ff53628402be14e87a5ffe996416894684e596956143365800da
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup toolchain install && rustup show active-toolchain && rustup target add x86_64-pc-windows-gnu
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: windows
+          cache-bin: false
+          save-if: false
+      - run: scripts/ship-client-windows.sh
+      - run: scripts/package-client.sh windows-x64
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-client-windows
+          path: dist/outcast-lite-client-*-windows-*.tar.gz
           if-no-files-found: error
 
   ship:
@@ -119,6 +134,7 @@ jobs:
             unzip -l dist/outcast-*.zip | grep -q " node_modules/$module/package.json\$" || { echo "no module $module in the zip" >&2; exit 1; }
           done
       - run: scripts/package-lite.sh
+      - run: scripts/package-client.sh linux-x64 linux-armv7 linux-armv8
       - name: The lite component for every architecture, and the x64 one runs and says its version
         run: |
           version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)
@@ -140,13 +156,18 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: release-lite
-          path: dist/outcast-lite-*.tar.gz
+          path: dist/outcast-lite-[0-9]*.tar.gz
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-client-linux
+          path: dist/outcast-lite-client-*-linux-*.tar.gz
           if-no-files-found: error
 
   publish:
     name: sign, publish
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [check, shell, ship, android]
+    needs: [check, shell, ship, android, windows]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -162,7 +183,15 @@ jobs:
           path: dist
       - uses: actions/download-artifact@v8
         with:
-          name: release-android
+          name: release-client-linux
+          path: dist
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-client-windows
+          path: dist
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-client-android
           path: dist
       # The zip and every lite archive carry MANIFEST, every file's digest, and its
       # Ed25519 signature; beside them SHA256SUMS and its signature. The private key comes from the repository's
@@ -184,7 +213,7 @@ jobs:
           {
             scripts/release-notes.sh "$version"
             printf '\nShips evotap %s and evopeg %s.\n\n' "$(sed -n 's/^VERSION=//p' components/evotap.lock)" "$(sed -n 's/^VERSION=//p' components/evopeg.lock)"
-            printf 'Beside the zip, outcast-lite %s for Glass and any other consumer, one archive per architecture, and the lite client built for Android (arm64-v8a, armeabi-v7a, x86_64) with the crate a remote links; all signed the same way; docs/outcast-lite.md says what it is and how it is used.\n\n' "$version"
+            printf 'Beside the zip, outcast-lite %s for Glass and any other consumer, one archive per architecture, and the lite client for every remote platform (Linux x64, armv7 and armv8, Windows x64, Android) with the crate a remote links; all signed the same way; docs/outcast-lite.md says what it is and how it is used.\n\n' "$version"
             cat .github/release-footer.md
           } > dist/notes.md
       # Published as a pre-release: no player is offered it but one asked for it by

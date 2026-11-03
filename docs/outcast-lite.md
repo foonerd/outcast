@@ -23,16 +23,16 @@ The page hears the player a little behind the room: the ring, the 20 ms frames a
 
 ## Getting it
 
-Every [Outcast release](https://github.com/foonerd/outcast/releases) from 0.1.5 carries, beside the plugin zip, one archive per Volumio architecture:
+Every [Outcast release](https://github.com/foonerd/outcast/releases) from 0.1.8 carries two families of archives beside the plugin zip, each signed the same way:
 
-| Archive | For |
-| --- | --- |
-| `outcast-lite-<version>-arm.tar.gz` | Volumio's universal Raspberry Pi image, which calls itself `arm`; ARMv7 code, so not a Pi Zero or Pi 1 |
-| `outcast-lite-<version>-armv7.tar.gz` | 32-bit ARM players |
-| `outcast-lite-<version>-armv8.tar.gz` | 64-bit ARM players |
-| `outcast-lite-<version>-x64.tar.gz` | x86-64 players |
+| Archive | Side | What is in it | Platforms |
+| --- | --- | --- | --- |
+| `outcast-lite-<version>-<arch>.tar.gz` | The player: the lite itself, `bin/outcast-lite` | The server of the wire, this document, the licence, the reference client's source | `arm` (Volumio's universal Raspberry Pi image, ARMv7 code), `armv7`, `armv8`, `x64` |
+| `outcast-lite-client-<version>-<platform>.tar.gz` | A remote: the client of the wire | The reference client built for the platform, the `lite-client` crate's source for a remote that links it, this document, the licence | `linux-x64`, `linux-armv7`, `linux-armv8`, `windows-x64`, `android` (arm64-v8a, armeabi-v7a and x86_64 in one archive) |
 
-Each unpacks to `outcast-lite-<version>-<arch>/` with `bin/outcast-lite`, this document as `README.md`, and `LICENSE`, and carries at its root `MANIFEST`, every file's SHA-256, with `MANIFEST.sig`, its Ed25519 signature. Beside the assets sit `SHA256SUMS` and `SHA256SUMS.sig`. The key is the evo release key, the one Glass and Outcast carry as `keys/release-signing.pub`:
+The player takes the first family; a remote, or whoever writes one, takes the second. The reference client in the second runs as it is (`bin/lite-client`, `bin/lite-client.exe`, or `<abi>/lite-client` on Android) and plays nothing by itself: it writes the stream to standard output, for a player or for a remote's own audio code to take.
+
+Each archive unpacks to a directory of its own name and carries at its root `MANIFEST`, every file's SHA-256, with `MANIFEST.sig`, its Ed25519 signature. Beside the assets sit `SHA256SUMS` and `SHA256SUMS.sig`. The key is the evo release key, the one Glass and Outcast carry as `keys/release-signing.pub`:
 
 ```sh
 openssl pkeyutl -verify -pubin -inkey release-signing.pub -rawin -in SHA256SUMS -sigfile SHA256SUMS.sig
