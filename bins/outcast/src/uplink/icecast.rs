@@ -230,6 +230,14 @@ fn connect(cfg: &Icecast, content_type: &str) -> Result<TcpStream, Refusal> {
         .write_all(source_request(cfg, content_type, env!("CARGO_PKG_VERSION")).as_bytes())
         .map_err(|e| Refusal::Other(e.to_string()))?;
     let text = read_response(&mut stream).map_err(|e| Refusal::Other(e.to_string()))?;
+    // A server that takes the connection and never answers (frozen, or a proxy
+    // with nothing behind it) is a refusal with a reason of its own.
+    if text.trim().is_empty() {
+        return Err(Refusal::Other(format!(
+            "no answer from the server within {} s",
+            CONNECT.as_secs()
+        )));
+    }
     let (code, reason) = parse_response(&text);
     match code {
         200 => {
