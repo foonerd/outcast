@@ -100,6 +100,9 @@ pub struct Icecast {
     /// The sample rate sent, 0 for the stream's own.
     #[serde(default = "Icecast::default_rate")]
     pub rate: u32,
+    /// The channels sent, 0 for the stream's own.
+    #[serde(default)]
+    pub channels: u32,
     #[serde(default = "Icecast::default_name")]
     pub name: String,
     #[serde(default)]
@@ -157,6 +160,7 @@ impl Default for Icecast {
             codec: Self::default_codec(),
             bitrate: Self::default_bitrate(),
             rate: Self::default_rate(),
+            channels: 0,
             name: Self::default_name(),
             description: String::new(),
             genre: String::new(),
@@ -180,6 +184,9 @@ pub struct Lan {
     pub bitrate: u32,
     #[serde(default = "Lan::default_rate")]
     pub rate: u32,
+    /// The channels sent, 0 for the stream's own.
+    #[serde(default)]
+    pub channels: u32,
     #[serde(default = "Lan::default_name")]
     pub name: String,
     #[serde(default = "Lan::default_max_listeners")]
@@ -218,6 +225,7 @@ impl Default for Lan {
             codec: Self::default_codec(),
             bitrate: Self::default_bitrate(),
             rate: Self::default_rate(),
+            channels: 0,
             name: Self::default_name(),
             max_listeners: Self::default_max_listeners(),
             keep_alive: true,
@@ -249,6 +257,9 @@ pub struct Record {
     /// 0: the stream's own rate, nothing resampled.
     #[serde(default)]
     pub rate: u32,
+    /// 0: the stream's own channels.
+    #[serde(default)]
+    pub channels: u32,
     #[serde(default = "Record::default_split")]
     pub split: Split,
     #[serde(default = "default_true")]
@@ -275,6 +286,7 @@ impl Default for Record {
             codec: Self::default_codec(),
             bitrate: 0,
             rate: 0,
+            channels: 0,
             split: Self::default_split(),
             title_in_name: true,
         }
@@ -324,11 +336,8 @@ impl Uplinks {
                 }
             }
             Protocol::Shoutcast1 => {
-                // SHOUTcast carries MP3 and AAC and nothing else; a stream id is 1 or more.
-                if !matches!(i.codec, Codec::Mp3 | Codec::Aac) {
-                    i.codec = Codec::Mp3;
-                }
-                i.stream_id = i.stream_id.clamp(1, 99);
+                // A stream id is 1 or more; the source port is the server's plus one.
+                i.stream_id = i.stream_id.max(1);
                 if i.port == u16::MAX {
                     i.enabled = false;
                 }
@@ -337,28 +346,16 @@ impl Uplinks {
         if i.user.trim().is_empty() {
             i.user = Icecast::default_user();
         }
-        i.bitrate = i.bitrate.clamp(32, 512);
-        i.rate = tidy_rate(i.rate, 44100);
+        // The codec, the bitrate, the rate and the channels are the operator's,
+        // whatever they are: the destination is the one to refuse them, and the
+        // encoder's own refusal is shown as it comes.
         let l = &mut self.lan;
-        l.bitrate = l.bitrate.clamp(32, 512);
-        l.rate = tidy_rate(l.rate, 44100);
-        l.max_listeners = l.max_listeners.clamp(1, 64);
+        l.max_listeners = l.max_listeners.max(1);
         let r = &mut self.record;
         r.folder = r.folder.trim().to_string();
         if r.enabled && r.folder.is_empty() {
             r.enabled = false;
         }
-        if r.bitrate != 0 {
-            r.bitrate = r.bitrate.clamp(32, 512);
-        }
-        r.rate = tidy_rate(r.rate, 0);
-    }
-}
-
-fn tidy_rate(rate: u32, fallback: u32) -> u32 {
-    match rate {
-        0 | 44100 | 48000 => rate,
-        _ => fallback,
     }
 }
 
@@ -392,19 +389,22 @@ mod tests {
     }
 
     #[test]
-    fn tidy_turns_off_what_cannot_run_and_clamps_the_rest() {
+    fn tidy_turns_off_what_cannot_run_and_leaves_the_operators_values() {
         let mut u = Uplinks::default();
         u.icecast.enabled = true;
         u.icecast.host = "  ".into();
         u.icecast.bitrate = 9999;
         u.icecast.rate = 96000;
+        u.icecast.channels = 6;
         u.lan.max_listeners = 0;
         u.record.enabled = true;
         u.record.folder = "".into();
         u.tidy();
         assert!(!u.icecast.enabled);
-        assert_eq!(u.icecast.bitrate, 512);
-        assert_eq!(u.icecast.rate, 44100);
+        // Whatever the operator set goes to the encoder; the destination refuses.
+        assert_eq!(u.icecast.bitrate, 9999);
+        assert_eq!(u.icecast.rate, 96000);
+        assert_eq!(u.icecast.channels, 6);
         assert_eq!(u.lan.max_listeners, 1);
         assert!(!u.record.enabled);
         let mut v = Uplinks::default();
@@ -416,7 +416,7 @@ mod tests {
     }
 
     #[test]
-    fn shoutcast_takes_no_mount_and_only_its_codecs() {
+    fn shoutcast_takes_no_mount_and_the_codec_as_set() {
         let mut u: Uplinks = serde_json::from_str(
             r#"{"icecast":{"enabled":true,"protocol":"shoutcast1","host":"h","password":"p","mount":"","codec":"opus","stream_id":0}}"#,
         )
@@ -424,8 +424,9 @@ mod tests {
         u.tidy();
         assert!(u.icecast.enabled);
         assert_eq!(u.icecast.protocol, Protocol::Shoutcast1);
-        assert_eq!(u.icecast.codec, Codec::Mp3);
+        assert_eq!(u.icecast.codec, Codec::Opus);
         assert_eq!(u.icecast.stream_id, 1);
+        assert_eq!(u.icecast.channels, 0);
         let d = Uplinks::default();
         assert_eq!(d.icecast.protocol, Protocol::Icecast2);
         assert_eq!(d.icecast.stream_id, 1);

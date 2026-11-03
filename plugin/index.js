@@ -362,15 +362,25 @@ Outcast.prototype.getUIConfig = function () {
         path.join(__dirname, 'UIConfig.json'))
         .then((uiconf) => {
             const section = (id) => (uiconf.sections.find((s) => s.id === id) || { content: [] }).content;
+            // The encoding fields: the preset and, under Advanced, the operator's own. A
+            // player from a release without presets shows its values under Advanced.
+            const encoding = (content, prefix) => {
+                const preset = String(c.get(prefix + '_preset', ''));
+                const fallback = h.PRESETS[h.DEFAULT_PRESET[prefix]];
+                setSelect(content, prefix + '_preset', h.PRESETS[preset] ? preset : h.DEFAULT_PRESET[prefix]);
+                setValue(content, prefix + '_advanced', preset === '' || c.get(prefix + '_advanced', false) === true);
+                setSelect(content, prefix + '_codec', c.get(prefix + '_codec', fallback.codec));
+                setValue(content, prefix + '_bitrate', String(c.get(prefix + '_bitrate', String(fallback.bitrate))));
+                setValue(content, prefix + '_rate', String(c.get(prefix + '_rate', String(fallback.rate))));
+                setSelect(content, prefix + '_channels', String(c.get(prefix + '_channels', String(fallback.channels))));
+            };
             const ice = section('icecast_section');
             setValue(ice, 'ice_enabled', c.get('ice_enabled', false) === true);
             ['ice_host', 'ice_port', 'ice_mount', 'ice_user', 'ice_password', 'ice_name', 'ice_description', 'ice_genre', 'ice_url']
                 .forEach((k) => setValue(ice, k, String(c.get(k, ''))));
             setSelect(ice, 'ice_protocol', c.get('ice_protocol', 'icecast2'));
             setValue(ice, 'ice_stream_id', String(c.get('ice_stream_id', '1')));
-            setSelect(ice, 'ice_codec', c.get('ice_codec', 'mp3'));
-            setSelect(ice, 'ice_bitrate', c.get('ice_bitrate', '192'));
-            setSelect(ice, 'ice_rate', c.get('ice_rate', '44100'));
+            encoding(ice, 'ice');
             setValue(ice, 'ice_more', c.get('ice_more', false) === true);
             setValue(ice, 'ice_public', c.get('ice_public', false) === true);
             setValue(ice, 'ice_keep_alive', c.get('ice_keep_alive', true) !== false);
@@ -378,9 +388,7 @@ Outcast.prototype.getUIConfig = function () {
             const lan = section('lan_section');
             setValue(lan, 'lan_enabled', c.get('lan_enabled', false) === true);
             setValue(lan, 'lan_port', String(c.get('lan_port', '8000')));
-            setSelect(lan, 'lan_codec', c.get('lan_codec', 'mp3'));
-            setSelect(lan, 'lan_bitrate', c.get('lan_bitrate', '192'));
-            setSelect(lan, 'lan_rate', c.get('lan_rate', '44100'));
+            encoding(lan, 'lan');
             setValue(lan, 'lan_name', String(c.get('lan_name', 'Volumio')));
             setValue(lan, 'lan_max_listeners', String(c.get('lan_max_listeners', '5')));
             setValue(lan, 'lan_keep_alive', c.get('lan_keep_alive', true) !== false);
@@ -388,9 +396,7 @@ Outcast.prototype.getUIConfig = function () {
             const rec = section('record_section');
             setValue(rec, 'rec_enabled', c.get('rec_enabled', false) === true);
             setValue(rec, 'rec_folder', String(c.get('rec_folder', '/data/INTERNAL/outcast/recordings')));
-            setSelect(rec, 'rec_codec', c.get('rec_codec', 'flac'));
-            setSelect(rec, 'rec_bitrate', c.get('rec_bitrate', '192'));
-            setSelect(rec, 'rec_rate', c.get('rec_rate', '0'));
+            encoding(rec, 'rec');
             setSelect(rec, 'rec_split', c.get('rec_split', 'track'));
             setValue(rec, 'rec_title_in_name', c.get('rec_title_in_name', true) !== false);
             defer.resolve(uiconf);

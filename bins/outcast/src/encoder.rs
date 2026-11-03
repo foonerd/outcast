@@ -229,6 +229,12 @@ mod tests {
     fn segment() -> Segment {
         Segment {
             format: "s32le",
+            layout: tap::sample::Layout::Linear {
+                bytes: 4,
+                valid: 32,
+                signed: true,
+                little: true,
+            },
             rate: 96000,
             channels: 2,
             frame_bytes: 8,

@@ -14,6 +14,7 @@
 //! is the file the page writes the uplinks to.
 
 mod config;
+mod conform;
 mod control;
 mod encoder;
 mod feed;

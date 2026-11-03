@@ -17,9 +17,10 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::config::{Codec, Icecast, Protocol};
+use crate::conform::Conformer;
 use crate::encoder::{Encoder, Output, Recipe};
 use crate::feed::{Event, Segment};
-use crate::uplink::{self, clean_line, idle_segment, same_shape, Ctx, Next, Silence, GRACE, STILL};
+use crate::uplink::{self, clean_line, Ctx, Next, Silence, GRACE, STILL};
 
 /// A write that makes no progress for this long means the peer is gone.
 const STALL: Duration = Duration::from_secs(8);
@@ -474,6 +475,36 @@ fn lose(
     *next_try = Instant::now() + Duration::from_secs(BACKOFF_MAX.min(1u64 << (*attempt).min(6)));
 }
 
+/// Bytes of the stream delivered through the connection, and what goes wrong
+/// on the way dealt with: an encoder gone is replaced at the next turn, a
+/// connection gone is made again after the backoff.
+fn deliver(
+    conn: &mut Option<Connection>,
+    ctx: &Ctx,
+    bytes: &[u8],
+    attempt: &mut u32,
+    next_try: &mut Instant,
+) {
+    let Some(c) = conn.as_mut() else { return };
+    match carry(c, bytes) {
+        Ok(()) => {
+            let bytes = c.bytes;
+            ctx.update(|u| u.bytes = bytes);
+        }
+        Err(Trouble::Encoder(err)) => {
+            ctx.log(&format!("encoder gone: {err}"));
+            if let Some(enc) = c.encoder.take() {
+                enc.kill();
+            }
+            c.encoded = None;
+            c.shape = None;
+        }
+        Err(Trouble::Connection(reason)) => {
+            lose(conn, ctx, &reason, attempt, next_try);
+        }
+    }
+}
+
 /// Bytes written to the socket and not yet taken by the peer, as the kernel
 /// counts them: a peer that stops taking (frozen, black-holed, half-open)
 /// shows here long before a write blocks, since the send buffer is large.
@@ -548,6 +579,9 @@ pub fn run(cfg: Icecast, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u
     // The silence that keeps the mount alive while the player stands still.
     let mut silence: Option<Silence> = None;
     let mut last_pcm = Instant::now();
+    // One shape for the encoder, whatever the player plays.
+    let mut conformer = Conformer::new(cfg.rate, cfg.channels);
+    let mut conformed: Vec<u8> = Vec::new();
     ctx.state("idle", None);
     ctx.log(&format!(
         "{}:{}{} as {}{}{}",
@@ -603,11 +637,11 @@ pub fn run(cfg: Icecast, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u
                 }
             }
         }
-        // Connected and no encoder: one for the stream's shape, or for the idle
-        // shape where the mount is kept alive and nothing plays.
+        // Connected and no encoder: one at the conformer's shape, while a
+        // stream plays or always where the mount is kept alive.
         if let Some(c) = conn.as_mut() {
             if c.encoder.is_none() {
-                let shape = segment.or_else(|| cfg.keep_alive.then(|| idle_segment(cfg.rate)));
+                let shape = (segment.is_some() || cfg.keep_alive).then(|| conformer.shape());
                 if let Some(shape) = shape {
                     let (tx, rx) = mpsc::sync_channel(ENCODED_QUEUE);
                     let recipe = Recipe {
@@ -672,8 +706,9 @@ pub fn run(cfg: Icecast, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u
                     continue;
                 }
                 let still = segment.is_none() || last_pcm.elapsed() > STILL;
-                let Some(c) = conn.as_mut() else { continue };
-                let Some(shape) = c.shape else { continue };
+                let Some(shape) = conn.as_ref().and_then(|c| c.shape) else {
+                    continue;
+                };
                 if !still {
                     continue;
                 }
@@ -683,23 +718,7 @@ pub fn run(cfg: Icecast, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u
                 }
                 let zeros = silence.as_mut().and_then(|s| s.due().map(<[u8]>::to_vec));
                 let Some(zeros) = zeros else { continue };
-                match carry(c, &zeros) {
-                    Ok(()) => {
-                        let bytes = c.bytes;
-                        ctx.update(|u| u.bytes = bytes);
-                    }
-                    Err(Trouble::Encoder(err)) => {
-                        ctx.log(&format!("encoder gone: {err}"));
-                        if let Some(enc) = c.encoder.take() {
-                            enc.kill();
-                        }
-                        c.encoded = None;
-                        c.shape = None;
-                    }
-                    Err(Trouble::Connection(reason)) => {
-                        lose(&mut conn, &ctx, &reason, &mut attempt, &mut next_try);
-                    }
-                }
+                deliver(&mut conn, &ctx, &zeros, &mut attempt, &mut next_try);
             }
             Next::Event(Event::Segment(seg)) => {
                 ended_at = None;
@@ -708,11 +727,17 @@ pub fn run(cfg: Icecast, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u
                 if silence.take().is_some() {
                     ctx.update(|u| u.silence = false);
                 }
+                // The stream is conformed to the uplink's shape, and what the
+                // stream before still held goes first. The encoder runs on where
+                // the shape is held; where it follows the player and changed, the
+                // encoder ends and a new one starts at the new shape.
+                conformer.segment(&seg, &mut conformed);
+                ctx.log(&conformer.describe(&seg));
+                if !conformed.is_empty() {
+                    deliver(&mut conn, &ctx, &conformed, &mut attempt, &mut next_try);
+                }
                 if let Some(c) = conn.as_mut() {
-                    // The same shape goes on through the encoder without a seam; a
-                    // new shape on the same connection is a new encoder.
-                    let same = c.shape.as_ref().is_some_and(|s| same_shape(s, &seg));
-                    if !same && end_encoder(c).is_err() {
+                    if c.shape.is_some_and(|s| s != conformer.shape()) && end_encoder(c).is_err() {
                         conn = None;
                     }
                 }
@@ -722,6 +747,11 @@ pub fn run(cfg: Icecast, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u
             }
             Next::Event(Event::End) => {
                 segment = None;
+                conformed.clear();
+                conformer.end(&mut conformed);
+                if !conformed.is_empty() {
+                    deliver(&mut conn, &ctx, &conformed, &mut attempt, &mut next_try);
+                }
                 if cfg.keep_alive {
                     // The encoder goes on, fed silence until the next stream.
                     if let Some(c) = conn.as_ref() {
@@ -766,24 +796,11 @@ pub fn run(cfg: Icecast, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u
                 if silence.take().is_some() {
                     ctx.update(|u| u.silence = false);
                 }
-                let Some(c) = conn.as_mut() else { continue };
-                match carry(c, &piece) {
-                    Ok(()) => {
-                        let bytes = c.bytes;
-                        ctx.update(|u| u.bytes = bytes);
-                    }
-                    Err(Trouble::Encoder(err)) => {
-                        ctx.log(&format!("encoder gone: {err}"));
-                        if let Some(enc) = c.encoder.take() {
-                            enc.kill();
-                        }
-                        c.encoded = None;
-                        c.shape = None;
-                    }
-                    Err(Trouble::Connection(reason)) => {
-                        lose(&mut conn, &ctx, &reason, &mut attempt, &mut next_try);
-                    }
+                conformer.push(&piece, &mut conformed);
+                if conformed.is_empty() {
+                    continue;
                 }
+                deliver(&mut conn, &ctx, &conformed, &mut attempt, &mut next_try);
             }
         }
     }
@@ -830,6 +847,7 @@ mod tests {
             codec: Codec::Mp3,
             bitrate: 192,
             rate: 44100,
+            channels: 2,
             name: "Volumio".into(),
             description: "a\r\nb".into(),
             genre: String::new(),

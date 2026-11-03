@@ -9,6 +9,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::config::{Record, Split};
+use crate::conform::Conformer;
 use crate::encoder::{Encoder, Output, Recipe};
 use crate::feed::{Event, Segment};
 use crate::uplink::{self, Ctx, Next, GRACE};
@@ -125,14 +126,25 @@ pub fn run(cfg: Record, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u8
     let mut recording_title = String::new();
     let mut encoder: Option<Encoder> = None;
     let mut files: u64 = 0;
+    // The files' shape: the operator's rate and channels where set, the
+    // player's where not.
+    let mut conformer = Conformer::new(cfg.rate, cfg.channels);
+    let mut conformed: Vec<u8> = Vec::new();
     ctx.state("idle", None);
     ctx.log(&format!("to {} as {}", cfg.folder, cfg.codec.extension()));
 
     loop {
         // A stream whose first bytes have been held long enough gets its file.
-        if let (Some(seg), None, Some(at)) = (segment.as_ref(), encoder.as_ref(), since) {
+        if let (Some(_), None, Some(at)) = (segment.as_ref(), encoder.as_ref(), since) {
             if at.elapsed() >= PREROLL || preroll.len() >= PREROLL_MOST {
-                encoder = begin(&cfg, &ctx, seg, &title, &mut preroll, &mut files);
+                encoder = begin(
+                    &cfg,
+                    &ctx,
+                    &conformer.shape(),
+                    &title,
+                    &mut preroll,
+                    &mut files,
+                );
                 recording_title = title.clone();
             }
         }
@@ -140,7 +152,13 @@ pub fn run(cfg: Record, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u8
             Next::Gone | Next::Event(Event::Stop) => break,
             Next::Nothing => {}
             Next::Event(Event::Segment(seg)) => {
-                if let Some(e) = encoder.take() {
+                // What the stream before still held goes into its file first.
+                conformer.segment(&seg, &mut conformed);
+                ctx.log(&conformer.describe(&seg));
+                if let Some(mut e) = encoder.take() {
+                    if !conformed.is_empty() {
+                        let _ = e.feed(&conformed);
+                    }
                     e.finish(GRACE);
                 }
                 segment = Some(seg);
@@ -148,11 +166,24 @@ pub fn run(cfg: Record, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u8
                 preroll.clear();
             }
             Next::Event(Event::End) => {
-                if let Some(e) = encoder.take() {
+                conformed.clear();
+                conformer.end(&mut conformed);
+                if let Some(mut e) = encoder.take() {
+                    if !conformed.is_empty() {
+                        let _ = e.feed(&conformed);
+                    }
                     e.finish(GRACE);
-                } else if let (Some(seg), false) = (segment.as_ref(), preroll.is_empty()) {
+                } else if segment.is_some() && !(preroll.is_empty() && conformed.is_empty()) {
                     // A stream shorter than the pre-roll still gets its file.
-                    if let Some(e) = begin(&cfg, &ctx, seg, &title, &mut preroll, &mut files) {
+                    preroll.extend_from_slice(&conformed);
+                    if let Some(e) = begin(
+                        &cfg,
+                        &ctx,
+                        &conformer.shape(),
+                        &title,
+                        &mut preroll,
+                        &mut files,
+                    ) {
                         e.finish(GRACE);
                     }
                 }
@@ -181,13 +212,17 @@ pub fn run(cfg: Record, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u8
                 }
             }
             Next::Pcm(piece) => {
+                conformer.push(&piece, &mut conformed);
+                if conformed.is_empty() {
+                    continue;
+                }
                 let Some(e) = encoder.as_mut() else {
                     if segment.is_some() && preroll.len() < PREROLL_MOST {
-                        preroll.extend_from_slice(&piece);
+                        preroll.extend_from_slice(&conformed);
                     }
                     continue;
                 };
-                if let Err(err) = e.feed(&piece) {
+                if let Err(err) = e.feed(&conformed) {
                     ctx.log(&format!("encoder gone: {err}"));
                     ctx.state("error", Some(&format!("encoder: {err}")));
                     if let Some(enc) = encoder.take() {

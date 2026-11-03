@@ -8,11 +8,16 @@
 use tap::audio::Shape;
 use tap::sample::{ffmpeg_name, widen_to_s32, Layout};
 
+/// The raw formats evopeg demuxes: every other linear format is widened.
+const EVOPEG_FORMATS: [&str; 4] = ["s16le", "s24le", "s32le", "f32le"];
+
 /// A segment as an encoder reads it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Segment {
     /// evopeg's name for the raw bytes, as `s32le`.
     pub format: &'static str,
+    /// The samples' layout, for the conformer.
+    pub layout: Layout,
     pub rate: u32,
     pub channels: u32,
     /// Bytes of one frame as sent.
@@ -35,10 +40,22 @@ pub enum Conversion {
 /// The segment an encoder gets for a ring of this shape, and the conversion.
 pub fn plan(shape: &Shape) -> (Segment, Conversion) {
     let channels = shape.channels.max(1);
+    let s32 = Layout::Linear {
+        bytes: 4,
+        valid: 32,
+        signed: true,
+        little: true,
+    };
     if shape.one_bit {
         return (
             Segment {
                 format: "s16le",
+                layout: Layout::Linear {
+                    bytes: 2,
+                    valid: 16,
+                    signed: true,
+                    little: true,
+                },
                 rate: 44100,
                 channels,
                 frame_bytes: 2 * channels,
@@ -50,22 +67,27 @@ pub fn plan(shape: &Shape) -> (Segment, Conversion) {
             },
         );
     }
-    if let Some(name) = ffmpeg_name(shape.format) {
-        return (
-            Segment {
-                format: name,
-                rate: shape.rate,
-                channels,
-                frame_bytes: shape.frame_bytes,
-                dsd_silence: false,
-            },
-            Conversion::Pass,
-        );
+    if let (Some(name), Some(layout)) = (ffmpeg_name(shape.format), Layout::from_alsa(shape.format))
+    {
+        if EVOPEG_FORMATS.contains(&name) {
+            return (
+                Segment {
+                    format: name,
+                    layout,
+                    rate: shape.rate,
+                    channels,
+                    frame_bytes: shape.frame_bytes,
+                    dsd_silence: false,
+                },
+                Conversion::Pass,
+            );
+        }
     }
     let layout = Layout::from_alsa(shape.format).unwrap_or(Layout::Float { little: true });
     (
         Segment {
             format: "s32le",
+            layout: s32,
             rate: shape.rate,
             channels,
             frame_bytes: 4 * channels,
@@ -126,6 +148,17 @@ mod tests {
         let mut out = Vec::new();
         convert(&conv, &seg, &[1, 2, 3, 4], &mut out);
         assert_eq!(out, vec![1, 2, 3, 4]);
+    }
+
+    #[test]
+    fn a_format_evopeg_has_no_name_for_is_widened_too() {
+        // S16_BE is ALSA format 3: ffmpeg knows it as s16be, evopeg does not demux it.
+        let (seg, conv) = plan(&shape(3, 44100, 2, 4, false));
+        assert_eq!(seg.format, "s32le");
+        assert!(matches!(conv, Conversion::Widen(_)));
+        let mut out = Vec::new();
+        convert(&conv, &seg, &[0x40, 0x00, 0x40, 0x00], &mut out);
+        assert_eq!(&out[..4], &[0, 0, 0, 0x40]);
     }
 
     #[test]

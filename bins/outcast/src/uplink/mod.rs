@@ -83,18 +83,6 @@ pub const GRACE: Duration = Duration::from_secs(5);
 /// uplink that keeps its stream alive fills with silence from here on.
 pub const STILL: Duration = Duration::from_millis(300);
 
-/// The shape an uplink streams when the player has played nothing yet: two
-/// channels of 16-bit samples at the uplink's own rate, or 44.1 kHz.
-pub fn idle_segment(rate: u32) -> Segment {
-    Segment {
-        format: "s16le",
-        rate: if rate == 0 { 44100 } else { rate },
-        channels: 2,
-        frame_bytes: 4,
-        dsd_silence: false,
-    }
-}
-
 /// Silence at a shape, paced by the clock: as many zero frames as the time
 /// since the last call is worth, so an encoder fed from here runs at the
 /// stream's own pace while the player stands still.
@@ -130,11 +118,6 @@ impl Silence {
         self.zeros.resize(frames * self.frame_bytes, 0);
         Some(&self.zeros)
     }
-}
-
-/// Whether two segments ask the same of an encoder.
-pub fn same_shape(a: &Segment, b: &Segment) -> bool {
-    a.format == b.format && a.rate == b.rate && a.channels == b.channels
 }
 
 /// A value fit for one header line: every run of line breaks is one space,

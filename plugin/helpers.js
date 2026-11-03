@@ -72,9 +72,72 @@ function checkText(v, field, t) {
 }
 
 // The Icecast uplink speaks Icecast 2 or SHOUTcast v1; the second has no mount and
-// no user, a stream number instead, and MP3 or AAC alone.
+// no user, a stream number instead.
 function protocolOf(data) {
     return sel(data.ice_protocol) === 'shoutcast1' ? 'shoutcast1' : 'icecast2';
+}
+
+// ------------------------------------------------------------------ the encoding
+// What an uplink sends is a preset, the settings commonly used for its kind of
+// destination, or whatever the operator sets under Advanced: any codec evopeg makes, any
+// bitrate, any sample rate (0 for the player's own), stereo, mono or the player's own
+// channels. The plugin refuses nothing; the destination or the encoder does, and the
+// status says so. A player upgraded from a release without presets keeps the values it
+// had, as if Advanced were on.
+const PRESETS = {
+    'mp3-128-44100': { codec: 'mp3', bitrate: 128, rate: 44100, channels: 2 },
+    'mp3-192-44100': { codec: 'mp3', bitrate: 192, rate: 44100, channels: 2 },
+    'mp3-320-44100': { codec: 'mp3', bitrate: 320, rate: 44100, channels: 2 },
+    'aac-96-44100': { codec: 'aac', bitrate: 96, rate: 44100, channels: 2 },
+    'aac-128-48000': { codec: 'aac', bitrate: 128, rate: 48000, channels: 2 },
+    'opus-64-48000': { codec: 'opus', bitrate: 64, rate: 48000, channels: 2 },
+    'opus-96-48000': { codec: 'opus', bitrate: 96, rate: 48000, channels: 2 },
+    'vorbis-128-44100': { codec: 'vorbis', bitrate: 128, rate: 44100, channels: 2 },
+    'flac-48000': { codec: 'flac', bitrate: 0, rate: 48000, channels: 2 },
+    'flac-0': { codec: 'flac', bitrate: 0, rate: 0, channels: 0 },
+    'wav-0': { codec: 'wav', bitrate: 0, rate: 0, channels: 0 }
+};
+const DEFAULT_PRESET = { ice: 'mp3-128-44100', lan: 'mp3-128-44100', rec: 'flac-0' };
+
+function checkWhole(v, field, t) {
+    const s = String(v === undefined || v === null ? '' : v).trim();
+    return /^\d+$/.test(s) ? null : t('ERR_NUMBER', { field: t(field) });
+}
+
+// The encoding's own fields checked, when Advanced is on: numbers are numbers.
+function validateEncoding(data, prefix, t) {
+    if (data[prefix + '_advanced'] !== true) return null;
+    return checkWhole(data[prefix + '_bitrate'], 'BITRATE', t) ||
+        checkWhole(data[prefix + '_rate'], 'RATE', t) ||
+        null;
+}
+
+function applyEncoding(data, prefix, set) {
+    const advanced = data[prefix + '_advanced'] === true;
+    set(prefix + '_preset', PRESETS[sel(data[prefix + '_preset'])] ? sel(data[prefix + '_preset']) : DEFAULT_PRESET[prefix]);
+    set(prefix + '_advanced', advanced);
+    if (!advanced) return;
+    set(prefix + '_codec', sel(data[prefix + '_codec']));
+    set(prefix + '_bitrate', String(data[prefix + '_bitrate']).trim());
+    set(prefix + '_rate', String(data[prefix + '_rate']).trim());
+    set(prefix + '_channels', sel(data[prefix + '_channels']));
+}
+
+// The encoding for the core: the preset's values, or the operator's own.
+function encodingFrom(get, prefix) {
+    const preset = String(get(prefix + '_preset', ''));
+    const advanced = get(prefix + '_advanced', false) === true || preset === '';
+    if (!advanced) {
+        const p = PRESETS[preset] || PRESETS[DEFAULT_PRESET[prefix]];
+        return { codec: p.codec, bitrate: p.bitrate, rate: p.rate, channels: p.channels };
+    }
+    const p = PRESETS[DEFAULT_PRESET[prefix]];
+    return {
+        codec: String(get(prefix + '_codec', p.codec)),
+        bitrate: num(get(prefix + '_bitrate', String(p.bitrate)), p.bitrate),
+        rate: num(get(prefix + '_rate', String(p.rate)), p.rate),
+        channels: num(get(prefix + '_channels', String(p.channels)), p.channels)
+    };
 }
 
 function validateIcecast(data, t) {
@@ -84,10 +147,10 @@ function validateIcecast(data, t) {
         checkPort(data.ice_port, 'ICE_PORT', t) ||
         (shoutcast && parseInt(String(data.ice_port).trim(), 10) === 65535 ? t('ERR_PORT', { field: t('ICE_PORT') }) : null) ||
         (!shoutcast && !/^\/\S*$/.test(String(data.ice_mount || '').trim()) ? t('ERR_MOUNT') : null) ||
-        (shoutcast ? checkRange(data.ice_stream_id, 'ICE_STREAM_ID', 1, 99, t) : null) ||
-        (shoutcast && !['mp3', 'aac'].includes(sel(data.ice_codec)) ? t('ERR_SHOUTCAST_CODEC') : null) ||
+        (shoutcast ? checkRange(data.ice_stream_id, 'ICE_STREAM_ID', 1, 999, t) : null) ||
         (!data.ice_password ? t('ERR_PASSWORD') : null) ||
         (!shoutcast ? checkText(data.ice_user, 'ICE_USER', t) : null) ||
+        validateEncoding(data, 'ice', t) ||
         checkText(data.ice_name, 'STREAM_NAME', t) ||
         (data.ice_more === true && (
             checkText(data.ice_description, 'ICE_DESCRIPTION', t) ||
@@ -99,6 +162,7 @@ function validateIcecast(data, t) {
 function validateLan(data, t) {
     if (data.lan_enabled !== true) return null;
     return checkPort(data.lan_port, 'LAN_PORT', t) ||
+        validateEncoding(data, 'lan', t) ||
         checkText(data.lan_name, 'STREAM_NAME', t) ||
         checkRange(data.lan_max_listeners, 'LAN_MAX', 1, 64, t) ||
         null;
@@ -107,7 +171,9 @@ function validateLan(data, t) {
 function validateRecord(data, t) {
     if (data.rec_enabled !== true) return null;
     const folder = String(data.rec_folder || '').trim();
-    return (!/^\/\S/.test(folder) || /["\r\n]/.test(folder) ? t('ERR_FOLDER') : null) || null;
+    return (!/^\/\S/.test(folder) || /["\r\n]/.test(folder) ? t('ERR_FOLDER') : null) ||
+        validateEncoding(data, 'rec', t) ||
+        null;
 }
 
 // ------------------------------------------------------------- the settings kept
@@ -125,9 +191,7 @@ function applyIcecast(data, set) {
     else set('ice_mount', String(data.ice_mount).trim());
     if (!shoutcast) set('ice_user', String(data.ice_user || 'source').trim() || 'source');
     set('ice_password', String(data.ice_password));
-    set('ice_codec', sel(data.ice_codec));
-    set('ice_bitrate', sel(data.ice_bitrate));
-    set('ice_rate', sel(data.ice_rate));
+    applyEncoding(data, 'ice', set);
     set('ice_name', String(data.ice_name || '').trim());
     set('ice_keep_alive', data.ice_keep_alive !== false);
     set('ice_more', data.ice_more === true);
@@ -144,9 +208,7 @@ function applyLan(data, set) {
     set('lan_enabled', on);
     if (!on) return;
     set('lan_port', String(data.lan_port).trim());
-    set('lan_codec', sel(data.lan_codec));
-    set('lan_bitrate', sel(data.lan_bitrate));
-    set('lan_rate', sel(data.lan_rate));
+    applyEncoding(data, 'lan', set);
     set('lan_name', String(data.lan_name || '').trim());
     set('lan_max_listeners', String(data.lan_max_listeners).trim());
     set('lan_keep_alive', data.lan_keep_alive !== false);
@@ -157,9 +219,7 @@ function applyRecord(data, set) {
     set('rec_enabled', on);
     if (!on) return;
     set('rec_folder', String(data.rec_folder).trim().replace(/\/+$/, '') || '/');
-    set('rec_codec', sel(data.rec_codec));
-    set('rec_bitrate', sel(data.rec_bitrate));
-    set('rec_rate', sel(data.rec_rate));
+    applyEncoding(data, 'rec', set);
     set('rec_split', sel(data.rec_split));
     set('rec_title_in_name', data.rec_title_in_name !== false);
 }
@@ -179,9 +239,7 @@ function uplinksFrom(get) {
             stream_id: num(get('ice_stream_id', '1'), 1),
             user: str('ice_user', 'source'),
             password: str('ice_password', ''),
-            codec: str('ice_codec', 'mp3'),
-            bitrate: num(get('ice_bitrate', '192'), 192),
-            rate: num(get('ice_rate', '44100'), 44100),
+            ...encodingFrom(get, 'ice'),
             name: str('ice_name', 'Volumio'),
             description: bool('ice_more') ? str('ice_description', '') : '',
             genre: bool('ice_more') ? str('ice_genre', '') : '',
@@ -192,9 +250,7 @@ function uplinksFrom(get) {
         lan: {
             enabled: bool('lan_enabled'),
             port: num(get('lan_port', '8000'), 8000),
-            codec: str('lan_codec', 'mp3'),
-            bitrate: num(get('lan_bitrate', '192'), 192),
-            rate: num(get('lan_rate', '44100'), 44100),
+            ...encodingFrom(get, 'lan'),
             name: str('lan_name', 'Volumio'),
             max_listeners: num(get('lan_max_listeners', '5'), 5),
             keep_alive: get('lan_keep_alive', true) !== false
@@ -202,9 +258,7 @@ function uplinksFrom(get) {
         record: {
             enabled: bool('rec_enabled'),
             folder: str('rec_folder', '/data/INTERNAL/outcast/recordings'),
-            codec: str('rec_codec', 'flac'),
-            bitrate: num(get('rec_bitrate', '192'), 192),
-            rate: num(get('rec_rate', '0'), 0),
+            ...encodingFrom(get, 'rec'),
             split: str('rec_split', 'track'),
             title_in_name: get('rec_title_in_name', true) !== false
         }
@@ -254,7 +308,7 @@ function summarize(status, audioPath, audioPathError, t) {
 }
 
 module.exports = {
-    screenTitle, checkConfig, chainHasTap, fill, sel,
+    screenTitle, checkConfig, chainHasTap, fill, sel, PRESETS, DEFAULT_PRESET,
     validateIcecast, validateLan, validateRecord,
     applyIcecast, applyLan, applyRecord, uplinksFrom, summarize
 };

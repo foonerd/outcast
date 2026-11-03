@@ -13,6 +13,7 @@ tap = { git = "https://github.com/foonerd/glass", tag = "v0.11.10" }
 libc = "0.2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+rubato = "5.0.1"
 
 [lints]
 workspace = true

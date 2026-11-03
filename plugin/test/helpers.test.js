@@ -54,12 +54,12 @@ test('the Icecast settings are checked for what the server needs', () => {
     assert.equal(h.validateIcecast({ ...good, ice_more: true, ice_genre: 'a\nb' }, t), 'ERR_TEXT {"field":"ICE_GENRE"}');
 });
 
-test('a SHOUTcast server wants no mount, a stream number, and MP3 or AAC', () => {
+test('a SHOUTcast server wants no mount and a stream number; the codec is the operator\'s', () => {
     const sc = { ice_enabled: true, ice_protocol: { value: 'shoutcast1' }, ice_host: 'dnas.example.com', ice_port: '8000', ice_mount: 'nothing', ice_stream_id: '1', ice_password: 'x', ice_codec: { value: 'mp3' }, ice_name: 'Volumio' };
     assert.equal(h.validateIcecast(sc, t), null);
     assert.equal(h.validateIcecast({ ...sc, ice_codec: 'aac', ice_stream_id: '12' }, t), null);
-    assert.equal(h.validateIcecast({ ...sc, ice_codec: { value: 'opus' } }, t), 'ERR_SHOUTCAST_CODEC');
-    assert.equal(h.validateIcecast({ ...sc, ice_stream_id: '0' }, t), 'ERR_RANGE {"field":"ICE_STREAM_ID","min":1,"max":99}');
+    assert.equal(h.validateIcecast({ ...sc, ice_advanced: true, ice_codec: { value: 'opus' }, ice_bitrate: '64', ice_rate: '48000' }, t), null);
+    assert.equal(h.validateIcecast({ ...sc, ice_stream_id: '0' }, t), 'ERR_RANGE {"field":"ICE_STREAM_ID","min":1,"max":999}');
     assert.equal(h.validateIcecast({ ...sc, ice_stream_id: 'one' }, t), 'ERR_NUMBER {"field":"ICE_STREAM_ID"}');
     assert.equal(h.validateIcecast({ ...sc, ice_port: '65535' }, t), 'ERR_PORT {"field":"ICE_PORT"}');
     assert.equal(h.validateIcecast({ ...sc, ice_user: 'a"b' }, t), null);
@@ -74,6 +74,39 @@ test('a SHOUTcast server wants no mount, a stream number, and MP3 or AAC', () =>
     assert.equal(u.icecast.stream_id, 2);
     assert.equal(u.icecast.mount, '/volumio.mp3');
     assert.equal(h.uplinksFrom((k, d) => d).icecast.protocol, 'icecast2');
+});
+
+test('the encoding is a preset, or the operator\'s own under Advanced, and nothing is refused', () => {
+    // A preset: its values go to the core, the custom fields are not kept.
+    const kept = {};
+    const set = (k, v) => { kept[k] = v; };
+    const base = { lan_enabled: true, lan_port: '8100', lan_name: 'x', lan_max_listeners: '5' };
+    assert.equal(h.validateLan({ ...base, lan_preset: { value: 'opus-96-48000' } }, t), null);
+    h.applyLan({ ...base, lan_preset: { value: 'opus-96-48000' }, lan_advanced: false, lan_codec: 'mp3', lan_bitrate: '999' }, set);
+    assert.equal(kept.lan_preset, 'opus-96-48000');
+    assert.equal('lan_bitrate' in kept, false);
+    let u = h.uplinksFrom((k, d) => (k in kept ? kept[k] : d));
+    assert.deepEqual([u.lan.codec, u.lan.bitrate, u.lan.rate, u.lan.channels], ['opus', 96, 48000, 2]);
+    // Advanced: any number is taken as it is; only a non-number is refused.
+    const adv = { ...base, lan_preset: 'mp3-128-44100', lan_advanced: true, lan_codec: { value: 'flac' }, lan_bitrate: '0', lan_rate: '96000', lan_channels: { value: '0' } };
+    assert.equal(h.validateLan(adv, t), null);
+    assert.equal(h.validateLan({ ...adv, lan_rate: 'cd' }, t), 'ERR_NUMBER {"field":"RATE"}');
+    assert.equal(h.validateLan({ ...adv, lan_bitrate: '-1' }, t), 'ERR_NUMBER {"field":"BITRATE"}');
+    assert.equal(h.validateLan({ ...adv, lan_bitrate: '5000', lan_rate: '192000' }, t), null);
+    h.applyLan(adv, set);
+    u = h.uplinksFrom((k, d) => (k in kept ? kept[k] : d));
+    assert.deepEqual([u.lan.codec, u.lan.bitrate, u.lan.rate, u.lan.channels], ['flac', 0, 96000, 0]);
+    // An unknown preset falls back to the section's default.
+    h.applyLan({ ...base, lan_preset: 'nothing-such', lan_advanced: false }, set);
+    assert.equal(kept.lan_preset, 'mp3-128-44100');
+    // A player upgraded from a release without presets keeps the values it had.
+    const old = { ice_enabled: true, ice_codec: 'aac', ice_bitrate: '160', ice_rate: '48000' };
+    const v = h.uplinksFrom((k, d) => (k in old ? old[k] : d));
+    assert.deepEqual([v.icecast.codec, v.icecast.bitrate, v.icecast.rate, v.icecast.channels], ['aac', 160, 48000, 2]);
+    // The defaults: internet radio for the streams, FLAC as played for the files.
+    const defaults = h.uplinksFrom((k, d) => d);
+    assert.deepEqual([defaults.icecast.codec, defaults.icecast.bitrate, defaults.icecast.rate, defaults.icecast.channels], ['mp3', 128, 44100, 2]);
+    assert.deepEqual([defaults.record.codec, defaults.record.bitrate, defaults.record.rate, defaults.record.channels], ['flac', 0, 0, 0]);
 });
 
 test('the network stream and the recording are checked too', () => {
@@ -91,22 +124,23 @@ test('a save keeps the page values, and the file the core reads follows', () => 
     const kept = {};
     const set = (k, v) => { kept[k] = v; };
     h.applyIcecast({ ice_enabled: true, ice_host: ' ice.example.com ', ice_port: '8000', ice_mount: '/live.opus', ice_user: '', ice_password: 'pw',
-        ice_codec: { value: 'opus' }, ice_bitrate: { value: '128' }, ice_rate: { value: '48000' }, ice_name: 'Living room', ice_more: true,
+        ice_advanced: true, ice_codec: { value: 'opus' }, ice_bitrate: '128', ice_rate: '48000', ice_channels: { value: '2' }, ice_name: 'Living room', ice_more: true,
         ice_description: 'd', ice_genre: 'g', ice_url: 'u', ice_public: true }, set);
-    h.applyLan({ lan_enabled: true, lan_port: '8001', lan_codec: { value: 'flac' }, lan_bitrate: { value: '320' }, lan_rate: { value: '0' }, lan_name: 'LAN', lan_max_listeners: '3' }, set);
-    h.applyRecord({ rec_enabled: true, rec_folder: '/data/INTERNAL/outcast/rec/', rec_codec: { value: 'wav' }, rec_bitrate: { value: '192' }, rec_rate: { value: '48000' }, rec_split: { value: 'stream' }, rec_title_in_name: false }, set);
+    h.applyLan({ lan_enabled: true, lan_port: '8001', lan_advanced: true, lan_codec: { value: 'flac' }, lan_bitrate: '320', lan_rate: '0', lan_channels: '0', lan_name: 'LAN', lan_max_listeners: '3' }, set);
+    h.applyRecord({ rec_enabled: true, rec_folder: '/data/INTERNAL/outcast/rec/', rec_advanced: true, rec_codec: { value: 'wav' }, rec_bitrate: '192', rec_rate: '48000', rec_channels: '1', rec_split: { value: 'stream' }, rec_title_in_name: false }, set);
     assert.equal(kept.ice_host, 'ice.example.com');
     assert.equal(kept.ice_user, 'source');
     assert.equal(kept.rec_folder, '/data/INTERNAL/outcast/rec');
     const get = (k, d) => (k in kept ? kept[k] : d);
     const u = h.uplinksFrom(get);
-    assert.deepEqual(u.icecast, { enabled: true, protocol: 'icecast2', host: 'ice.example.com', port: 8000, mount: '/live.opus', stream_id: 1, user: 'source', password: 'pw', codec: 'opus', bitrate: 128, rate: 48000, name: 'Living room', description: 'd', genre: 'g', url: 'u', public: true, keep_alive: true });
-    assert.deepEqual(u.lan, { enabled: true, port: 8001, codec: 'flac', bitrate: 320, rate: 0, name: 'LAN', max_listeners: 3, keep_alive: true });
-    h.applyLan({ lan_enabled: true, lan_port: '8001', lan_codec: 'mp3', lan_bitrate: '192', lan_rate: '44100', lan_name: 'LAN', lan_max_listeners: '3', lan_keep_alive: false }, set);
+    assert.deepEqual(u.icecast, { enabled: true, protocol: 'icecast2', host: 'ice.example.com', port: 8000, mount: '/live.opus', stream_id: 1, user: 'source', password: 'pw', codec: 'opus', bitrate: 128, rate: 48000, channels: 2, name: 'Living room', description: 'd', genre: 'g', url: 'u', public: true, keep_alive: true });
+    assert.deepEqual(u.lan, { enabled: true, port: 8001, codec: 'flac', bitrate: 320, rate: 0, channels: 0, name: 'LAN', max_listeners: 3, keep_alive: true });
+    h.applyLan({ lan_enabled: true, lan_port: '8001', lan_preset: 'mp3-192-44100', lan_name: 'LAN', lan_max_listeners: '3', lan_keep_alive: false }, set);
     assert.equal(h.uplinksFrom(get).lan.keep_alive, false);
-    assert.deepEqual(u.record, { enabled: true, folder: '/data/INTERNAL/outcast/rec', codec: 'wav', bitrate: 192, rate: 48000, split: 'stream', title_in_name: false });
+    assert.equal(h.uplinksFrom(get).lan.bitrate, 192);
+    assert.deepEqual(u.record, { enabled: true, folder: '/data/INTERNAL/outcast/rec', codec: 'wav', bitrate: 192, rate: 48000, channels: 1, split: 'stream', title_in_name: false });
     // Turned off, the extra fields are not carried.
-    h.applyIcecast({ ice_enabled: true, ice_host: 'h', ice_port: '1', ice_mount: '/m', ice_password: 'p', ice_codec: 'mp3', ice_bitrate: '192', ice_rate: '44100', ice_name: 'n', ice_more: false }, set);
+    h.applyIcecast({ ice_enabled: true, ice_host: 'h', ice_port: '1', ice_mount: '/m', ice_password: 'p', ice_preset: 'mp3-128-44100', ice_name: 'n', ice_more: false }, set);
     assert.equal(h.uplinksFrom(get).icecast.description, '');
     assert.equal(h.uplinksFrom(get).icecast.public, false);
     const defaults = h.uplinksFrom((k, d) => d);

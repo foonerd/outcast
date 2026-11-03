@@ -13,9 +13,10 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use crate::config::{Codec, Lan};
+use crate::conform::Conformer;
 use crate::encoder::{Encoder, Output, Recipe};
 use crate::feed::{Event, Segment};
-use crate::uplink::{self, clean_line, idle_segment, same_shape, Ctx, Next, Silence, GRACE, STILL};
+use crate::uplink::{self, clean_line, Ctx, Next, Silence, GRACE, STILL};
 
 /// Bytes of audio between two metadata blocks, for a listener that asked.
 pub const METAINT: usize = 8192;
@@ -226,13 +227,15 @@ pub fn run(cfg: Lan, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u8>>>
     // The silence that keeps the stream going while the player stands still.
     let mut silence: Option<Silence> = None;
     let mut last_pcm = Instant::now();
+    // One shape for the encoder, whatever the player plays.
+    let mut conformer = Conformer::new(cfg.rate, cfg.channels);
+    let mut conformed: Vec<u8> = Vec::new();
 
     loop {
-        // No encoder: one for the stream's shape, or for the idle shape where the
-        // stream is kept alive and nothing plays.
+        // No encoder: one at the conformer's shape, while a stream plays or
+        // always where the stream is kept alive.
         if encoder.is_none() {
-            if let Some(wanted) = segment.or_else(|| cfg.keep_alive.then(|| idle_segment(cfg.rate)))
-            {
+            if let Some(wanted) = (segment.is_some() || cfg.keep_alive).then(|| conformer.shape()) {
                 let (tx, rx) = mpsc::sync_channel(ENCODED_QUEUE);
                 let recipe = Recipe {
                     codec: cfg.codec,
@@ -269,7 +272,7 @@ pub fn run(cfg: Lan, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u8>>>
                     continue;
                 }
                 let still = segment.is_none() || last_pcm.elapsed() > STILL;
-                let (Some(e), Some(s)) = (encoder.as_mut(), shape) else {
+                let (true, Some(s)) = (encoder.is_some(), shape) else {
                     continue;
                 };
                 if !still {
@@ -281,19 +284,18 @@ pub fn run(cfg: Lan, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u8>>>
                 }
                 let zeros = silence.as_mut().and_then(|z| z.due().map(<[u8]>::to_vec));
                 let Some(zeros) = zeros else { continue };
-                if let Err(err) = e.feed(&zeros) {
-                    ctx.log(&format!("encoder gone: {err}"));
-                    if let Some(enc) = encoder.take() {
-                        enc.kill();
-                    }
-                    encoded = None;
-                    shape = None;
+                if !feed_encoder(
+                    &mut encoder,
+                    &mut encoded,
+                    &mut shape,
+                    &zeros,
+                    &mut pages,
+                    ogg,
+                    &shared,
+                    &mut bytes,
+                    &ctx,
+                ) {
                     continue;
-                }
-                if let Some(rx) = encoded.as_ref() {
-                    while let Ok(out) = rx.try_recv() {
-                        publish(&out, &mut pages, ogg, &shared, &mut bytes);
-                    }
                 }
                 let b = bytes;
                 ctx.update(|u| u.bytes = b);
@@ -303,9 +305,26 @@ pub fn run(cfg: Lan, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u8>>>
                 if silence.take().is_some() {
                     ctx.update(|u| u.silence = false);
                 }
-                // The same shape goes on through the encoder without a seam.
-                let same = shape.as_ref().is_some_and(|s| same_shape(s, &seg));
-                if !same {
+                // The stream is conformed to the uplink's shape, and what the
+                // stream before still held goes first. The encoder runs on where
+                // the shape is held; where it follows the player and changed, the
+                // encoder ends and a new one starts at the new shape.
+                conformer.segment(&seg, &mut conformed);
+                ctx.log(&conformer.describe(&seg));
+                if !conformed.is_empty() {
+                    feed_encoder(
+                        &mut encoder,
+                        &mut encoded,
+                        &mut shape,
+                        &conformed,
+                        &mut pages,
+                        ogg,
+                        &shared,
+                        &mut bytes,
+                        &ctx,
+                    );
+                }
+                if shape.is_some_and(|s| s != conformer.shape()) {
                     if let Some(e) = encoder.take() {
                         e.finish(GRACE);
                         if let Some(rx) = encoded.take() {
@@ -318,6 +337,21 @@ pub fn run(cfg: Lan, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u8>>>
             }
             Next::Event(Event::End) => {
                 segment = None;
+                conformed.clear();
+                conformer.end(&mut conformed);
+                if !conformed.is_empty() {
+                    feed_encoder(
+                        &mut encoder,
+                        &mut encoded,
+                        &mut shape,
+                        &conformed,
+                        &mut pages,
+                        ogg,
+                        &shared,
+                        &mut bytes,
+                        &ctx,
+                    );
+                }
                 if cfg.keep_alive {
                     if let (Some(s), true) = (shape, silence.is_none()) {
                         silence = Some(Silence::new(&s));
@@ -354,20 +388,21 @@ pub fn run(cfg: Lan, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u8>>>
                 if silence.take().is_some() {
                     ctx.update(|u| u.silence = false);
                 }
-                let Some(e) = encoder.as_mut() else { continue };
-                if let Err(err) = e.feed(&piece) {
-                    ctx.log(&format!("encoder gone: {err}"));
-                    if let Some(enc) = encoder.take() {
-                        enc.kill();
-                    }
-                    encoded = None;
-                    shape = None;
+                conformer.push(&piece, &mut conformed);
+                if conformed.is_empty()
+                    || !feed_encoder(
+                        &mut encoder,
+                        &mut encoded,
+                        &mut shape,
+                        &conformed,
+                        &mut pages,
+                        ogg,
+                        &shared,
+                        &mut bytes,
+                        &ctx,
+                    )
+                {
                     continue;
-                }
-                if let Some(rx) = encoded.as_ref() {
-                    while let Ok(out) = rx.try_recv() {
-                        publish(&out, &mut pages, ogg, &shared, &mut bytes);
-                    }
                 }
                 let b = bytes;
                 let n = shared
@@ -398,6 +433,41 @@ pub fn run(cfg: Lan, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u8>>>
     drop(listener);
     let _ = acceptor.join();
     ctx.state("off", None);
+}
+
+/// Bytes into the encoder and what it made so far to the listeners; false
+/// when the encoder is gone, in which case it is dropped and a new one is
+/// started at the next turn.
+#[allow(clippy::too_many_arguments)]
+fn feed_encoder(
+    encoder: &mut Option<Encoder>,
+    encoded: &mut Option<Receiver<Arc<Vec<u8>>>>,
+    shape: &mut Option<Segment>,
+    bytes: &[u8],
+    pages: &mut OggPages,
+    ogg: bool,
+    shared: &Arc<Mutex<Shared>>,
+    count: &mut u64,
+    ctx: &Ctx,
+) -> bool {
+    let Some(e) = encoder.as_mut() else {
+        return false;
+    };
+    if let Err(err) = e.feed(bytes) {
+        ctx.log(&format!("encoder gone: {err}"));
+        if let Some(enc) = encoder.take() {
+            enc.kill();
+        }
+        *encoded = None;
+        *shape = None;
+        return false;
+    }
+    if let Some(rx) = encoded.as_ref() {
+        while let Ok(out) = rx.try_recv() {
+            publish(&out, pages, ogg, shared, count);
+        }
+    }
+    true
 }
 
 /// A piece of the encoded stream to every listener that has room; for Ogg,
