@@ -7,7 +7,7 @@ All notable changes to Outcast Uplink. The format follows Keep a Changelog; the 
 ### Added
 
 - SHOUTcast servers: the Icecast uplink has a server type, Icecast 2 as before or SHOUTcast, for a SHOUTcast DNAS of version 1 or of version 2 in its legacy mode. With SHOUTcast chosen the page asks for the server's own port and a stream number (1 unless the DNAS has several) in place of the mount point and the source user; the stream is MP3 or AAC; the title goes to the server through its admin interface. The connection, the reconnection, the stall watch and the silence that keeps the stream up are the same as for Icecast.
-- The settings page in German, Spanish, French, Dutch and Polish beside English.
+- The settings page in German, Spanish, French, Italian, Japanese, Dutch, Polish, Portuguese, Russian and Chinese beside English.
 
 ## [0.1.2] - 2026-11-03
 
