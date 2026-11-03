@@ -83,6 +83,29 @@ for (const file of files) {
   if (!text.endsWith('\n') || text.replace(/\n+$/, '') !== text.trimEnd()) { console.error(file + ': must end with one newline and nothing after the JSON'); process.exit(1); }
 }
 console.log(files.length + ' plugin files parse');
+// Every language carries exactly the English keys, in the English order, with the
+// same {{variables}}: a string added in English alone would show as its key on a
+// player in another language, and a variable renamed in one would show as text.
+const strings = files.filter((f) => /\/i18n\/strings_[a-z_]+\.json$/.test(f));
+const english = strings.find((f) => f.endsWith('strings_en.json'));
+if (!english) { console.error('plugin/i18n/strings_en.json is missing'); process.exit(1); }
+const flat = (o, p = '') => Object.entries(o).flatMap(([k, v]) => (v && typeof v === 'object' ? flat(v, p + k + '.') : [[p + k, v]]));
+const en = flat(JSON.parse(fs.readFileSync(english, 'utf8')));
+const vars = (s) => (String(s).match(/\{\{[a-z]+\}\}/g) || []).sort().join(' ');
+for (const file of strings) {
+  if (file === english) continue;
+  const other = flat(JSON.parse(fs.readFileSync(file, 'utf8')));
+  const missing = en.filter(([k]) => !other.some(([o]) => o === k)).map(([k]) => k);
+  const extra = other.filter(([k]) => !en.some(([e]) => e === k)).map(([k]) => k);
+  if (missing.length || extra.length) { console.error(file + ': not the English keys' + (missing.length ? '; missing ' + missing.join(', ') : '') + (extra.length ? '; extra ' + extra.join(', ') : '')); process.exit(1); }
+  const order = other.map(([k]) => k).join('\n') === en.map(([k]) => k).join('\n');
+  if (!order) { console.error(file + ': the keys are not in the English order'); process.exit(1); }
+  const varsDiffer = en.filter(([k, v]) => vars(v) !== vars(other.find(([o]) => o === k)[1])).map(([k]) => k);
+  if (varsDiffer.length) { console.error(file + ': the variables differ from English in ' + varsDiffer.join(', ')); process.exit(1); }
+  const empty = other.filter(([, v]) => String(v).trim() === '').map(([k]) => k);
+  if (empty.length) { console.error(file + ': empty in ' + empty.join(', ')); process.exit(1); }
+}
+console.log((strings.length - 1) + ' translations carry the English keys');
 JS
 
 echo "check: plugin"

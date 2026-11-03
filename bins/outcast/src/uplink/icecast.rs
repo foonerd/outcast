@@ -16,7 +16,7 @@ use std::sync::mpsc::{self, Receiver};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use crate::config::Icecast;
+use crate::config::{Codec, Icecast, Protocol};
 use crate::encoder::{Encoder, Output, Recipe};
 use crate::feed::{Event, Segment};
 use crate::uplink::{self, clean_line, idle_segment, same_shape, Ctx, Next, Silence, GRACE, STILL};
@@ -95,6 +95,60 @@ pub fn metadata_request(cfg: &Icecast, title: &str, version: &str) -> String {
 
 pub fn basic_auth(user: &str, password: &str) -> String {
     base64(format!("{user}:{password}").as_bytes())
+}
+
+/// SHOUTcast's name for a stream's content: `audio/aacp` for AAC, as a DNAS
+/// says it; MP3 as everywhere.
+pub fn shoutcast_content_type(codec: Codec) -> &'static str {
+    match codec {
+        Codec::Aac => "audio/aacp",
+        _ => "audio/mpeg",
+    }
+}
+
+/// A SHOUTcast v1 source's first line: the password, with the stream id
+/// where a DNAS 2 has several streams.
+pub fn shoutcast_password_line(cfg: &Icecast) -> String {
+    if cfg.stream_id > 1 {
+        format!("{}:#{}\r\n", clean_line(&cfg.password), cfg.stream_id)
+    } else {
+        format!("{}\r\n", clean_line(&cfg.password))
+    }
+}
+
+/// A SHOUTcast v1 source's headers, sent after the server's `OK2`: the
+/// `icy-*` lines a DNAS 1 expects, every one of them, then an empty line.
+pub fn shoutcast_headers(cfg: &Icecast, content_type: &str) -> String {
+    let h = [
+        format!("icy-name:{}", clean_line(&cfg.name)),
+        format!("icy-genre:{}", clean_line(&cfg.genre)),
+        format!("icy-url:{}", clean_line(&cfg.url)),
+        format!("icy-pub:{}", u8::from(cfg.public)),
+        format!("icy-br:{}", cfg.bitrate),
+        "icy-irc:".to_string(),
+        "icy-icq:".to_string(),
+        "icy-aim:".to_string(),
+        format!("content-type:{content_type}"),
+    ];
+    h.join("\r\n") + "\r\n\r\n"
+}
+
+/// The `GET` that sets a SHOUTcast stream's title, on the server's own
+/// port; a DNAS takes it from a client that calls itself Mozilla and from
+/// no other.
+pub fn shoutcast_metadata_request(cfg: &Icecast, title: &str) -> String {
+    let sid = if cfg.stream_id > 1 {
+        format!("&sid={}", cfg.stream_id)
+    } else {
+        String::new()
+    };
+    format!(
+        "GET /admin.cgi?pass={}&mode=updinfo&song={}{sid} HTTP/1.0\r\nHost: {}:{}\r\nUser-Agent: (Mozilla Compatible)\r\n\r\n",
+        percent(&cfg.password),
+        percent(title),
+        cfg.host,
+        cfg.port
+    )
 }
 
 /// Standard base64, for the one header that wants it.
@@ -213,23 +267,38 @@ fn read_response(stream: &mut TcpStream) -> io::Result<String> {
     Ok(String::from_utf8_lossy(&buf).into_owned())
 }
 
-fn connect(cfg: &Icecast, content_type: &str) -> Result<TcpStream, Refusal> {
-    let addr = (cfg.host.as_str(), cfg.port)
+/// A connection to the server, with its socket set as every uplink wants it.
+fn open(cfg: &Icecast, port: u16) -> Result<TcpStream, Refusal> {
+    let addr = (cfg.host.as_str(), port)
         .to_socket_addrs()
         .map_err(|e| Refusal::Other(format!("{}: {e}", cfg.host)))?
         .next()
         .ok_or_else(|| Refusal::Other(format!("{}: no address", cfg.host)))?;
-    let mut stream =
+    let stream =
         TcpStream::connect_timeout(&addr, CONNECT).map_err(|e| Refusal::Other(e.to_string()))?;
     let _ = stream.set_nodelay(true);
     fix_send_buffer(&stream);
     stream
         .set_write_timeout(Some(CONNECT))
         .map_err(|e| Refusal::Other(e.to_string()))?;
+    Ok(stream)
+}
+
+/// The stream's socket as it is while the stream flows: no read timeout, a
+/// write that makes no progress for `STALL` an error.
+fn streaming(stream: TcpStream) -> Result<TcpStream, Refusal> {
     stream
-        .write_all(source_request(cfg, content_type, env!("CARGO_PKG_VERSION")).as_bytes())
+        .set_read_timeout(None)
         .map_err(|e| Refusal::Other(e.to_string()))?;
-    let text = read_response(&mut stream).map_err(|e| Refusal::Other(e.to_string()))?;
+    stream
+        .set_write_timeout(Some(STALL))
+        .map_err(|e| Refusal::Other(e.to_string()))?;
+    Ok(stream)
+}
+
+/// The server's answer, or the refusal a server that never answers earns.
+fn answer(stream: &mut TcpStream) -> Result<String, Refusal> {
+    let text = read_response(stream).map_err(|e| Refusal::Other(e.to_string()))?;
     // A server that takes the connection and never answers (frozen, or a proxy
     // with nothing behind it) is a refusal with a reason of its own.
     if text.trim().is_empty() {
@@ -238,23 +307,61 @@ fn connect(cfg: &Icecast, content_type: &str) -> Result<TcpStream, Refusal> {
             CONNECT.as_secs()
         )));
     }
+    Ok(text)
+}
+
+fn connect(cfg: &Icecast, content_type: &str) -> Result<TcpStream, Refusal> {
+    match cfg.protocol {
+        Protocol::Icecast2 => connect_icecast(cfg, content_type),
+        Protocol::Shoutcast1 => connect_shoutcast(cfg, content_type),
+    }
+}
+
+/// Icecast 2: the `SOURCE` request to the mount, answered with a status line.
+fn connect_icecast(cfg: &Icecast, content_type: &str) -> Result<TcpStream, Refusal> {
+    let mut stream = open(cfg, cfg.port)?;
+    stream
+        .write_all(source_request(cfg, content_type, env!("CARGO_PKG_VERSION")).as_bytes())
+        .map_err(|e| Refusal::Other(e.to_string()))?;
+    let text = answer(&mut stream)?;
     let (code, reason) = parse_response(&text);
     match code {
-        200 => {
-            stream
-                .set_read_timeout(None)
-                .map_err(|e| Refusal::Other(e.to_string()))?;
-            stream
-                .set_write_timeout(Some(STALL))
-                .map_err(|e| Refusal::Other(e.to_string()))?;
-            Ok(stream)
-        }
+        200 => streaming(stream),
         401 => Err(Refusal::Auth(reason)),
         _ => Err(Refusal::Other(reason)),
     }
 }
 
-/// The mount's title set through the admin interface, on a connection of its own.
+/// SHOUTcast v1: the password on the port above the server's, the server's
+/// `OK2`, then the `icy-*` headers; the stream follows.
+fn connect_shoutcast(cfg: &Icecast, content_type: &str) -> Result<TcpStream, Refusal> {
+    let port = cfg
+        .port
+        .checked_add(1)
+        .ok_or_else(|| Refusal::Other("the server's port has no port above it".to_string()))?;
+    let mut stream = open(cfg, port)?;
+    stream
+        .write_all(shoutcast_password_line(cfg).as_bytes())
+        .map_err(|e| Refusal::Other(e.to_string()))?;
+    let text = answer(&mut stream)?;
+    let first = text.lines().next().unwrap_or("").trim().to_string();
+    if !first.starts_with("OK2") {
+        let reason = format!("SHOUTcast said: {first}");
+        return if first.to_ascii_lowercase().contains("pass") {
+            Err(Refusal::Auth(reason))
+        } else {
+            Err(Refusal::Other(reason))
+        };
+    }
+    stream
+        .write_all(shoutcast_headers(cfg, content_type).as_bytes())
+        .map_err(|e| Refusal::Other(e.to_string()))?;
+    streaming(stream)
+}
+
+/// The stream's title set through the server's admin interface, on a
+/// connection of its own: Icecast's `/admin/metadata` with the source's
+/// credentials, or SHOUTcast's `admin.cgi` with the password.
 fn push_title(cfg: &Icecast, title: &str) -> Result<(), String> {
     let addr = (cfg.host.as_str(), cfg.port)
         .to_socket_addrs()
@@ -267,8 +374,11 @@ fn push_title(cfg: &Icecast, title: &str) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     s.set_read_timeout(Some(Duration::from_secs(5)))
         .map_err(|e| e.to_string())?;
-    s.write_all(metadata_request(cfg, title, env!("CARGO_PKG_VERSION")).as_bytes())
-        .map_err(|e| e.to_string())?;
+    let request = match cfg.protocol {
+        Protocol::Icecast2 => metadata_request(cfg, title, env!("CARGO_PKG_VERSION")),
+        Protocol::Shoutcast1 => shoutcast_metadata_request(cfg, title),
+    };
+    s.write_all(request.as_bytes()).map_err(|e| e.to_string())?;
     let mut buf = Vec::new();
     let _ = s.read_to_end(&mut buf);
     let (code, reason) = parse_response(&String::from_utf8_lossy(&buf));
@@ -424,7 +534,10 @@ fn stalled(c: &mut Connection) -> bool {
 }
 
 pub fn run(cfg: Icecast, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u8>>>) {
-    let content_type = cfg.codec.content_type();
+    let content_type = match cfg.protocol {
+        Protocol::Icecast2 => cfg.codec.content_type(),
+        Protocol::Shoutcast1 => shoutcast_content_type(cfg.codec),
+    };
     let mut segment: Option<Segment> = None;
     let mut title = String::new();
     let mut pushed = String::new();
@@ -437,12 +550,20 @@ pub fn run(cfg: Icecast, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u
     let mut last_pcm = Instant::now();
     ctx.state("idle", None);
     ctx.log(&format!(
-        "{}:{}{} as {}{}",
+        "{}:{}{} as {}{}{}",
         cfg.host,
         cfg.port,
-        cfg.mount,
+        match cfg.protocol {
+            Protocol::Icecast2 => cfg.mount.clone(),
+            Protocol::Shoutcast1 => format!(" SHOUTcast v1 stream {}", cfg.stream_id),
+        },
         content_type,
-        if cfg.keep_alive { ", kept alive" } else { "" }
+        if cfg.keep_alive { ", kept alive" } else { "" },
+        if cfg.protocol == Protocol::Shoutcast1 {
+            ", the source on the port above"
+        } else {
+            ""
+        }
     ));
 
     loop {
@@ -695,14 +816,15 @@ fn drain(stream: &mut TcpStream, rx: &Receiver<Arc<Vec<u8>>>, bytes: &mut u64) -
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::Codec;
 
     fn cfg() -> Icecast {
         Icecast {
             enabled: true,
+            protocol: Protocol::Icecast2,
             host: "ice.example.com".into(),
             port: 8000,
             mount: "/volumio.mp3".into(),
+            stream_id: 1,
             user: "source".into(),
             password: "hackme".into(),
             codec: Codec::Mp3,
@@ -732,6 +854,24 @@ mod tests {
         let r = metadata_request(&cfg(), "Zoë & Co - Ça va?", "0.1.0");
         assert!(r.starts_with("GET /admin/metadata?mode=updinfo&charset=UTF-8&mount=%2Fvolumio.mp3&song=Zo%C3%AB%20%26%20Co%20-%20%C3%87a%20va%3F HTTP/1.0\r\n"), "{r}");
         assert!(r.contains("Authorization: Basic c291cmNlOmhhY2ttZQ==\r\n"));
+    }
+
+    #[test]
+    fn the_shoutcast_handshake_is_what_a_dnas_expects() {
+        let mut c = cfg();
+        c.protocol = Protocol::Shoutcast1;
+        c.genre = "Spiritual".into();
+        assert_eq!(shoutcast_password_line(&c), "hackme\r\n");
+        c.stream_id = 2;
+        assert_eq!(shoutcast_password_line(&c), "hackme:#2\r\n");
+        let h = shoutcast_headers(&c, "audio/mpeg");
+        assert_eq!(h, "icy-name:Volumio\r\nicy-genre:Spiritual\r\nicy-url:\r\nicy-pub:0\r\nicy-br:192\r\nicy-irc:\r\nicy-icq:\r\nicy-aim:\r\ncontent-type:audio/mpeg\r\n\r\n");
+        let m = shoutcast_metadata_request(&c, "Zoë - Ça va");
+        assert!(m.starts_with("GET /admin.cgi?pass=hackme&mode=updinfo&song=Zo%C3%AB%20-%20%C3%87a%20va&sid=2 HTTP/1.0\r\nHost: ice.example.com:8000\r\nUser-Agent: (Mozilla Compatible)\r\n\r\n"), "{m}");
+        c.stream_id = 1;
+        assert!(!shoutcast_metadata_request(&c, "x").contains("sid="));
+        assert_eq!(shoutcast_content_type(Codec::Aac), "audio/aacp");
+        assert_eq!(shoutcast_content_type(Codec::Mp3), "audio/mpeg");
     }
 
     #[test]

@@ -366,6 +366,8 @@ Outcast.prototype.getUIConfig = function () {
             setValue(ice, 'ice_enabled', c.get('ice_enabled', false) === true);
             ['ice_host', 'ice_port', 'ice_mount', 'ice_user', 'ice_password', 'ice_name', 'ice_description', 'ice_genre', 'ice_url']
                 .forEach((k) => setValue(ice, k, String(c.get(k, ''))));
+            setSelect(ice, 'ice_protocol', c.get('ice_protocol', 'icecast2'));
+            setValue(ice, 'ice_stream_id', String(c.get('ice_stream_id', '1')));
             setSelect(ice, 'ice_codec', c.get('ice_codec', 'mp3'));
             setSelect(ice, 'ice_bitrate', c.get('ice_bitrate', '192'));
             setSelect(ice, 'ice_rate', c.get('ice_rate', '44100'));

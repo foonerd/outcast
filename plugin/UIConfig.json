@@ -12,14 +12,18 @@
       "onSave": { "type": "controller", "endpoint": "audio_interface/outcast", "method": "updateIcecast" },
       "saveButton": {
         "label": "TRANSLATE.OUTCAST.SAVE",
-        "data": ["ice_enabled", "ice_host", "ice_port", "ice_mount", "ice_user", "ice_password", "ice_codec", "ice_bitrate", "ice_rate", "ice_name", "ice_keep_alive", "ice_more", "ice_description", "ice_genre", "ice_url", "ice_public"]
+        "data": ["ice_enabled", "ice_host", "ice_port", "ice_protocol", "ice_mount", "ice_stream_id", "ice_user", "ice_password", "ice_codec", "ice_bitrate", "ice_rate", "ice_name", "ice_keep_alive", "ice_more", "ice_description", "ice_genre", "ice_url", "ice_public"]
       },
       "content": [
         { "id": "ice_enabled", "element": "switch", "label": "TRANSLATE.OUTCAST.ICE_ENABLE", "doc": "TRANSLATE.OUTCAST.ICE_ENABLE_DESC", "value": false },
         { "id": "ice_host", "element": "input", "label": "TRANSLATE.OUTCAST.ICE_HOST", "doc": "TRANSLATE.OUTCAST.ICE_HOST_DESC", "value": "", "visibleIf": { "field": "ice_enabled", "value": true } },
         { "id": "ice_port", "element": "input", "label": "TRANSLATE.OUTCAST.ICE_PORT", "doc": "TRANSLATE.OUTCAST.ICE_PORT_DESC", "value": "8000", "visibleIf": { "field": "ice_enabled", "value": true } },
-        { "id": "ice_mount", "element": "input", "label": "TRANSLATE.OUTCAST.ICE_MOUNT", "doc": "TRANSLATE.OUTCAST.ICE_MOUNT_DESC", "value": "/volumio.mp3", "visibleIf": { "field": "ice_enabled", "value": true } },
-        { "id": "ice_user", "element": "input", "label": "TRANSLATE.OUTCAST.ICE_USER", "doc": "TRANSLATE.OUTCAST.ICE_USER_DESC", "value": "source", "visibleIf": { "field": "ice_enabled", "value": true } },
+        { "id": "ice_protocol", "element": "select", "label": "TRANSLATE.OUTCAST.ICE_PROTOCOL", "doc": "TRANSLATE.OUTCAST.ICE_PROTOCOL_DESC", "value": { "value": "icecast2", "label": "Icecast 2" },
+          "options": [ { "value": "icecast2", "label": "Icecast 2" }, { "value": "shoutcast1", "label": "SHOUTcast" } ],
+          "visibleIf": { "field": "ice_enabled", "value": true } },
+        { "id": "ice_mount", "element": "input", "label": "TRANSLATE.OUTCAST.ICE_MOUNT", "doc": "TRANSLATE.OUTCAST.ICE_MOUNT_DESC", "value": "/volumio.mp3", "visibleIf": { "field": "ice_protocol", "value": "icecast2" } },
+        { "id": "ice_stream_id", "element": "input", "label": "TRANSLATE.OUTCAST.ICE_STREAM_ID", "doc": "TRANSLATE.OUTCAST.ICE_STREAM_ID_DESC", "value": "1", "visibleIf": { "field": "ice_protocol", "value": "shoutcast1" } },
+        { "id": "ice_user", "element": "input", "label": "TRANSLATE.OUTCAST.ICE_USER", "doc": "TRANSLATE.OUTCAST.ICE_USER_DESC", "value": "source", "visibleIf": { "field": "ice_protocol", "value": "icecast2" } },
         { "id": "ice_password", "element": "input", "type": "password", "label": "TRANSLATE.OUTCAST.ICE_PASSWORD", "doc": "TRANSLATE.OUTCAST.ICE_PASSWORD_DESC", "value": "", "visibleIf": { "field": "ice_enabled", "value": true } },
         { "id": "ice_codec", "element": "select", "label": "TRANSLATE.OUTCAST.CODEC", "doc": "TRANSLATE.OUTCAST.ICE_CODEC_DESC", "value": { "value": "mp3", "label": "MP3" },
           "options": [ { "value": "mp3", "label": "MP3" }, { "value": "aac", "label": "AAC" }, { "value": "opus", "label": "Opus" }, { "value": "vorbis", "label": "Ogg Vorbis" } ],

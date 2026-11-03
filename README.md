@@ -4,13 +4,13 @@ A Volumio plugin of the [evo framework](https://evoframework.org) that casts wha
 
 Each uplink has its own encoder, transport, reconnection and status. One failing never stops another.
 
-The first release carries three uplinks: an Icecast server, a stream on the network, and recording to files. The radio (SHOUTcast), broadcast (RTMP, SRT) and CDN (HLS) families follow, each with its own release.
+The first releases carry three uplinks: an Icecast or SHOUTcast server, a stream on the network, and recording to files. The broadcast (RTMP, SRT) and CDN (HLS) families follow, each with its own release.
 
 ## The uplinks
 
 | Uplink | What it does |
 | --- | --- |
-| Icecast | The source protocol to one mount of an Icecast server (AzuraCast, Zeno, Live365, Radio.co and most hosted radio take the same), as MP3, AAC, Opus or Ogg Vorbis. The mount stays up with silence while the player pauses or stops, from the moment the uplink is on, unless set to follow the player. A server that goes away is retried with a backoff; a server that stops taking bytes is found within seconds and dropped; a refused password is retried after a minute. The title the player shows is pushed to the server for MP3 and AAC and carried in the stream for Opus and Ogg Vorbis. |
+| Icecast | The source protocol to one mount of an Icecast server (AzuraCast, Zeno, Live365, Radio.co and most hosted radio take the same), as MP3, AAC, Opus or Ogg Vorbis; or the SHOUTcast v1 source protocol to a SHOUTcast DNAS (version 1, or version 2 in its legacy mode, by stream number), as MP3 or AAC. The mount stays up with silence while the player pauses or stops, from the moment the uplink is on, unless set to follow the player. A server that goes away is retried with a backoff; a server that stops taking bytes is found within seconds and dropped; a refused password is retried after a minute. The title the player shows is pushed to the server for MP3 and AAC, through SHOUTcast's own admin interface on a DNAS, and carried in the stream for Opus and Ogg Vorbis. |
 | The stream on the network | An HTTP stream on a port of the player, at `http://<player>:<port>/`, as MP3, AAC, Opus, Ogg Vorbis or FLAC, for any player on the network: it goes on with silence while the player pauses or stops, unless set to end with it; titles in band for a player that asks for them; a listener joining late given the stream's headers; a limit on listeners. |
 | Recording | FLAC, WAV, MP3, AAC, Opus or Ogg Vorbis files under a folder of the player (`/data/INTERNAL/outcast/recordings` unless set otherwise, reachable over the player's network share), a file per track named by the moment and the title, or one file per stream. |
 
@@ -26,7 +26,7 @@ The plugin is three parts in one zip, one copy of each binary per Volumio archit
 
 | Part | What | Where it comes from |
 | --- | --- | --- |
-| The shell (`plugin/`) | The Volumio plugin as the store wants it: the settings page, the install with the tap's ALSA contribution proved before it is registered and taken back when the chain does not take it, the title from the player's state, the core's service. | This repository. |
+| The shell (`plugin/`) | The Volumio plugin as the store wants it: the settings page in English, German, Spanish, French, Dutch and Polish, the install with the tap's ALSA contribution proved before it is registered and taken back when the chain does not take it, the title from the player's state, the core's service. | This repository. |
 | The core (`bins/outcast`) | One daemon in Rust, started by the shell as its own systemd unit: it follows the audio ring, carries the sound to every uplink, runs each uplink's transport, keeps a status file and answers a control socket. Static, linked against musl. | This repository, cross-built in CI. |
 | The components | [evotap](https://github.com/foonerd/evotap), the ALSA plugin the sound passes through and the ring it writes; [evopeg](https://github.com/foonerd/evopeg), FFmpeg built down to encoding and muxing from a pipe to a pipe. | Their own releases, at the versions `components/*.lock` name, fetched in CI and verified against the evo release key (`keys/release-signing.pub`) before anything of them is packed. |
 

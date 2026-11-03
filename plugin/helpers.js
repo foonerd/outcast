@@ -71,13 +71,23 @@ function checkText(v, field, t) {
     return /["\r\n]/.test(String(v || '')) ? t('ERR_TEXT', { field: t(field) }) : null;
 }
 
+// The Icecast uplink speaks Icecast 2 or SHOUTcast v1; the second has no mount and
+// no user, a stream number instead, and MP3 or AAC alone.
+function protocolOf(data) {
+    return sel(data.ice_protocol) === 'shoutcast1' ? 'shoutcast1' : 'icecast2';
+}
+
 function validateIcecast(data, t) {
     if (data.ice_enabled !== true) return null;
+    const shoutcast = protocolOf(data) === 'shoutcast1';
     return (!String(data.ice_host || '').trim() ? t('ERR_HOST') : null) ||
         checkPort(data.ice_port, 'ICE_PORT', t) ||
-        (!/^\/\S*$/.test(String(data.ice_mount || '').trim()) ? t('ERR_MOUNT') : null) ||
+        (shoutcast && parseInt(String(data.ice_port).trim(), 10) === 65535 ? t('ERR_PORT', { field: t('ICE_PORT') }) : null) ||
+        (!shoutcast && !/^\/\S*$/.test(String(data.ice_mount || '').trim()) ? t('ERR_MOUNT') : null) ||
+        (shoutcast ? checkRange(data.ice_stream_id, 'ICE_STREAM_ID', 1, 99, t) : null) ||
+        (shoutcast && !['mp3', 'aac'].includes(sel(data.ice_codec)) ? t('ERR_SHOUTCAST_CODEC') : null) ||
         (!data.ice_password ? t('ERR_PASSWORD') : null) ||
-        checkText(data.ice_user, 'ICE_USER', t) ||
+        (!shoutcast ? checkText(data.ice_user, 'ICE_USER', t) : null) ||
         checkText(data.ice_name, 'STREAM_NAME', t) ||
         (data.ice_more === true && (
             checkText(data.ice_description, 'ICE_DESCRIPTION', t) ||
@@ -107,10 +117,13 @@ function applyIcecast(data, set) {
     const on = data.ice_enabled === true;
     set('ice_enabled', on);
     if (!on) return;
+    const shoutcast = protocolOf(data) === 'shoutcast1';
+    set('ice_protocol', shoutcast ? 'shoutcast1' : 'icecast2');
     set('ice_host', String(data.ice_host).trim());
     set('ice_port', String(data.ice_port).trim());
-    set('ice_mount', String(data.ice_mount).trim());
-    set('ice_user', String(data.ice_user || 'source').trim() || 'source');
+    if (shoutcast) set('ice_stream_id', String(data.ice_stream_id).trim());
+    else set('ice_mount', String(data.ice_mount).trim());
+    if (!shoutcast) set('ice_user', String(data.ice_user || 'source').trim() || 'source');
     set('ice_password', String(data.ice_password));
     set('ice_codec', sel(data.ice_codec));
     set('ice_bitrate', sel(data.ice_bitrate));
@@ -159,9 +172,11 @@ function uplinksFrom(get) {
     return {
         icecast: {
             enabled: bool('ice_enabled'),
+            protocol: str('ice_protocol', 'icecast2') === 'shoutcast1' ? 'shoutcast1' : 'icecast2',
             host: str('ice_host', ''),
             port: num(get('ice_port', '8000'), 8000),
             mount: str('ice_mount', '/volumio.mp3'),
+            stream_id: num(get('ice_stream_id', '1'), 1),
             user: str('ice_user', 'source'),
             password: str('ice_password', ''),
             codec: str('ice_codec', 'mp3'),

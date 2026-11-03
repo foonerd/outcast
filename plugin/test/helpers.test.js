@@ -54,6 +54,28 @@ test('the Icecast settings are checked for what the server needs', () => {
     assert.equal(h.validateIcecast({ ...good, ice_more: true, ice_genre: 'a\nb' }, t), 'ERR_TEXT {"field":"ICE_GENRE"}');
 });
 
+test('a SHOUTcast server wants no mount, a stream number, and MP3 or AAC', () => {
+    const sc = { ice_enabled: true, ice_protocol: { value: 'shoutcast1' }, ice_host: 'dnas.example.com', ice_port: '8000', ice_mount: 'nothing', ice_stream_id: '1', ice_password: 'x', ice_codec: { value: 'mp3' }, ice_name: 'Volumio' };
+    assert.equal(h.validateIcecast(sc, t), null);
+    assert.equal(h.validateIcecast({ ...sc, ice_codec: 'aac', ice_stream_id: '12' }, t), null);
+    assert.equal(h.validateIcecast({ ...sc, ice_codec: { value: 'opus' } }, t), 'ERR_SHOUTCAST_CODEC');
+    assert.equal(h.validateIcecast({ ...sc, ice_stream_id: '0' }, t), 'ERR_RANGE {"field":"ICE_STREAM_ID","min":1,"max":99}');
+    assert.equal(h.validateIcecast({ ...sc, ice_stream_id: 'one' }, t), 'ERR_NUMBER {"field":"ICE_STREAM_ID"}');
+    assert.equal(h.validateIcecast({ ...sc, ice_port: '65535' }, t), 'ERR_PORT {"field":"ICE_PORT"}');
+    assert.equal(h.validateIcecast({ ...sc, ice_user: 'a"b' }, t), null);
+    const kept = {};
+    h.applyIcecast({ ...sc, ice_bitrate: '128', ice_rate: '44100', ice_stream_id: ' 2 ' }, (k, v) => { kept[k] = v; });
+    assert.equal(kept.ice_protocol, 'shoutcast1');
+    assert.equal(kept.ice_stream_id, '2');
+    assert.equal('ice_mount' in kept, false);
+    assert.equal('ice_user' in kept, false);
+    const u = h.uplinksFrom((k, d) => (k in kept ? kept[k] : d));
+    assert.equal(u.icecast.protocol, 'shoutcast1');
+    assert.equal(u.icecast.stream_id, 2);
+    assert.equal(u.icecast.mount, '/volumio.mp3');
+    assert.equal(h.uplinksFrom((k, d) => d).icecast.protocol, 'icecast2');
+});
+
 test('the network stream and the recording are checked too', () => {
     assert.equal(h.validateLan({ lan_enabled: true, lan_port: '8000', lan_name: 'x', lan_max_listeners: '5' }, t), null);
     assert.equal(h.validateLan({ lan_enabled: true, lan_port: '0', lan_name: 'x', lan_max_listeners: '5' }, t), 'ERR_PORT {"field":"LAN_PORT"}');
@@ -78,7 +100,7 @@ test('a save keeps the page values, and the file the core reads follows', () => 
     assert.equal(kept.rec_folder, '/data/INTERNAL/outcast/rec');
     const get = (k, d) => (k in kept ? kept[k] : d);
     const u = h.uplinksFrom(get);
-    assert.deepEqual(u.icecast, { enabled: true, host: 'ice.example.com', port: 8000, mount: '/live.opus', user: 'source', password: 'pw', codec: 'opus', bitrate: 128, rate: 48000, name: 'Living room', description: 'd', genre: 'g', url: 'u', public: true, keep_alive: true });
+    assert.deepEqual(u.icecast, { enabled: true, protocol: 'icecast2', host: 'ice.example.com', port: 8000, mount: '/live.opus', stream_id: 1, user: 'source', password: 'pw', codec: 'opus', bitrate: 128, rate: 48000, name: 'Living room', description: 'd', genre: 'g', url: 'u', public: true, keep_alive: true });
     assert.deepEqual(u.lan, { enabled: true, port: 8001, codec: 'flac', bitrate: 320, rate: 0, name: 'LAN', max_listeners: 3, keep_alive: true });
     h.applyLan({ lan_enabled: true, lan_port: '8001', lan_codec: 'mp3', lan_bitrate: '192', lan_rate: '44100', lan_name: 'LAN', lan_max_listeners: '3', lan_keep_alive: false }, set);
     assert.equal(h.uplinksFrom(get).lan.keep_alive, false);

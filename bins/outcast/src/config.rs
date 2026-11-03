@@ -58,17 +58,37 @@ fn default_true() -> bool {
     true
 }
 
-/// The Icecast uplink: the source protocol to one mount.
+/// How the uplink talks to the server.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Protocol {
+    /// Icecast 2's `SOURCE` request to a mount, with Basic authentication.
+    #[default]
+    Icecast2,
+    /// SHOUTcast's v1 source protocol: the password on the port above the
+    /// server's, `OK2`, the `icy-*` headers; what a DNAS 1 takes, and a
+    /// DNAS 2 on its legacy port.
+    Shoutcast1,
+}
+
+/// The Icecast uplink: the source protocol to one mount, or SHOUTcast's.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Icecast {
     #[serde(default)]
     pub enabled: bool,
     #[serde(default)]
+    pub protocol: Protocol,
+    #[serde(default)]
     pub host: String,
+    /// The server's own port; a SHOUTcast source connects one above it.
     #[serde(default = "Icecast::default_port")]
     pub port: u16,
     #[serde(default = "Icecast::default_mount")]
     pub mount: String,
+    /// The stream a SHOUTcast DNAS 2 with several takes this one as; 1 for a
+    /// DNAS 1 or a DNAS 2 with one.
+    #[serde(default = "Icecast::default_stream_id")]
+    pub stream_id: u32,
     #[serde(default = "Icecast::default_user")]
     pub user: String,
     #[serde(default)]
@@ -103,6 +123,9 @@ impl Icecast {
     fn default_mount() -> String {
         "/volumio.mp3".into()
     }
+    fn default_stream_id() -> u32 {
+        1
+    }
     fn default_user() -> String {
         "source".into()
     }
@@ -124,9 +147,11 @@ impl Default for Icecast {
     fn default() -> Self {
         Self {
             enabled: false,
+            protocol: Protocol::Icecast2,
             host: String::new(),
             port: Self::default_port(),
             mount: Self::default_mount(),
+            stream_id: Self::default_stream_id(),
             user: Self::default_user(),
             password: String::new(),
             codec: Self::default_codec(),
@@ -289,8 +314,25 @@ impl Uplinks {
         let i = &mut self.icecast;
         i.host = i.host.trim().to_string();
         i.mount = i.mount.trim().to_string();
-        if i.enabled && (i.host.is_empty() || !i.mount.starts_with('/')) {
+        if i.enabled && i.host.is_empty() {
             i.enabled = false;
+        }
+        match i.protocol {
+            Protocol::Icecast2 => {
+                if i.enabled && !i.mount.starts_with('/') {
+                    i.enabled = false;
+                }
+            }
+            Protocol::Shoutcast1 => {
+                // SHOUTcast carries MP3 and AAC and nothing else; a stream id is 1 or more.
+                if !matches!(i.codec, Codec::Mp3 | Codec::Aac) {
+                    i.codec = Codec::Mp3;
+                }
+                i.stream_id = i.stream_id.clamp(1, 99);
+                if i.port == u16::MAX {
+                    i.enabled = false;
+                }
+            }
         }
         if i.user.trim().is_empty() {
             i.user = Icecast::default_user();
@@ -371,6 +413,22 @@ mod tests {
         v.icecast.mount = "nomount".into();
         v.tidy();
         assert!(!v.icecast.enabled);
+    }
+
+    #[test]
+    fn shoutcast_takes_no_mount_and_only_its_codecs() {
+        let mut u: Uplinks = serde_json::from_str(
+            r#"{"icecast":{"enabled":true,"protocol":"shoutcast1","host":"h","password":"p","mount":"","codec":"opus","stream_id":0}}"#,
+        )
+        .unwrap();
+        u.tidy();
+        assert!(u.icecast.enabled);
+        assert_eq!(u.icecast.protocol, Protocol::Shoutcast1);
+        assert_eq!(u.icecast.codec, Codec::Mp3);
+        assert_eq!(u.icecast.stream_id, 1);
+        let d = Uplinks::default();
+        assert_eq!(d.icecast.protocol, Protocol::Icecast2);
+        assert_eq!(d.icecast.stream_id, 1);
     }
 
     #[test]

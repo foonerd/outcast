@@ -80,7 +80,18 @@ impl Hub {
         let icecast = uplinks.icecast.enabled.then(|| {
             let cfg = uplinks.icecast.clone();
             let ctx = self.ctx("icecast", "icecast");
-            listed.push(ctx.entry(&format!("{}:{}{}", cfg.host, cfg.port, cfg.mount)));
+            let detail = match cfg.protocol {
+                crate::config::Protocol::Icecast2 => {
+                    format!("{}:{}{}", cfg.host, cfg.port, cfg.mount)
+                }
+                crate::config::Protocol::Shoutcast1 => {
+                    format!(
+                        "{}:{} SHOUTcast v1, stream {}",
+                        cfg.host, cfg.port, cfg.stream_id
+                    )
+                }
+            };
+            listed.push(ctx.entry(&detail));
             (cfg, ctx)
         });
         let lan = uplinks.lan.enabled.then(|| {
