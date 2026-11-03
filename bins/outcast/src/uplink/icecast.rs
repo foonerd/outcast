@@ -67,9 +67,17 @@ pub fn source_request(cfg: &Icecast, content_type: &str, version: &str) -> Strin
     if !cfg.url.is_empty() {
         h.push(format!("ice-url: {}", clean_line(&cfg.url)));
     }
+    // What the server tells directories and listeners of the stream: the bitrate
+    // for a lossy codec, the rate where it is fixed, the channels.
+    let mut info: Vec<String> = Vec::new();
     if cfg.codec.lossy() {
-        h.push(format!("ice-audio-info: bitrate={}", cfg.bitrate));
+        info.push(format!("bitrate={}", cfg.bitrate));
     }
+    if cfg.rate != 0 {
+        info.push(format!("samplerate={}", cfg.rate));
+    }
+    info.push("channels=2".to_string());
+    h.push(format!("ice-audio-info: {}", info.join(";")));
     h.join("\r\n") + "\r\n\r\n"
 }
 
@@ -599,7 +607,7 @@ mod tests {
         assert!(r.starts_with("SOURCE /volumio.mp3 HTTP/1.0\r\nHost: ice.example.com:8000\r\nAuthorization: Basic c291cmNlOmhhY2ttZQ==\r\nUser-Agent: outcast/0.1.0\r\nContent-Type: audio/mpeg\r\nice-public: 0\r\nice-name: Volumio\r\n"), "{r}");
         assert!(r.contains("ice-description: a b\r\n"));
         assert!(!r.contains("ice-genre"));
-        assert!(r.contains("ice-audio-info: bitrate=192\r\n"));
+        assert!(r.contains("ice-audio-info: bitrate=192;samplerate=44100;channels=2\r\n"));
         assert!(r.ends_with("\r\n\r\n"));
     }
 

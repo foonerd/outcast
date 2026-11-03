@@ -189,8 +189,10 @@ pub fn run(cfg: Lan, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u8>>>
         cfg.codec.content_type()
     ));
     ctx.state("listening", Some(""));
-    // The acceptor, on a thread of its own, for as long as the socket lives.
-    {
+    // The acceptor, on a thread of its own, for as long as the worker lives: the
+    // listening socket is shut when the worker ends, which ends the accepting, so the
+    // port is free for the next worker.
+    let acceptor = {
         let shared = Arc::clone(&shared);
         let cfg = cfg.clone();
         let ctx = ctx.clone();
@@ -209,8 +211,8 @@ pub fn run(cfg: Lan, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u8>>>
                         .spawn(move || serve(stream, cfg, shared, ctx));
                 }
             })
-            .expect("lan accept thread");
-    }
+            .expect("lan accept thread")
+    };
 
     let ogg = matches!(cfg.codec, Codec::Opus | Codec::Vorbis | Codec::Flac);
     let mut pages = OggPages::default();
@@ -315,7 +317,13 @@ pub fn run(cfg: Lan, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u8>>>
         .unwrap_or_else(|e| e.into_inner())
         .listeners
         .clear();
+    // The listening socket shut: the acceptor's wait ends with an error and it leaves.
+    {
+        use std::os::unix::io::AsRawFd;
+        unsafe { libc::shutdown(listener.as_raw_fd(), libc::SHUT_RDWR) };
+    }
     drop(listener);
+    let _ = acceptor.join();
     ctx.state("off", None);
 }
 

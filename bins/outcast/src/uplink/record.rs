@@ -6,7 +6,7 @@
 use std::path::PathBuf;
 use std::sync::mpsc::Receiver;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::config::{Record, Split};
 use crate::encoder::{Encoder, Output, Recipe};
@@ -56,8 +56,71 @@ pub fn file_for(cfg: &Record, title: &str, stamp: &str) -> PathBuf {
     PathBuf::from(&cfg.folder).join(name)
 }
 
+/// How long a new stream's first bytes are held before its file begins: the
+/// player's title settles in the hub within two seconds of the stream, and a
+/// file named by it from its first byte is worth the wait. The bytes held are
+/// written first, so nothing is lost.
+const PREROLL: Duration = Duration::from_millis(2500);
+/// The most the pre-roll holds; beyond it the file begins whatever the title.
+const PREROLL_MOST: usize = 16 << 20;
+
+/// A file begun for the segment, with the pre-roll written first.
+fn begin(
+    cfg: &Record,
+    ctx: &Ctx,
+    seg: &Segment,
+    title: &str,
+    preroll: &mut Vec<u8>,
+    files: &mut u64,
+) -> Option<Encoder> {
+    if let Err(e) = std::fs::create_dir_all(&cfg.folder) {
+        ctx.state("error", Some(&format!("{}: {e}", cfg.folder)));
+        ctx.log(&format!("{}: {e}", cfg.folder));
+        std::thread::sleep(Duration::from_secs(5));
+        return None;
+    }
+    let path = file_for(cfg, title, &stamp());
+    let recipe = Recipe {
+        codec: cfg.codec,
+        bitrate: cfg.bitrate,
+        rate: cfg.rate,
+        title: title.to_string(),
+        output: Output::File(path.clone()),
+    };
+    match Encoder::start(&ctx.evopeg, seg, &recipe, None, &ctx.id) {
+        Ok(mut e) => {
+            if !preroll.is_empty() {
+                if let Err(err) = e.feed(preroll) {
+                    ctx.log(&format!("encoder gone: {err}"));
+                    e.kill();
+                    return None;
+                }
+                preroll.clear();
+            }
+            *files += 1;
+            let shown = path.display().to_string();
+            ctx.log(&format!("recording {shown}"));
+            let n = *files;
+            ctx.update(|u| {
+                u.state = "recording".into();
+                u.detail = shown;
+                u.files = n;
+            });
+            Some(e)
+        }
+        Err(e) => {
+            ctx.state("error", Some(&format!("encoder: {e}")));
+            ctx.log(&format!("encoder: {e}"));
+            std::thread::sleep(Duration::from_secs(2));
+            None
+        }
+    }
+}
+
 pub fn run(cfg: Record, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u8>>>) {
     let mut segment: Option<Segment> = None;
+    let mut since: Option<Instant> = None;
+    let mut preroll: Vec<u8> = Vec::new();
     let mut title = String::new();
     let mut recording_title = String::new();
     let mut encoder: Option<Encoder> = None;
@@ -66,42 +129,11 @@ pub fn run(cfg: Record, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u8
     ctx.log(&format!("to {} as {}", cfg.folder, cfg.codec.extension()));
 
     loop {
-        if let (Some(seg), None) = (segment.as_ref(), encoder.as_ref()) {
-            match std::fs::create_dir_all(&cfg.folder) {
-                Ok(()) => {
-                    let path = file_for(&cfg, &title, &stamp());
-                    let recipe = Recipe {
-                        codec: cfg.codec,
-                        bitrate: cfg.bitrate,
-                        rate: cfg.rate,
-                        title: title.clone(),
-                        output: Output::File(path.clone()),
-                    };
-                    match Encoder::start(&ctx.evopeg, seg, &recipe, None, &ctx.id) {
-                        Ok(e) => {
-                            encoder = Some(e);
-                            recording_title = title.clone();
-                            files += 1;
-                            let shown = path.display().to_string();
-                            ctx.log(&format!("recording {shown}"));
-                            ctx.update(|u| {
-                                u.state = "recording".into();
-                                u.detail = shown;
-                                u.files = files;
-                            });
-                        }
-                        Err(e) => {
-                            ctx.state("error", Some(&format!("encoder: {e}")));
-                            ctx.log(&format!("encoder: {e}"));
-                            std::thread::sleep(Duration::from_secs(2));
-                        }
-                    }
-                }
-                Err(e) => {
-                    ctx.state("error", Some(&format!("{}: {e}", cfg.folder)));
-                    ctx.log(&format!("{}: {e}", cfg.folder));
-                    std::thread::sleep(Duration::from_secs(5));
-                }
+        // A stream whose first bytes have been held long enough gets its file.
+        if let (Some(seg), None, Some(at)) = (segment.as_ref(), encoder.as_ref(), since) {
+            if at.elapsed() >= PREROLL || preroll.len() >= PREROLL_MOST {
+                encoder = begin(&cfg, &ctx, seg, &title, &mut preroll, &mut files);
+                recording_title = title.clone();
             }
         }
         match uplink::next(&ctl, &pcm, Duration::from_millis(20)) {
@@ -112,12 +144,21 @@ pub fn run(cfg: Record, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u8
                     e.finish(GRACE);
                 }
                 segment = Some(seg);
+                since = Some(Instant::now());
+                preroll.clear();
             }
             Next::Event(Event::End) => {
                 if let Some(e) = encoder.take() {
                     e.finish(GRACE);
+                } else if let (Some(seg), false) = (segment.as_ref(), preroll.is_empty()) {
+                    // A stream shorter than the pre-roll still gets its file.
+                    if let Some(e) = begin(&cfg, &ctx, seg, &title, &mut preroll, &mut files) {
+                        e.finish(GRACE);
+                    }
                 }
                 segment = None;
+                since = None;
+                preroll.clear();
                 ctx.update(|u| {
                     u.state = "idle".into();
                     u.detail = cfg.folder.clone();
@@ -131,14 +172,21 @@ pub fn run(cfg: Record, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u8
                     && encoder.is_some()
                     && recording_title != title
                 {
-                    // The next file begins with the next bytes.
+                    // The next file begins with the next bytes, at once: the title
+                    // has already settled in the hub.
                     if let Some(e) = encoder.take() {
                         e.finish(GRACE);
                     }
+                    since = Some(Instant::now() - PREROLL);
                 }
             }
             Next::Pcm(piece) => {
-                let Some(e) = encoder.as_mut() else { continue };
+                let Some(e) = encoder.as_mut() else {
+                    if segment.is_some() && preroll.len() < PREROLL_MOST {
+                        preroll.extend_from_slice(&piece);
+                    }
+                    continue;
+                };
                 if let Err(err) = e.feed(&piece) {
                     ctx.log(&format!("encoder gone: {err}"));
                     ctx.state("error", Some(&format!("encoder: {err}")));

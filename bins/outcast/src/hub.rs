@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, Sender, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
+use std::time::{Duration, Instant};
 
 use tap::audio::Shape;
 
@@ -35,12 +36,19 @@ struct Worker {
     handle: Option<JoinHandle<()>>,
 }
 
+/// How long a title is held before the uplinks hear it: the player pushes a
+/// state with the previous track's title for a moment when a queue changes,
+/// and a title that lasts less than this was never the screen's.
+const TITLE_HOLD: Duration = Duration::from_secs(2);
+
 pub struct Hub {
     status: Arc<Mutex<Status>>,
     evopeg: PathBuf,
     config: PathBuf,
     workers: Vec<Worker>,
     title: String,
+    /// A title just given, and when; told to the uplinks once it has stood.
+    pending_title: Option<(String, Instant)>,
     segment: Option<(Segment, Conversion)>,
     converted: Vec<u8>,
 }
@@ -53,6 +61,7 @@ impl Hub {
             config: config.to_path_buf(),
             workers: Vec::new(),
             title: String::new(),
+            pending_title: None,
             segment: None,
             converted: Vec::new(),
         }
@@ -213,12 +222,25 @@ impl Hub {
         self.broadcast(Event::End);
     }
 
+    /// A title from the player: held until it has stood for `TITLE_HOLD`.
     pub fn title(&mut self, title: String) {
         if self.title == title {
+            self.pending_title = None;
             return;
         }
-        self.title = title.clone();
-        self.broadcast(Event::Title(title));
+        self.pending_title = Some((title, Instant::now()));
+    }
+
+    /// A held title that has stood long enough, told to the uplinks. Called
+    /// often, between looks at the ring.
+    pub fn tick(&mut self) {
+        let due = matches!(&self.pending_title, Some((_, at)) if at.elapsed() >= TITLE_HOLD);
+        if due {
+            if let Some((title, _)) = self.pending_title.take() {
+                self.title = title.clone();
+                self.broadcast(Event::Title(title));
+            }
+        }
     }
 
     /// A command from the control socket.

@@ -39,8 +39,10 @@ fn ring_of(reader: &Reader) -> Ring {
     }
 }
 
-/// Every command waiting, given to the hub. False when the control side is gone.
+/// Every command waiting, given to the hub, and the hub's clock ticked. False
+/// when the control side is gone.
 fn commands(hub: &mut Hub, rx: &Receiver<Command>) -> bool {
+    hub.tick();
     loop {
         match rx.try_recv() {
             Ok(c) => hub.command(c),

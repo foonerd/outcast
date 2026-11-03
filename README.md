@@ -4,7 +4,21 @@ A Volumio plugin of the [evo framework](https://evoframework.org) that casts wha
 
 Each uplink has its own encoder, transport, reconnection and status. One failing never stops another.
 
-There is no release yet. The first will carry the Icecast uplink, the LAN stream and recording to a file; the radio, broadcast and CDN families follow, each with its own release.
+The first release carries three uplinks: an Icecast server, a stream on the network, and recording to files. The radio (SHOUTcast), broadcast (RTMP, SRT) and CDN (HLS) families follow, each with its own release.
+
+## The uplinks
+
+| Uplink | What it does |
+| --- | --- |
+| Icecast | The source protocol to one mount of an Icecast server (AzuraCast, Zeno, Live365, Radio.co and most hosted radio take the same), as MP3, AAC, Opus or Ogg Vorbis. A server that goes away is retried with a backoff; a server that stops taking bytes is found within seconds and dropped; a refused password is retried after a minute. The title the player shows is pushed to the server for MP3 and AAC and carried in the stream for Opus and Ogg Vorbis. |
+| The stream on the network | An HTTP stream on a port of the player, at `http://<player>:<port>/`, as MP3, AAC, Opus, Ogg Vorbis or FLAC, for any player on the network: titles in band for a player that asks for them, a listener joining late given the stream's headers, a limit on listeners. |
+| Recording | FLAC, WAV, MP3, AAC, Opus or Ogg Vorbis files under a folder of the player (`/data/INTERNAL/outcast/recordings` unless set otherwise, reachable over the player's network share), a file per track named by the moment and the title, or one file per stream. |
+
+Each is set up on the plugin's settings page; the status button there says what the player is playing as the tap sees it and where each uplink stands.
+
+## Installing and the audio chain
+
+The plugin installs from the Volumio plugin store, or from a release here through the player's plugin manager. On enabling, the tap is proved before it is taken into the player's audio chain: the player's own ALSA loads it and plays a second through it into nothing; only then is its contribution registered, and the chain as written is verified. Any failure takes the contribution back and says why, so a player is never left with a chain it cannot open. Disabling the plugin takes the tap out again. Nothing of the player's own software is modified; every binary the plugin runs is in its own folder.
 
 ## How it is built
 
