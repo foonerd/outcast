@@ -21,7 +21,7 @@
     "os": ["bookworm"],
     "architectures": ["armhf", "amd64"],
     "details": "Streams whatever the player plays, from any service, to Icecast, SHOUTcast, RTMP, SRT, HLS, the LAN or a file, with the screen's title. Built on evotap.",
-    "changelog": "No release yet."
+    "changelog": "0.1.0 The first release: the Icecast uplink, the stream on the network and recording to files, each with its own encoder, transport and status; every service the player has carried by evotap, with the title the screen shows."
   },
   "dependencies": {
     "kew": "^0.7.0",
