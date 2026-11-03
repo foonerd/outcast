@@ -2,6 +2,17 @@
 
 All notable changes to Outcast Uplink. The format follows Keep a Changelog; the versions follow Semantic Versioning.
 
+## [0.1.4] - 2026-11-03
+
+### Changed
+
+- The destination decides: the Icecast and network stream sections take any bitrate, any sample rate or "as played", and stereo, mono or as played, with the values commonly used for the chosen server type as defaults, a Suggested settings button that fills them in, and the words beside each field saying what the common servers take. Nothing is refused by the plugin; a server's or the encoder's own refusal is shown as it comes. SHOUTcast takes any codec the operator sets.
+
+### Added
+
+- A sample rate that is set gives one continuous stream at that rate whatever the player plays: a track at another rate is resampled in the core (a windowed sinc, rubato), one at another width is widened, a mono track is doubled, and the encoder runs on across the player's changes. "As played" follows the player's rate and starts the stream anew at every change, as before.
+- The core's log says what it does with each stream: as it is, resampled to the chosen rate, or widened.
+
 ## [0.1.3] - 2026-11-03
 
 ### Added

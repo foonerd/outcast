@@ -1,6 +1,6 @@
 {
   "name": "outcast",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Casts whatever the player plays out to any uplink: Icecast, SHOUTcast, RTMP, SRT, HLS, the LAN or a file. An evo framework plugin built on evotap.",
   "main": "index.js",
   "scripts": {
@@ -21,7 +21,7 @@
     "os": ["bookworm"],
     "architectures": ["armhf", "amd64"],
     "details": "Streams whatever the player plays, from any service, to Icecast, SHOUTcast, RTMP, SRT, HLS, the LAN or a file, with the screen's title. Built on evotap.",
-    "changelog": "0.1.3 SHOUTcast servers on the Icecast uplink, and the settings page in eleven languages."
+    "changelog": "0.1.4 The destination decides: presets per server type, any value under Advanced, and a set rate is one continuous stream."
   },
   "dependencies": {
     "kew": "^0.7.0",
