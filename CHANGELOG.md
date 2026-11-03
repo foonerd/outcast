@@ -2,6 +2,12 @@
 
 All notable changes to Outcast Uplink. The format follows Keep a Changelog; the versions follow Semantic Versioning.
 
+## [0.1.7] - 2026-11-03
+
+### Added
+
+- The lite's client built for Android on every release: `outcast-lite-client-<version>-android.tar.gz`, the reference client for arm64-v8a, armeabi-v7a and x86_64 built with the NDK as Glass builds its app, the client crate's source beside it for a remote that links it, the document and the licence, signed like every asset.
+
 ## [0.1.6] - 2026-11-03
 
 ### Added
