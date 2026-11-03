@@ -2,6 +2,13 @@
 
 All notable changes to Outcast Uplink. The format follows Keep a Changelog; the versions follow Semantic Versioning.
 
+## [0.1.6] - 2026-11-03
+
+### Added
+
+- outcast-lite for native remotes: `lite-client`, a pure-Rust crate of this workspace a remote links by tag on Linux, Windows and Android (the connection, every frame as an event, the segment's shape, the PCM decoded to 16-bit or float), built in CI for the three Android ABIs the way Glass builds its app; a reference client, `examples/lite-client.rs`, in every archive and in the repository; and the document's section on playing the stream from a native remote (reaching the lite through the manager, the audio queue and its lead, the reopen on a new segment, the clear on gap and end, the drift, bit-perfect on Linux).
+- The page sketch keeps playing with the screen locked or the tab in the background, on Android and iOS, through a media stream and an audio element with a media session.
+
 ## [0.1.5] - 2026-11-03
 
 ### Added
