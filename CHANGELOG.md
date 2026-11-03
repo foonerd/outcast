@@ -2,6 +2,12 @@
 
 All notable changes to Outcast Uplink. The format follows Keep a Changelog; the versions follow Semantic Versioning.
 
+## [0.1.8] - 2026-11-03
+
+### Changed
+
+- The lite's client on the release for every remote platform under one name, `outcast-lite-client-<version>-<platform>.tar.gz`: linux-x64, linux-armv7, linux-armv8, windows-x64 and android, each with the reference client built for the platform, the client crate's source, the document and the licence, signed like every asset. The document's "Getting it" is one table of the two families, the player's and the remote's.
+
 ## [0.1.7] - 2026-11-03
 
 ### Added
