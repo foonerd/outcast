@@ -161,6 +161,14 @@ ws.onmessage = (e) => {
 };
 ```
 
+On a phone the sound stops when the screen locks or the tab goes to the background, since a page's audio graph is not media to the system. Route the graph into a media stream and an audio element instead of the context's destination, and give it a media session: the sound then goes on with the screen off, with the lock screen's controls, on Android Chrome and iOS Safari alike. In place of `gain.connect(ctx.destination)` above:
+
+```js
+const dest = ctx.createMediaStreamDestination(); gain.connect(dest);
+const el = new Audio(); el.srcObject = dest.stream; el.play();   // inside the same tap that resumed the context
+if ('mediaSession' in navigator) navigator.mediaSession.metadata = new MediaMetadata({ title: 'Volumio' });
+```
+
 ## Behind a manager
 
 The page talks to its manager already; the lite listens on the loopback. Node proxies a WebSocket upgrade socket to socket with no library, so the page sees one origin, one port and the manager's own access control:
@@ -179,6 +187,57 @@ server.on('upgrade', (req, socket, head) => {
 ```
 
 The lite's answer to the upgrade goes back through the same socket. `litePort` is what the `listening` line said.
+
+## Playing it in a native remote
+
+A remote display on Linux, Windows or Android is a native client of the same wire: it opens the WebSocket the page opens, through the player's manager at the route the manager gives it (`ws://<player>:<manager port>/anymote/listen`, with whatever the manager asks of a remote), and takes the same frames. The lite never listens on the network itself; the manager's route is the way in from another machine.
+
+What the client does with the frames, in the order the stream brings them:
+
+1. **`segment`**: open the audio device at the segment's rate and channels, in the widest format the device takes, and convert each sample from the segment's format on the way (`s16le` as it is; `s24le` three bytes sign-extended; `s32le` as it is or its top bits; `f32le` as it is). A new `segment` while one is open: stop, clear the queue, reopen at the new shape. `one_bit`: say "plays on the player only" and queue nothing.
+2. **Binary frames**: queue them on the device. Start the device once about 200 ms are queued, not before, so the first frames do not run dry; that lead is the jitter buffer, and a quarter second is right for a LAN.
+3. **`gap`** and **`end`**: clear the queue; the stream starts again from the next frame (`gap`) or the next `segment` (`end`).
+4. **The queue's depth over time**: the player's clock and the device's clock drift by a few milliseconds a minute. If the queued audio grows past about half a second, drop it back to the lead; if it runs dry, pause the device until the lead is there again. A remote that resamples (the device at its own rate, the stream through a resampler such as `rubato`) can trim the ratio by a hair instead of dropping; either is inaudible.
+5. **The socket closing**: the lite leaves when nobody has listened for its idle time, and the manager starts it again on the next ask; reconnect with a backoff of a second or two.
+
+With SDL2, which the Glass remote already carries, this is an `AudioQueue` opened with `AudioSpecDesired { freq: rate, channels, samples: None }`, `queue_audio` per frame, `size()` for the depth, `clear()` on gap and end, `resume()` once the lead is queued. On Linux a remote can open the ALSA device directly at the stream's own rate and width and be bit-perfect to its DAC, the one place on the way where that is possible; on Android (AAudio) and Windows (WASAPI) the system mixer resamples to the device's rate, which loses nothing but the bits.
+
+### The client crate
+
+The wire's client side is a crate of the outcast workspace, `lite-client`, pure Rust, for a remote to link on Linux, Windows and Android alike: the connection, every frame as an event, the segment's shape, and the PCM of each frame decoded to 16-bit or float for the audio device. A remote takes it by tag, as Outcast takes Glass's tap crate:
+
+```toml
+[dependencies]
+lite-client = { git = "https://github.com/foonerd/outcast", tag = "v0.1.6" }
+```
+
+```rust
+use lite_client::{Client, Event};
+let mut client = Client::connect("ws://player:5582/anymote/listen")?;
+let (mut shape, mut samples) = (None, Vec::new());
+loop {
+    match client.event()? {
+        Event::Segment(s) => shape = Some(s),           // open the device at s.rate, s.channels
+        Event::Pcm(pcm) => if let Some(s) = &shape {
+            s.to_f32(&pcm, &mut samples);               // or to_i16; then queue them
+        },
+        Event::Gap { .. } | Event::End => {}            // clear the device's queue
+        Event::Closed => break,                         // reconnect after a moment
+        _ => {}
+    }
+}
+```
+
+A later lite's new frame types come back as `Event::Other` and its new fields are ignored, so a remote built against one version runs against the next. The crate builds for the Android ABIs with cargo-ndk exactly as the Glass app does; outcast's CI builds it and the reference client for arm64-v8a, armeabi-v7a and x86_64 on every commit, with the same NDK and the same steps as Glass's own Android job, so a remote that links it has nothing new to set up.
+
+The reference client ships in every archive and in the repository as `examples/lite-client.rs`: it uses the crate, prints every event to standard error and writes the PCM to standard output as it comes, or as 16-bit with `--s16`, so a remote's audio code can be tried against the real wire before it is written:
+
+```sh
+cargo build -p lite-client --example lite-client
+target/debug/examples/lite-client ws://<player>:5582/anymote/listen --s16 | aplay -f S16_LE -r 44100 -c 2
+```
+
+The rest of a remote is the queue and the rules above.
 
 ## Versions and the contract
 

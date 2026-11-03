@@ -81,7 +81,7 @@ jobs:
           for arch in arm armv7 armv8 x64; do
             t="dist/outcast-lite-$version-$arch.tar.gz"
             [ -f "$t" ] || { echo "no $t" >&2; exit 1; }
-            for f in bin/outcast-lite README.md LICENSE; do
+            for f in bin/outcast-lite README.md LICENSE examples/lite-client.rs; do
               tar -tzf "$t" | grep -q "^outcast-lite-$version-$arch/$f\$" || { echo "no $f in $t" >&2; exit 1; }
             done
           done

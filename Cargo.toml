@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["bins/outcast", "bins/outcast-lite", "crates/stream"]
+members = ["bins/outcast", "bins/outcast-lite", "crates/stream", "crates/lite-client"]
 
 [workspace.package]
 version = "0.1.5"
