@@ -70,6 +70,19 @@ jobs:
             [ -f "$f" ] || { echo "no reference client for $abi" >&2; exit 1; }
             file "$f" | grep -q ELF || { echo "$f is not an ELF" >&2; exit 1; }
           done
+      - run: scripts/package-android.sh
+      - name: The Android archive carries the three builds, the crate, the document and the licence
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)
+          t="dist/outcast-lite-client-$version-android.tar.gz"
+          for f in arm64-v8a/lite-client armeabi-v7a/lite-client x86_64/lite-client crate/Cargo.toml crate/src/lib.rs crate/examples/lite-client.rs README.md LICENSE; do
+            tar -tzf "$t" | grep -q "^outcast-lite-client-$version-android/$f\$" || { echo "no $f in $t" >&2; exit 1; }
+          done
+      - uses: actions/upload-artifact@v7
+        with:
+          name: outcast-lite-android
+          path: dist/outcast-lite-client-*-android.tar.gz
+          if-no-files-found: error
 
   ship:
     name: cross builds, the components, the plugin zip

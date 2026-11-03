@@ -45,6 +45,50 @@ jobs:
       - run: shellcheck -S warning -s sh plugin/install.sh plugin/uninstall.sh
       - run: shellcheck -S warning scripts/*.sh
 
+  android:
+    # The client crate a remote links, and its reference client, built for the three
+    # Android ABIs the way Glass builds its app: the Android Rust targets, the NDK and
+    # cargo-ndk on the runner itself. Nothing of it is a release asset; a remote takes
+    # the crate from this repository by tag.
+    name: lite-client for Android
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup toolchain install && rustup show active-toolchain && rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
+      - name: The NDK and cargo-ndk
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;27.2.12479018" >/dev/null
+          cargo install cargo-ndk --locked
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: android
+          cache-bin: false
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: lite-client and its reference client for arm64-v8a, armeabi-v7a and x86_64
+        run: |
+          ndk=$(find "$ANDROID_HOME/ndk" -maxdepth 1 -mindepth 1 -name '27.*' | sort -V | tail -n1)
+          export ANDROID_NDK_HOME="$ndk"
+          cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 build --release --locked -p lite-client --examples
+          for abi in aarch64-linux-android armv7-linux-androideabi x86_64-linux-android; do
+            f="target/$abi/release/examples/lite-client"
+            [ -f "$f" ] || { echo "no reference client for $abi" >&2; exit 1; }
+            file "$f" | grep -q ELF || { echo "$f is not an ELF" >&2; exit 1; }
+          done
+      - run: scripts/package-android.sh
+      - name: The Android archive carries the three builds, the crate, the document and the licence
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)
+          t="dist/outcast-lite-client-$version-android.tar.gz"
+          for f in arm64-v8a/lite-client armeabi-v7a/lite-client x86_64/lite-client crate/Cargo.toml crate/src/lib.rs crate/examples/lite-client.rs README.md LICENSE; do
+            tar -tzf "$t" | grep -q "^outcast-lite-client-$version-android/$f\$" || { echo "no $f in $t" >&2; exit 1; }
+          done
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-android
+          path: dist/outcast-lite-client-*-android.tar.gz
+          if-no-files-found: error
+
   ship:
     name: cross builds, the components, the plugin zip
     runs-on: ubuntu-24.04
@@ -102,7 +146,7 @@ jobs:
   publish:
     name: sign, publish
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [check, shell, ship]
+    needs: [check, shell, ship, android]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -115,6 +159,10 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           name: release-lite
+          path: dist
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-android
           path: dist
       # The zip and every lite archive carry MANIFEST, every file's digest, and its
       # Ed25519 signature; beside them SHA256SUMS and its signature. The private key comes from the repository's
@@ -136,7 +184,7 @@ jobs:
           {
             scripts/release-notes.sh "$version"
             printf '\nShips evotap %s and evopeg %s.\n\n' "$(sed -n 's/^VERSION=//p' components/evotap.lock)" "$(sed -n 's/^VERSION=//p' components/evopeg.lock)"
-            printf 'Beside the zip, outcast-lite %s for Glass and any other consumer, one archive per architecture, signed the same way; docs/outcast-lite.md says what it is and how it is used.\n\n' "$version"
+            printf 'Beside the zip, outcast-lite %s for Glass and any other consumer, one archive per architecture, and the lite client built for Android (arm64-v8a, armeabi-v7a, x86_64) with the crate a remote links; all signed the same way; docs/outcast-lite.md says what it is and how it is used.\n\n' "$version"
             cat .github/release-footer.md
           } > dist/notes.md
       # Published as a pre-release: no player is offered it but one asked for it by
