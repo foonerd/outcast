@@ -2,6 +2,13 @@
 
 All notable changes to Outcast Uplink. The format follows Keep a Changelog; the versions follow Semantic Versioning.
 
+## [0.1.2] - 2026-11-03
+
+### Added
+
+- The mount and the network stream stay up while the player pauses or stops: the uplink fills with silence at the stream's shape, paced by the clock, from the moment it is on and between streams, so a server never times the source out and a listener stays connected. A stream of the same shape as the last goes on through the same encoder without a seam. Each uplink has a switch to follow the player instead, as before.
+- The status says when an uplink carries silence.
+
 ## [0.1.1] - 2026-11-03
 
 ### Changed
