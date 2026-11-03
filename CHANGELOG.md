@@ -2,30 +2,13 @@
 
 All notable changes to Outcast Uplink. The format follows Keep a Changelog; the versions follow Semantic Versioning.
 
-## [0.1.8] - 2026-11-03
-
-### Changed
-
-- The lite's client on the release for every remote platform under one name, `outcast-lite-client-<version>-<platform>.tar.gz`: linux-x64, linux-armv7, linux-armv8, windows-x64 and android, each with the reference client built for the platform, the client crate's source, the document and the licence, signed like every asset. The document's "Getting it" is one table of the two families, the player's and the remote's.
-
-## [0.1.7] - 2026-11-03
-
-### Added
-
-- The lite's client built for Android on every release: `outcast-lite-client-<version>-android.tar.gz`, the reference client for arm64-v8a, armeabi-v7a and x86_64 built with the NDK as Glass builds its app, the client crate's source beside it for a remote that links it, the document and the licence, signed like every asset.
-
-## [0.1.6] - 2026-11-03
-
-### Added
-
-- outcast-lite for native remotes: `lite-client`, a pure-Rust crate of this workspace a remote links by tag on Linux, Windows and Android (the connection, every frame as an event, the segment's shape, the PCM decoded to 16-bit or float), built in CI for the three Android ABIs the way Glass builds its app; a reference client, `examples/lite-client.rs`, in every archive and in the repository; and the document's section on playing the stream from a native remote (reaching the lite through the manager, the audio queue and its lead, the reopen on a new segment, the clear on gap and end, the drift, bit-perfect on Linux).
-- The page sketch keeps playing with the screen locked or the tab in the background, on Android and iOS, through a media stream and an audio element with a media session.
-
 ## [0.1.5] - 2026-11-03
 
 ### Added
 
-- outcast-lite, beside the plugin zip on every release: one small static binary per architecture that reads the tap's ring and serves the player's sound as it is, PCM over a WebSocket, no encoder, for a page or a remote that wants to hear the player where the person is (Glass's Anymote first). A text frame says what the stream is, binary frames of at most 20 ms carry it; a rate cap sends a hi-res stream down at 16-bit for a weak link; the port is said on standard output and the process leaves by itself when nobody has listened for a while. Signed like every evo component, with `docs/outcast-lite.md` for whoever takes it.
+- outcast-lite, beside the plugin zip on every release: one small static binary per player architecture that reads the tap's ring and serves the player's sound as it is, PCM over a WebSocket, no encoder, for a page or a remote that wants to hear the player where the person is. A text frame says what the stream is, binary frames of at most 20 ms carry it; a rate cap sends a hi-res stream down at 16-bit for a weak link; the port is said on standard output and the process leaves by itself when nobody has listened for a while. Signed like every evo component.
+- The lite's client for every remote platform, `outcast-lite-client-<version>-<platform>.tar.gz` for linux-x64, linux-armv7, linux-armv8, windows-x64 and android: the reference client built for the platform, the `lite-client` crate's source that a remote links on Linux, Windows and Android (the connection, every frame as an event, the segment's shape, the PCM decoded to 16-bit or float), the document and the licence. The crate is built in CI for the three Android ABIs the way Glass builds its app.
+- `docs/outcast-lite.md`, inside every archive as its README: what the lite is and is not, getting and verifying it, what it needs on the player, running it, the wire, the rate cap, playing it in a page (with the screen locked too) and in a native remote, the proxy behind a manager, the contract.
 
 ### Changed
 
