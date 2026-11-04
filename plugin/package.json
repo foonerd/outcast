@@ -1,6 +1,6 @@
 {
   "name": "outcast",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Casts whatever the player plays out to any uplink: Icecast, SHOUTcast, RTMP, SRT, HLS, the LAN or a file. An evo framework plugin built on evotap.",
   "main": "index.js",
   "scripts": {
@@ -21,7 +21,7 @@
     "os": ["bookworm"],
     "architectures": ["armhf", "amd64"],
     "details": "Streams whatever the player plays, from any service, to Icecast, SHOUTcast, RTMP, SRT, HLS, the LAN or a file, with the screen's title. Built on evotap.",
-    "changelog": "0.1.5 outcast-lite beside the zip: the player's sound over a WebSocket, with its client for Linux, Windows and Android remotes, signed and documented."
+    "changelog": "0.1.6 The programme's level and dead air in the status, with the two settings; the core at Nice 5."
   },
   "dependencies": {
     "kew": "^0.7.0",

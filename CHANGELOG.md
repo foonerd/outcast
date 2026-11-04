@@ -2,6 +2,13 @@
 
 All notable changes to Outcast Uplink. The format follows Keep a Changelog; the versions follow Semantic Versioning.
 
+## [0.1.6] - 2026-11-04
+
+### Added
+
+- The programme's level and dead air in the status: the peak and RMS per channel from the tap's measurement ring, and dead air when the programme has been below the dead-air level for the dead-air time, whether the player plays silence or plays nothing; the core's log says when dead air begins and ends. The page has the two settings, a level in dBFS (-60 unless set) and a time in seconds (30 unless set; 0 never).
+- The core's unit runs at `Nice=5`, behind the player's audio thread.
+
 ## [0.1.5] - 2026-11-03
 
 ### Added
