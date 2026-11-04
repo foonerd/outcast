@@ -9,7 +9,9 @@ publish.workspace = true
 [dependencies]
 # The audio ring's shapes and sample layouts, from the Glass release that built the
 # evotap the plugin ships (components/evotap.lock).
-tap = { git = "https://github.com/foonerd/glass", tag = "v0.11.10" }
+# The tap at Glass v0.11.10 or later, evotap 0.1.1: the ring is the contract, versioned by
+# evotap, so the pin follows Glass's main and the lock names the revision built against.
+tap = { git = "https://github.com/foonerd/glass", branch = "main" }
 # The resampler behind a held rate: a windowed sinc, pure Rust.
 rubato = "5.0.1"
 

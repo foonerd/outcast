@@ -43,8 +43,8 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "bank"
-version = "0.11.10"
-source = "git+https://github.com/foonerd/glass?tag=v0.11.10#090ba736aede661cbf787ab0236ef86b9f0fee11"
+version = "0.11.19"
+source = "git+https://github.com/foonerd/glass?branch=main#df3f99874613e9731064b25bc51926d7d8a8d87b"
 dependencies = [
  "rustfft",
  "serde",
@@ -430,7 +430,7 @@ dependencies = [
 [[package]]
 name = "tap"
 version = "0.1.1"
-source = "git+https://github.com/foonerd/glass?tag=v0.11.10#090ba736aede661cbf787ab0236ef86b9f0fee11"
+source = "git+https://github.com/foonerd/glass?branch=main#df3f99874613e9731064b25bc51926d7d8a8d87b"
 dependencies = [
  "bank",
  "libc",
