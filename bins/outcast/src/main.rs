@@ -18,6 +18,7 @@ mod control;
 mod encoder;
 mod follow;
 mod hub;
+mod level;
 mod status;
 mod uplink;
 

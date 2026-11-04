@@ -52,6 +52,22 @@ pub struct Status {
     pub last_error: String,
     /// The uplinks, each with its own state.
     pub uplinks: Vec<Uplink>,
+    /// The programme's level from the tap's measurement ring; none when the
+    /// tap measures nothing.
+    pub level: Option<Level>,
+    /// The programme has been below the dead-air level for the dead-air time.
+    pub dead_air: bool,
+    /// Seconds since the programme last stood above the dead-air level.
+    pub quiet_seconds: u64,
+}
+
+/// The newest hop's level per channel, in dBFS.
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+pub struct Level {
+    pub peak_db: Vec<f32>,
+    pub rms_db: Vec<f32>,
+    /// Seconds since the epoch of the reading.
+    pub at: u64,
 }
 
 /// One uplink's state, as the page shows it.
@@ -106,6 +122,9 @@ impl Status {
             title: String::new(),
             last_error: String::new(),
             uplinks: Vec::new(),
+            level: None,
+            dead_air: false,
+            quiet_seconds: 0,
         }
     }
 

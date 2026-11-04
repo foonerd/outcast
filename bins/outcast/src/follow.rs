@@ -13,6 +13,7 @@ use tap::audio::Reader;
 use tap::sample::{alsa_name, ffmpeg_name};
 
 use crate::hub::{Command, Hub};
+use crate::level::Meter;
 use crate::status::{Ring, Status};
 
 /// Bytes taken from the ring in one go.
@@ -39,10 +40,11 @@ fn ring_of(reader: &Reader) -> Ring {
     }
 }
 
-/// Every command waiting, given to the hub, and the hub's clock ticked. False
-/// when the control side is gone.
-fn commands(hub: &mut Hub, rx: &Receiver<Command>) -> bool {
+/// Every command waiting, given to the hub, the hub's clock ticked and the
+/// meter read. False when the control side is gone.
+fn commands(hub: &mut Hub, rx: &Receiver<Command>, meter: &mut Meter) -> bool {
     hub.tick();
+    meter.tick(&hub.monitor());
     loop {
         match rx.try_recv() {
             Ok(c) => hub.command(c),
@@ -55,8 +57,9 @@ fn commands(hub: &mut Hub, rx: &Receiver<Command>) -> bool {
 /// Follow rings for ever.
 pub fn run(shm: &Path, tag: &str, status: Arc<Mutex<Status>>, mut hub: Hub, rx: Receiver<Command>) {
     let mut buf: Vec<u8> = Vec::with_capacity(TAKE);
+    let mut meter = Meter::new(shm, tag, Arc::clone(&status));
     loop {
-        if !commands(&mut hub, &rx) {
+        if !commands(&mut hub, &rx, &mut meter) {
             break;
         }
         let Some(mut reader) = Reader::open_live(shm, Some(tag)) else {
@@ -79,7 +82,7 @@ pub fn run(shm: &Path, tag: &str, status: Arc<Mutex<Status>>, mut hub: Hub, rx: 
         let mut bytes: u64 = 0;
         let mut lost: u64 = 0;
         loop {
-            if !commands(&mut hub, &rx) {
+            if !commands(&mut hub, &rx, &mut meter) {
                 hub.end();
                 hub.shutdown();
                 return;

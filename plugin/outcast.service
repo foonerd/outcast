@@ -11,6 +11,8 @@ Group=volumio
 RuntimeDirectory=outcast
 RuntimeDirectoryMode=0755
 ExecStart=/data/plugins/audio_interface/outcast/bin/outcast --run /run/outcast
+# Behind the player's audio thread, which is real-time; the encoders never starve it.
+Nice=5
 Restart=always
 RestartSec=3
 KillSignal=SIGTERM

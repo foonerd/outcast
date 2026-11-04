@@ -302,6 +302,37 @@ pub struct Uplinks {
     pub lan: Lan,
     #[serde(default)]
     pub record: Record,
+    #[serde(default)]
+    pub monitor: Monitor,
+}
+
+/// What the status watches the programme for.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Monitor {
+    /// The level, in dBFS, below which the programme counts as silent.
+    #[serde(default = "Monitor::default_level")]
+    pub dead_air_level: f32,
+    /// Seconds of silence after which the status says dead air; 0 never.
+    #[serde(default = "Monitor::default_seconds")]
+    pub dead_air_seconds: u64,
+}
+
+impl Monitor {
+    fn default_level() -> f32 {
+        -60.0
+    }
+    fn default_seconds() -> u64 {
+        30
+    }
+}
+
+impl Default for Monitor {
+    fn default() -> Self {
+        Self {
+            dead_air_level: Self::default_level(),
+            dead_air_seconds: Self::default_seconds(),
+        }
+    }
 }
 
 impl Uplinks {
@@ -370,6 +401,17 @@ mod tests {
         assert!(!u.icecast.enabled && !u.lan.enabled && !u.record.enabled);
         assert_eq!(u.icecast.mount, "/volumio.mp3");
         assert_eq!(u.record.codec, Codec::Flac);
+        assert_eq!(
+            (u.monitor.dead_air_level, u.monitor.dead_air_seconds),
+            (-60.0, 30)
+        );
+        let m: Uplinks =
+            serde_json::from_str(r#"{"monitor":{"dead_air_level":-45.5,"dead_air_seconds":0}}"#)
+                .unwrap();
+        assert_eq!(
+            (m.monitor.dead_air_level, m.monitor.dead_air_seconds),
+            (-45.5, 0)
+        );
     }
 
     #[test]

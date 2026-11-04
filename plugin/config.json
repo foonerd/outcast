@@ -42,5 +42,7 @@
   "rec_rate": { "type": "string", "value": "0" },
   "rec_channels": { "type": "string", "value": "0" },
   "rec_split": { "type": "string", "value": "track" },
-  "rec_title_in_name": { "type": "boolean", "value": true }
+  "rec_title_in_name": { "type": "boolean", "value": true },
+  "mon_level": { "type": "string", "value": "-60" },
+  "mon_seconds": { "type": "string", "value": "30" }
 }

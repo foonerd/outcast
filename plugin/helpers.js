@@ -168,6 +168,23 @@ function validateLan(data, t) {
         null;
 }
 
+// A signed number, as a level in dBFS.
+function checkSigned(v, field, t) {
+    const s = String(v === undefined || v === null ? '' : v).trim();
+    return /^-?\d+(\.\d+)?$/.test(s) ? null : t('ERR_NUMBER', { field: t(field) });
+}
+
+function validateMonitor(data, t) {
+    return checkSigned(data.mon_level, 'MON_LEVEL', t) ||
+        checkWhole(data.mon_seconds, 'MON_SECONDS', t) ||
+        null;
+}
+
+function applyMonitor(data, set) {
+    set('mon_level', String(data.mon_level).trim());
+    set('mon_seconds', String(data.mon_seconds).trim());
+}
+
 function validateRecord(data, t) {
     if (data.rec_enabled !== true) return null;
     const folder = String(data.rec_folder || '').trim();
@@ -261,6 +278,10 @@ function uplinksFrom(get) {
             ...encodingFrom(get, 'rec'),
             split: str('rec_split', 'track'),
             title_in_name: get('rec_title_in_name', true) !== false
+        },
+        monitor: {
+            dead_air_level: Number.isFinite(parseFloat(get('mon_level', '-60'))) ? parseFloat(get('mon_level', '-60')) : -60,
+            dead_air_seconds: num(get('mon_seconds', '30'), 30)
         }
     };
 }
@@ -283,6 +304,11 @@ function summarize(status, audioPath, audioPathError, t) {
     } else {
         lines.push(t('STATUS_IDLE'));
     }
+    if (status && status.level && Array.isArray(status.level.rms_db) && status.level.rms_db.length) {
+        const top = (a) => Math.max(...a).toFixed(1);
+        lines.push(t('STATUS_LEVEL', { peak: top(status.level.peak_db), rms: top(status.level.rms_db) }));
+    }
+    if (status && status.dead_air === true) lines.push(t('STATUS_DEAD_AIR', { seconds: status.quiet_seconds }));
     if (audioPath === 'ready') lines.push(t('STATUS_TAP_READY'));
     else if (audioPath === 'lost') lines.push(t('STATUS_TAP_LOST'));
     else lines.push(t('STATUS_TAP_FAILED', { error: audioPathError || '' }));
@@ -309,6 +335,6 @@ function summarize(status, audioPath, audioPathError, t) {
 
 module.exports = {
     screenTitle, checkConfig, chainHasTap, fill, sel, PRESETS, DEFAULT_PRESET,
-    validateIcecast, validateLan, validateRecord,
-    applyIcecast, applyLan, applyRecord, uplinksFrom, summarize
+    validateIcecast, validateLan, validateRecord, validateMonitor,
+    applyIcecast, applyLan, applyRecord, applyMonitor, uplinksFrom, summarize
 };

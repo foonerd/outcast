@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 
 use tap::audio::Shape;
 
-use crate::config::Uplinks;
+use crate::config::{Monitor, Uplinks};
 use crate::status::{self, Status};
 use crate::uplink::{self, Ctx};
 use stream::feed::{self, Conversion, Event, Segment};
@@ -51,6 +51,8 @@ pub struct Hub {
     pending_title: Option<(String, Instant)>,
     segment: Option<(Segment, Conversion)>,
     converted: Vec<u8>,
+    /// What the status watches the programme for, from the last load.
+    monitor: Monitor,
 }
 
 impl Hub {
@@ -64,7 +66,12 @@ impl Hub {
             pending_title: None,
             segment: None,
             converted: Vec::new(),
+            monitor: Monitor::default(),
         }
+    }
+
+    pub fn monitor(&self) -> Monitor {
+        self.monitor
     }
 
     /// The configuration read again and the uplinks made anew from it: the
@@ -73,6 +80,7 @@ impl Hub {
     /// stream is a short gap and not a silence.
     pub fn reload(&mut self) -> Result<(), String> {
         let uplinks = Uplinks::load(&self.config)?;
+        self.monitor = uplinks.monitor;
         self.stop_all();
         // The entries are in the status before any worker runs, since a worker
         // says its state at once and would be written over.

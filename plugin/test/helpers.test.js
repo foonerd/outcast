@@ -151,6 +151,27 @@ test('a save keeps the page values, and the file the core reads follows', () => 
     assert.equal(defaults.record.rate, 0);
 });
 
+test('the dead-air watch takes a level and a time, and the file carries them', () => {
+    assert.equal(h.validateMonitor({ mon_level: '-60', mon_seconds: '30' }, t), null);
+    assert.equal(h.validateMonitor({ mon_level: '-45.5', mon_seconds: '0' }, t), null);
+    assert.equal(h.validateMonitor({ mon_level: 'quiet', mon_seconds: '30' }, t), 'ERR_NUMBER {"field":"MON_LEVEL"}');
+    assert.equal(h.validateMonitor({ mon_level: '-60', mon_seconds: '-1' }, t), 'ERR_NUMBER {"field":"MON_SECONDS"}');
+    const kept = {};
+    h.applyMonitor({ mon_level: ' -50 ', mon_seconds: ' 12 ' }, (k, v) => { kept[k] = v; });
+    assert.deepEqual(h.uplinksFrom((k, d) => (k in kept ? kept[k] : d)).monitor, { dead_air_level: -50, dead_air_seconds: 12 });
+    assert.deepEqual(h.uplinksFrom((k, d) => d).monitor, { dead_air_level: -60, dead_air_seconds: 30 });
+});
+
+test('the status summary says the level and dead air', () => {
+    const s = { ring: null, segments: 0, bytes: 0, uplinks: [], level: { peak_db: [-6.02, -8.1], rms_db: [-20.5, -21.0], at: 1 }, dead_air: true, quiet_seconds: 42 };
+    assert.deepEqual(h.summarize(s, 'ready', '', t), [
+        'STATUS_IDLE',
+        'STATUS_LEVEL {"peak":"-6.0","rms":"-20.5"}',
+        'STATUS_DEAD_AIR {"seconds":42}',
+        'STATUS_TAP_READY', 'STATUS_NO_UPLINKS'
+    ]);
+});
+
 test('the status summary says the core, the stream, the tap and each uplink', () => {
     assert.deepEqual(h.summarize(null, 'failed', 'boom', t),
         ['STATUS_CORE_DOWN', 'STATUS_TAP_FAILED {"error":"boom"}', 'STATUS_NO_UPLINKS']);

@@ -399,6 +399,10 @@ Outcast.prototype.getUIConfig = function () {
             encoding(rec, 'rec');
             setSelect(rec, 'rec_split', c.get('rec_split', 'track'));
             setValue(rec, 'rec_title_in_name', c.get('rec_title_in_name', true) !== false);
+
+            const mon = section('monitor_section');
+            setValue(mon, 'mon_level', String(c.get('mon_level', '-60')));
+            setValue(mon, 'mon_seconds', String(c.get('mon_seconds', '30')));
             defer.resolve(uiconf);
         })
         .fail((e) => {
@@ -439,6 +443,10 @@ Outcast.prototype.updateLan = function (data) {
 
 Outcast.prototype.updateRecord = function (data) {
     return this.saveSection(data, h.validateRecord, h.applyRecord);
+};
+
+Outcast.prototype.updateMonitor = function (data) {
+    return this.saveSection(data, h.validateMonitor, h.applyMonitor);
 };
 
 Outcast.prototype.showStatus = function () {
