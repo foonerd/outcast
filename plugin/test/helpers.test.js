@@ -151,6 +151,32 @@ test('a save keeps the page values, and the file the core reads follows', () => 
     assert.equal(defaults.record.rate, 0);
 });
 
+test('the second and third Icecast slots are their own sections and their own uplinks', () => {
+    assert.deepEqual(h.ICE_SLOTS, ['ice', 'ice2', 'ice3']);
+    const good = { ice2_enabled: true, ice2_host: 'two.example.com', ice2_port: '8000', ice2_mount: '/two.mp3', ice2_password: 'x', ice2_user: 'source', ice2_name: 'Two' };
+    assert.equal(h.validateIcecast(good, t, 'ice2'), null);
+    assert.equal(h.validateIcecast({ ...good, ice2_mount: 'two' }, t, 'ice2'), 'ERR_MOUNT');
+    assert.equal(h.validateIcecast({ ice2_enabled: false }, t, 'ice2'), null);
+    const kept = {};
+    h.applyIcecast(good, (k, v) => { kept[k] = v; }, 'ice2');
+    assert.equal(kept.ice2_host, 'two.example.com');
+    assert.equal('ice_host' in kept, false);
+    const u = h.uplinksFrom((k, d) => (k in kept ? kept[k] : d));
+    assert.equal(u.icecasts.length, 2);
+    assert.equal(u.icecasts[0].enabled, true);
+    assert.equal(u.icecasts[0].mount, '/two.mp3');
+    assert.equal(u.icecasts[1].enabled, false);
+    assert.equal(u.icecast.enabled, false);
+    const s = { ring: null, segments: 0, bytes: 0, uplinks: [
+        { id: 'icecast', kind: 'icecast', state: 'connected', detail: 'one', last_error: '' },
+        { id: 'icecast2', kind: 'icecast', state: 'waiting', detail: 'two', last_error: 'refused' }
+    ] };
+    assert.deepEqual(h.summarize(s, 'ready', '', t).slice(2), [
+        'STATUS_UPLINK {"name":"UPLINK_ICECAST","state":"connected","detail":"one"}',
+        'STATUS_UPLINK_ERROR {"name":"UPLINK_ICECAST 2","state":"waiting","error":"refused"}'
+    ]);
+});
+
 test('the dead-air watch takes a level and a time, and the file carries them', () => {
     assert.equal(h.validateMonitor({ mon_level: '-60', mon_seconds: '30' }, t), null);
     assert.equal(h.validateMonitor({ mon_level: '-45.5', mon_seconds: '0' }, t), null);

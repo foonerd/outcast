@@ -85,23 +85,36 @@ impl Hub {
         // The entries are in the status before any worker runs, since a worker
         // says its state at once and would be written over.
         let mut listed = Vec::new();
-        let icecast = uplinks.icecast.enabled.then(|| {
-            let cfg = uplinks.icecast.clone();
-            let ctx = self.ctx("icecast", "icecast");
-            let detail = match cfg.protocol {
-                crate::config::Protocol::Icecast2 => {
-                    format!("{}:{}{}", cfg.host, cfg.port, cfg.mount)
-                }
-                crate::config::Protocol::Shoutcast1 => {
-                    format!(
-                        "{}:{} SHOUTcast v1, stream {}",
-                        cfg.host, cfg.port, cfg.stream_id
-                    )
-                }
-            };
-            listed.push(ctx.entry(&detail));
-            (cfg, ctx)
-        });
+        // The Icecast slots: `icecast`, `icecast2`, `icecast3`, each enabled one its
+        // own worker, encoder and connection.
+        let icecasts: Vec<_> = uplinks
+            .slots()
+            .into_iter()
+            .enumerate()
+            .filter(|(_, cfg)| cfg.enabled)
+            .map(|(n, cfg)| {
+                let id = if n == 0 {
+                    "icecast".to_string()
+                } else {
+                    format!("icecast{}", n + 1)
+                };
+                let cfg = cfg.clone();
+                let ctx = self.ctx(&id, "icecast");
+                let detail = match cfg.protocol {
+                    crate::config::Protocol::Icecast2 => {
+                        format!("{}:{}{}", cfg.host, cfg.port, cfg.mount)
+                    }
+                    crate::config::Protocol::Shoutcast1 => {
+                        format!(
+                            "{}:{} SHOUTcast v1, stream {}",
+                            cfg.host, cfg.port, cfg.stream_id
+                        )
+                    }
+                };
+                listed.push(ctx.entry(&detail));
+                (id, cfg, ctx)
+            })
+            .collect();
         let lan = uplinks.lan.enabled.then(|| {
             let cfg = uplinks.lan.clone();
             let ctx = self.ctx("lan", "lan");
@@ -119,8 +132,8 @@ impl Hub {
             s.uplinks = listed;
             s.touch();
         }
-        if let Some((cfg, ctx)) = icecast {
-            self.start("icecast", move |ctl, pcm| {
+        for (id, cfg, ctx) in icecasts {
+            self.start(&id, move |ctl, pcm| {
                 uplink::icecast::run(cfg, ctx, ctl, pcm)
             });
         }

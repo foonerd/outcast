@@ -73,9 +73,12 @@ function checkText(v, field, t) {
 
 // The Icecast uplink speaks Icecast 2 or SHOUTcast v1; the second has no mount and
 // no user, a stream number instead.
-function protocolOf(data) {
-    return sel(data.ice_protocol) === 'shoutcast1' ? 'shoutcast1' : 'icecast2';
+function protocolOf(data, prefix) {
+    return sel(data[prefix + '_protocol']) === 'shoutcast1' ? 'shoutcast1' : 'icecast2';
 }
+
+// The Icecast slots on the page, each a section of its own with its fields prefixed.
+const ICE_SLOTS = ['ice', 'ice2', 'ice3'];
 
 // ------------------------------------------------------------------ the encoding
 // What an uplink sends is a preset, the settings commonly used for its kind of
@@ -97,7 +100,7 @@ const PRESETS = {
     'flac-0': { codec: 'flac', bitrate: 0, rate: 0, channels: 0 },
     'wav-0': { codec: 'wav', bitrate: 0, rate: 0, channels: 0 }
 };
-const DEFAULT_PRESET = { ice: 'mp3-128-44100', lan: 'mp3-128-44100', rec: 'flac-0' };
+const DEFAULT_PRESET = { ice: 'mp3-128-44100', ice2: 'mp3-128-44100', ice3: 'mp3-128-44100', lan: 'mp3-128-44100', rec: 'flac-0' };
 
 function checkWhole(v, field, t) {
     const s = String(v === undefined || v === null ? '' : v).trim();
@@ -140,22 +143,24 @@ function encodingFrom(get, prefix) {
     };
 }
 
-function validateIcecast(data, t) {
-    if (data.ice_enabled !== true) return null;
-    const shoutcast = protocolOf(data) === 'shoutcast1';
-    return (!String(data.ice_host || '').trim() ? t('ERR_HOST') : null) ||
-        checkPort(data.ice_port, 'ICE_PORT', t) ||
-        (shoutcast && parseInt(String(data.ice_port).trim(), 10) === 65535 ? t('ERR_PORT', { field: t('ICE_PORT') }) : null) ||
-        (!shoutcast && !/^\/\S*$/.test(String(data.ice_mount || '').trim()) ? t('ERR_MOUNT') : null) ||
-        (shoutcast ? checkRange(data.ice_stream_id, 'ICE_STREAM_ID', 1, 999, t) : null) ||
-        (!data.ice_password ? t('ERR_PASSWORD') : null) ||
-        (!shoutcast ? checkText(data.ice_user, 'ICE_USER', t) : null) ||
-        validateEncoding(data, 'ice', t) ||
-        checkText(data.ice_name, 'STREAM_NAME', t) ||
-        (data.ice_more === true && (
-            checkText(data.ice_description, 'ICE_DESCRIPTION', t) ||
-            checkText(data.ice_genre, 'ICE_GENRE', t) ||
-            checkText(data.ice_url, 'ICE_URL', t))) ||
+function validateIcecast(data, t, prefix) {
+    const p = prefix || 'ice';
+    const f = (k) => data[p + '_' + k];
+    if (f('enabled') !== true) return null;
+    const shoutcast = protocolOf(data, p) === 'shoutcast1';
+    return (!String(f('host') || '').trim() ? t('ERR_HOST') : null) ||
+        checkPort(f('port'), 'ICE_PORT', t) ||
+        (shoutcast && parseInt(String(f('port')).trim(), 10) === 65535 ? t('ERR_PORT', { field: t('ICE_PORT') }) : null) ||
+        (!shoutcast && !/^\/\S*$/.test(String(f('mount') || '').trim()) ? t('ERR_MOUNT') : null) ||
+        (shoutcast ? checkRange(f('stream_id'), 'ICE_STREAM_ID', 1, 999, t) : null) ||
+        (!f('password') ? t('ERR_PASSWORD') : null) ||
+        (!shoutcast ? checkText(f('user'), 'ICE_USER', t) : null) ||
+        validateEncoding(data, p, t) ||
+        checkText(f('name'), 'STREAM_NAME', t) ||
+        (f('more') === true && (
+            checkText(f('description'), 'ICE_DESCRIPTION', t) ||
+            checkText(f('genre'), 'ICE_GENRE', t) ||
+            checkText(f('url'), 'ICE_URL', t))) ||
         null;
 }
 
@@ -196,27 +201,30 @@ function validateRecord(data, t) {
 // ------------------------------------------------------------- the settings kept
 // What a save writes into the plugin's configuration: the page's data as plain values.
 
-function applyIcecast(data, set) {
-    const on = data.ice_enabled === true;
-    set('ice_enabled', on);
+function applyIcecast(data, set, prefix) {
+    const p = prefix || 'ice';
+    const f = (k) => data[p + '_' + k];
+    const put = (k, v) => set(p + '_' + k, v);
+    const on = f('enabled') === true;
+    put('enabled', on);
     if (!on) return;
-    const shoutcast = protocolOf(data) === 'shoutcast1';
-    set('ice_protocol', shoutcast ? 'shoutcast1' : 'icecast2');
-    set('ice_host', String(data.ice_host).trim());
-    set('ice_port', String(data.ice_port).trim());
-    if (shoutcast) set('ice_stream_id', String(data.ice_stream_id).trim());
-    else set('ice_mount', String(data.ice_mount).trim());
-    if (!shoutcast) set('ice_user', String(data.ice_user || 'source').trim() || 'source');
-    set('ice_password', String(data.ice_password));
-    applyEncoding(data, 'ice', set);
-    set('ice_name', String(data.ice_name || '').trim());
-    set('ice_keep_alive', data.ice_keep_alive !== false);
-    set('ice_more', data.ice_more === true);
-    if (data.ice_more === true) {
-        set('ice_description', String(data.ice_description || '').trim());
-        set('ice_genre', String(data.ice_genre || '').trim());
-        set('ice_url', String(data.ice_url || '').trim());
-        set('ice_public', data.ice_public === true);
+    const shoutcast = protocolOf(data, p) === 'shoutcast1';
+    put('protocol', shoutcast ? 'shoutcast1' : 'icecast2');
+    put('host', String(f('host')).trim());
+    put('port', String(f('port')).trim());
+    if (shoutcast) put('stream_id', String(f('stream_id')).trim());
+    else put('mount', String(f('mount')).trim());
+    if (!shoutcast) put('user', String(f('user') || 'source').trim() || 'source');
+    put('password', String(f('password')));
+    applyEncoding(data, p, set);
+    put('name', String(f('name') || '').trim());
+    put('keep_alive', f('keep_alive') !== false);
+    put('more', f('more') === true);
+    if (f('more') === true) {
+        put('description', String(f('description') || '').trim());
+        put('genre', String(f('genre') || '').trim());
+        put('url', String(f('url') || '').trim());
+        put('public', f('public') === true);
     }
 }
 
@@ -243,27 +251,35 @@ function applyRecord(data, set) {
 
 // The file the core reads, from the configuration: one object per uplink, in the
 // core's own words (bins/outcast/src/config.rs).
+// One Icecast slot for the core, from the configuration, by its prefix.
+function icecastFrom(get, p) {
+    const str = (k, d) => String(get(p + '_' + k, d));
+    const bool = (k) => get(p + '_' + k, false) === true;
+    return {
+        enabled: bool('enabled'),
+        protocol: str('protocol', 'icecast2') === 'shoutcast1' ? 'shoutcast1' : 'icecast2',
+        host: str('host', ''),
+        port: num(get(p + '_port', '8000'), 8000),
+        mount: str('mount', '/volumio.mp3'),
+        stream_id: num(get(p + '_stream_id', '1'), 1),
+        user: str('user', 'source'),
+        password: str('password', ''),
+        ...encodingFrom(get, p),
+        name: str('name', 'Volumio'),
+        description: bool('more') ? str('description', '') : '',
+        genre: bool('more') ? str('genre', '') : '',
+        url: bool('more') ? str('url', '') : '',
+        public: bool('more') && bool('public'),
+        keep_alive: get(p + '_keep_alive', true) !== false
+    };
+}
+
 function uplinksFrom(get) {
     const str = (k, d) => String(get(k, d));
     const bool = (k) => get(k, false) === true;
     return {
-        icecast: {
-            enabled: bool('ice_enabled'),
-            protocol: str('ice_protocol', 'icecast2') === 'shoutcast1' ? 'shoutcast1' : 'icecast2',
-            host: str('ice_host', ''),
-            port: num(get('ice_port', '8000'), 8000),
-            mount: str('ice_mount', '/volumio.mp3'),
-            stream_id: num(get('ice_stream_id', '1'), 1),
-            user: str('ice_user', 'source'),
-            password: str('ice_password', ''),
-            ...encodingFrom(get, 'ice'),
-            name: str('ice_name', 'Volumio'),
-            description: bool('ice_more') ? str('ice_description', '') : '',
-            genre: bool('ice_more') ? str('ice_genre', '') : '',
-            url: bool('ice_more') ? str('ice_url', '') : '',
-            public: bool('ice_more') && bool('ice_public'),
-            keep_alive: get('ice_keep_alive', true) !== false
-        },
+        icecast: icecastFrom(get, 'ice'),
+        icecasts: ICE_SLOTS.slice(1).map((p) => icecastFrom(get, p)),
         lan: {
             enabled: bool('lan_enabled'),
             port: num(get('lan_port', '8000'), 8000),
@@ -317,7 +333,8 @@ function summarize(status, audioPath, audioPathError, t) {
         lines.push(t('STATUS_NO_UPLINKS'));
     } else {
         status.uplinks.forEach((u) => {
-            const name = names[u.kind] ? t(names[u.kind]) : u.id;
+            const slot = /^icecast(\d+)$/.exec(u.id);
+            const name = (names[u.kind] ? t(names[u.kind]) : u.id) + (slot ? ' ' + slot[1] : '');
             let detail = u.detail || '';
             if (u.kind === 'lan') detail += ', ' + u.listeners + ' listening';
             if (u.silence) detail += ', silence';
@@ -334,7 +351,7 @@ function summarize(status, audioPath, audioPathError, t) {
 }
 
 module.exports = {
-    screenTitle, checkConfig, chainHasTap, fill, sel, PRESETS, DEFAULT_PRESET,
+    screenTitle, checkConfig, chainHasTap, fill, sel, PRESETS, DEFAULT_PRESET, ICE_SLOTS,
     validateIcecast, validateLan, validateRecord, validateMonitor,
     applyIcecast, applyLan, applyRecord, applyMonitor, uplinksFrom, summarize
 };

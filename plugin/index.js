@@ -374,16 +374,18 @@ Outcast.prototype.getUIConfig = function () {
                 setValue(content, prefix + '_rate', String(c.get(prefix + '_rate', String(fallback.rate))));
                 setSelect(content, prefix + '_channels', String(c.get(prefix + '_channels', String(fallback.channels))));
             };
-            const ice = section('icecast_section');
-            setValue(ice, 'ice_enabled', c.get('ice_enabled', false) === true);
-            ['ice_host', 'ice_port', 'ice_mount', 'ice_user', 'ice_password', 'ice_name', 'ice_description', 'ice_genre', 'ice_url']
-                .forEach((k) => setValue(ice, k, String(c.get(k, ''))));
-            setSelect(ice, 'ice_protocol', c.get('ice_protocol', 'icecast2'));
-            setValue(ice, 'ice_stream_id', String(c.get('ice_stream_id', '1')));
-            encoding(ice, 'ice');
-            setValue(ice, 'ice_more', c.get('ice_more', false) === true);
-            setValue(ice, 'ice_public', c.get('ice_public', false) === true);
-            setValue(ice, 'ice_keep_alive', c.get('ice_keep_alive', true) !== false);
+            h.ICE_SLOTS.forEach((p) => {
+                const ice = section(p === 'ice' ? 'icecast_section' : 'icecast' + p.slice(3) + '_section');
+                setValue(ice, p + '_enabled', c.get(p + '_enabled', false) === true);
+                ['host', 'port', 'mount', 'user', 'password', 'name', 'description', 'genre', 'url']
+                    .forEach((k) => setValue(ice, p + '_' + k, String(c.get(p + '_' + k, ''))));
+                setSelect(ice, p + '_protocol', c.get(p + '_protocol', 'icecast2'));
+                setValue(ice, p + '_stream_id', String(c.get(p + '_stream_id', '1')));
+                encoding(ice, p);
+                setValue(ice, p + '_more', c.get(p + '_more', false) === true);
+                setValue(ice, p + '_public', c.get(p + '_public', false) === true);
+                setValue(ice, p + '_keep_alive', c.get(p + '_keep_alive', true) !== false);
+            });
 
             const lan = section('lan_section');
             setValue(lan, 'lan_enabled', c.get('lan_enabled', false) === true);
@@ -435,6 +437,14 @@ Outcast.prototype.saveSection = function (data, validate, apply) {
 
 Outcast.prototype.updateIcecast = function (data) {
     return this.saveSection(data, h.validateIcecast, h.applyIcecast);
+};
+
+Outcast.prototype.updateIcecast2 = function (data) {
+    return this.saveSection(data, (d, t) => h.validateIcecast(d, t, 'ice2'), (d, set) => h.applyIcecast(d, set, 'ice2'));
+};
+
+Outcast.prototype.updateIcecast3 = function (data) {
+    return this.saveSection(data, (d, t) => h.validateIcecast(d, t, 'ice3'), (d, set) => h.applyIcecast(d, set, 'ice3'));
 };
 
 Outcast.prototype.updateLan = function (data) {

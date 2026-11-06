@@ -146,6 +146,34 @@ impl Icecast {
     }
 }
 
+impl Icecast {
+    /// What cannot run turned off, what is empty filled.
+    pub fn tidy(&mut self) {
+        self.host = self.host.trim().to_string();
+        self.mount = self.mount.trim().to_string();
+        if self.enabled && self.host.is_empty() {
+            self.enabled = false;
+        }
+        match self.protocol {
+            Protocol::Icecast2 => {
+                if self.enabled && !self.mount.starts_with('/') {
+                    self.enabled = false;
+                }
+            }
+            Protocol::Shoutcast1 => {
+                // A stream id is 1 or more; the source port is the server's plus one.
+                self.stream_id = self.stream_id.max(1);
+                if self.port == u16::MAX {
+                    self.enabled = false;
+                }
+            }
+        }
+        if self.user.trim().is_empty() {
+            self.user = Self::default_user();
+        }
+    }
+}
+
 impl Default for Icecast {
     fn default() -> Self {
         Self {
@@ -298,6 +326,9 @@ impl Default for Record {
 pub struct Uplinks {
     #[serde(default)]
     pub icecast: Icecast,
+    /// Further Icecast or SHOUTcast destinations, each its own uplink.
+    #[serde(default)]
+    pub icecasts: Vec<Icecast>,
     #[serde(default)]
     pub lan: Lan,
     #[serde(default)]
@@ -353,29 +384,16 @@ impl Uplinks {
     /// Values the core cannot use, put right: an empty mount or host turns the
     /// uplink off, a bitrate out of the way is clamped, a rate that is not one
     /// of the two the encoders take becomes the stream's own.
+    /// Every Icecast slot, the first and the further ones, in order.
+    pub fn slots(&self) -> Vec<&Icecast> {
+        std::iter::once(&self.icecast)
+            .chain(self.icecasts.iter())
+            .collect()
+    }
+
     pub fn tidy(&mut self) {
-        let i = &mut self.icecast;
-        i.host = i.host.trim().to_string();
-        i.mount = i.mount.trim().to_string();
-        if i.enabled && i.host.is_empty() {
-            i.enabled = false;
-        }
-        match i.protocol {
-            Protocol::Icecast2 => {
-                if i.enabled && !i.mount.starts_with('/') {
-                    i.enabled = false;
-                }
-            }
-            Protocol::Shoutcast1 => {
-                // A stream id is 1 or more; the source port is the server's plus one.
-                i.stream_id = i.stream_id.max(1);
-                if i.port == u16::MAX {
-                    i.enabled = false;
-                }
-            }
-        }
-        if i.user.trim().is_empty() {
-            i.user = Icecast::default_user();
+        for i in std::iter::once(&mut self.icecast).chain(self.icecasts.iter_mut()) {
+            i.tidy();
         }
         // The codec, the bitrate, the rate and the channels are the operator's,
         // whatever they are: the destination is the one to refuse them, and the
@@ -412,6 +430,19 @@ mod tests {
             (m.monitor.dead_air_level, m.monitor.dead_air_seconds),
             (-45.5, 0)
         );
+        assert!(u.icecasts.is_empty() && u.slots().len() == 1);
+    }
+
+    #[test]
+    fn further_icecast_slots_are_their_own_uplinks_and_tidied_alike() {
+        let mut u: Uplinks = serde_json::from_str(
+            r#"{"icecast":{"enabled":true,"host":"a","password":"p"},"icecasts":[{"enabled":true,"host":" ","password":"p"},{"enabled":true,"host":"c","mount":"nomount","password":"p"},{"enabled":true,"protocol":"shoutcast1","host":"d","password":"p","stream_id":0}]}"#,
+        )
+        .unwrap();
+        u.tidy();
+        let on: Vec<bool> = u.slots().iter().map(|s| s.enabled).collect();
+        assert_eq!(on, vec![true, false, false, true]);
+        assert_eq!(u.icecasts[2].stream_id, 1);
     }
 
     #[test]
