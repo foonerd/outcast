@@ -413,6 +413,22 @@ Outcast.prototype.getUIConfig = function () {
             setValue(srt, 'srt_keep_alive', c.get('srt_keep_alive', true) !== false);
             h.hideWhenOff(srt, 'srt', (k, d) => c.get(k, d));
 
+            const rtmp = section('rtmp_section');
+            setValue(rtmp, 'rtmp_enabled', c.get('rtmp_enabled', false) === true);
+            setValue(rtmp, 'rtmp_url', String(c.get('rtmp_url', '')));
+            setValue(rtmp, 'rtmp_key', String(c.get('rtmp_key', '')));
+            encoding(rtmp, 'rtmp');
+            setValue(rtmp, 'rtmp_keep_alive', c.get('rtmp_keep_alive', true) !== false);
+            h.hideWhenOff(rtmp, 'rtmp', (k, d) => c.get(k, d));
+
+            const ts = section('ts_section');
+            setValue(ts, 'ts_enabled', c.get('ts_enabled', false) === true);
+            setSelect(ts, 'ts_transport', c.get('ts_transport', 'tcp'));
+            ['ts_host', 'ts_port', 'ts_ttl'].forEach((k) => setValue(ts, k, String(c.get(k, ''))));
+            encoding(ts, 'ts');
+            setValue(ts, 'ts_keep_alive', c.get('ts_keep_alive', true) !== false);
+            h.hideWhenOff(ts, 'ts', (k, d) => c.get(k, d));
+
             const mon = section('monitor_section');
             setValue(mon, 'mon_enabled', c.get('mon_enabled', true) !== false);
             setValue(mon, 'mon_level', String(c.get('mon_level', '-60')));
@@ -469,6 +485,14 @@ Outcast.prototype.updateRecord = function (data) {
 
 Outcast.prototype.updateSrt = function (data) {
     return this.saveSection(data, h.validateSrt, h.applySrt);
+};
+
+Outcast.prototype.updateRtmp = function (data) {
+    return this.saveSection(data, h.validateRtmp, h.applyRtmp);
+};
+
+Outcast.prototype.updateTs = function (data) {
+    return this.saveSection(data, h.validateTs, h.applyTs);
 };
 
 Outcast.prototype.updateMonitor = function (data) {

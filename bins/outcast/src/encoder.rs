@@ -42,6 +42,8 @@ pub enum Container {
     Native,
     /// An MPEG transport stream, every codec the muxer takes.
     MpegTs,
+    /// FLV, for RTMP: AAC or MP3.
+    Flv,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -99,6 +101,7 @@ pub fn arguments(segment: &Segment, recipe: &Recipe) -> Vec<String> {
     a.push(match recipe.container {
         Container::Native => muxer.into(),
         Container::MpegTs => "mpegts".into(),
+        Container::Flv => "flv".into(),
     });
     match &recipe.output {
         Output::Pipe => a.push("pipe:1".into()),
@@ -273,6 +276,22 @@ mod tests {
         );
         let s = a.join(" ");
         assert!(s.starts_with("-hide_banner -loglevel error -nostdin -f s32le -ar 96000 -ac 2 -i pipe:0 -ar 44100 -c:a libmp3lame -b:a 192k -metadata title=Artist - Title -f mp3 pipe:1"), "{s}");
+    }
+
+    #[test]
+    fn flv_takes_the_flv_muxer() {
+        let a = arguments(
+            &segment(),
+            &Recipe {
+                codec: Codec::Aac,
+                bitrate: 128,
+                rate: 44100,
+                title: String::new(),
+                output: Output::Pipe,
+                container: Container::Flv,
+            },
+        );
+        assert!(a.join(" ").ends_with("-c:a aac -b:a 128k -f flv pipe:1"));
     }
 
     #[test]

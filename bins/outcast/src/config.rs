@@ -343,7 +343,161 @@ pub struct Uplinks {
     #[serde(default)]
     pub srt: Srt,
     #[serde(default)]
+    pub rtmp: Rtmp,
+    #[serde(default)]
+    pub ts: Ts,
+    #[serde(default)]
     pub monitor: Monitor,
+}
+
+/// How a transport stream travels.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Transport {
+    /// A TCP connection to the receiver, which listens; lost, it is made again.
+    #[default]
+    Tcp,
+    /// UDP datagrams of seven transport packets, unicast or multicast.
+    Udp,
+}
+
+/// A transport-stream uplink: the stream as an MPEG transport stream to a
+/// host and port, over TCP or UDP, the plain contribution feed a broadcast
+/// chain, a decoder or a player such as VLC takes.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Ts {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub transport: Transport,
+    #[serde(default)]
+    pub host: String,
+    #[serde(default = "Ts::default_port")]
+    pub port: u16,
+    /// The time to live of a multicast datagram: how many routers it may cross.
+    #[serde(default = "Ts::default_ttl")]
+    pub ttl: u8,
+    #[serde(default = "Ts::default_codec")]
+    pub codec: Codec,
+    #[serde(default = "Ts::default_bitrate")]
+    pub bitrate: u32,
+    /// The sample rate sent, 0 for the stream's own.
+    #[serde(default = "Ts::default_rate")]
+    pub rate: u32,
+    /// The channels sent, 0 for the stream's own.
+    #[serde(default)]
+    pub channels: u32,
+    #[serde(default = "default_true")]
+    pub keep_alive: bool,
+}
+
+impl Ts {
+    fn default_port() -> u16 {
+        5004
+    }
+    fn default_ttl() -> u8 {
+        1
+    }
+    fn default_codec() -> Codec {
+        Codec::Aac
+    }
+    fn default_bitrate() -> u32 {
+        128
+    }
+    fn default_rate() -> u32 {
+        48000
+    }
+    pub fn tidy(&mut self) {
+        self.host = self.host.trim().to_string();
+        if self.enabled && self.host.is_empty() {
+            self.enabled = false;
+        }
+    }
+}
+
+impl Default for Ts {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            transport: Transport::Tcp,
+            host: String::new(),
+            port: Self::default_port(),
+            ttl: Self::default_ttl(),
+            codec: Self::default_codec(),
+            bitrate: Self::default_bitrate(),
+            rate: Self::default_rate(),
+            channels: 0,
+            keep_alive: true,
+        }
+    }
+}
+
+/// An RTMP uplink: the stream published to an RTMP server, this side the
+/// publisher, as the audio of an FLV stream.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Rtmp {
+    #[serde(default)]
+    pub enabled: bool,
+    /// `rtmp://host[:port]/application`.
+    #[serde(default)]
+    pub url: String,
+    #[serde(default)]
+    pub stream_key: String,
+    #[serde(default = "Rtmp::default_codec")]
+    pub codec: Codec,
+    #[serde(default = "Rtmp::default_bitrate")]
+    pub bitrate: u32,
+    /// The sample rate sent, 0 for the stream's own.
+    #[serde(default = "Rtmp::default_rate")]
+    pub rate: u32,
+    /// The channels sent, 0 for the stream's own.
+    #[serde(default)]
+    pub channels: u32,
+    #[serde(default = "default_true")]
+    pub keep_alive: bool,
+}
+
+impl Rtmp {
+    fn default_codec() -> Codec {
+        Codec::Aac
+    }
+    fn default_bitrate() -> u32 {
+        128
+    }
+    fn default_rate() -> u32 {
+        44100
+    }
+    pub fn tidy(&mut self) {
+        self.url = self.url.trim().to_string();
+        self.stream_key = self.stream_key.trim().to_string();
+        if self.enabled && self.url.is_empty() {
+            self.enabled = false;
+        }
+    }
+    /// The stream key for a log line: its first characters and no more.
+    pub fn stream_key_shown(&self) -> String {
+        let k = &self.stream_key;
+        if k.len() <= 4 {
+            "…".to_string()
+        } else {
+            format!("{}…", &k[..4])
+        }
+    }
+}
+
+impl Default for Rtmp {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            url: String::new(),
+            stream_key: String::new(),
+            codec: Self::default_codec(),
+            bitrate: Self::default_bitrate(),
+            rate: Self::default_rate(),
+            channels: 0,
+            keep_alive: true,
+        }
+    }
 }
 
 /// An SRT uplink: the stream as an MPEG transport stream to an SRT listener
@@ -486,6 +640,8 @@ impl Uplinks {
             i.tidy();
         }
         self.srt.tidy();
+        self.rtmp.tidy();
+        self.ts.tidy();
         // The codec, the bitrate, the rate and the channels are the operator's,
         // whatever they are: the destination is the one to refuse them, and the
         // encoder's own refusal is shown as it comes.
@@ -532,6 +688,20 @@ mod tests {
         s.tidy();
         assert!(!s.srt.enabled && s.srt.latency_ms == 120);
         assert!(Codec::Mp2.lossy() && Codec::Mp2.content_type() == "audio/mpeg");
+        assert!(!u.rtmp.enabled && u.rtmp.codec == Codec::Aac && u.rtmp.rate == 44100);
+        let mut r: Uplinks =
+            serde_json::from_str(r#"{"rtmp":{"enabled":true,"url":" ","stream_key":"abcdefgh"}}"#)
+                .unwrap();
+        r.tidy();
+        assert!(!r.rtmp.enabled && r.rtmp.stream_key_shown() == "abcd…");
+        assert!(
+            !u.ts.enabled && u.ts.transport == Transport::Tcp && u.ts.port == 5004 && u.ts.ttl == 1
+        );
+        let t: Uplinks = serde_json::from_str(
+            r#"{"ts":{"enabled":true,"transport":"udp","host":"239.1.1.1","ttl":4}}"#,
+        )
+        .unwrap();
+        assert!(t.ts.transport == Transport::Udp && t.ts.ttl == 4);
     }
 
     #[test]

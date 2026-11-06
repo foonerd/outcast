@@ -17,6 +17,8 @@ stream = { path = "../../crates/stream" }
 libc = "0.2"
 # The SRT transport: the protocol's state machines, pure Rust, driven over UDP here.
 srt-protocol = "0.4.4"
+# The RTMP session: the handshake, the chunk stream and the commands, pure Rust.
+rml_rtmp = "0.8.0"
 bytes = "1"
 rand = "0.8"
 serde = { version = "1", features = ["derive"] }

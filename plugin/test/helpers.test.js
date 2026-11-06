@@ -199,6 +199,33 @@ test('the SRT uplink takes a listener, a stream id, a passphrase and a latency',
     assert.ok(line.includes('rtt') && line.includes(':3') && line.includes('lost'), line);
 });
 
+test('the RTMP uplink takes an rtmp address with an application and a stream key', () => {
+    const good = { rtmp_enabled: true, rtmp_url: 'rtmp://ingest.example.com/live', rtmp_key: 'abcd-1234' };
+    assert.equal(h.validateRtmp(good, t), null);
+    assert.equal(h.validateRtmp({ rtmp_enabled: false }, t), null);
+    assert.equal(h.validateRtmp({ ...good, rtmp_url: 'rtmps://x/live' }, t), 'ERR_RTMP_URL');
+    assert.equal(h.validateRtmp({ ...good, rtmp_url: 'rtmp://host' }, t), 'ERR_RTMP_URL');
+    assert.equal(h.validateRtmp({ ...good, rtmp_key: '' }, t), 'ERR_RTMP_KEY');
+    const kept = {};
+    h.applyRtmp({ ...good, rtmp_url: ' rtmp://x:1936/app ', rtmp_preset: { value: 'aac-160-44100' } }, (k, v) => { kept[k] = v; });
+    const u = h.uplinksFrom((k, d) => (k in kept ? kept[k] : d)).rtmp;
+    assert.deepEqual(u, { enabled: true, url: 'rtmp://x:1936/app', stream_key: 'abcd-1234', codec: 'aac', bitrate: 160, rate: 44100, channels: 2, keep_alive: true });
+});
+
+test('the transport-stream uplink goes over TCP unless told UDP', () => {
+    const good = { ts_enabled: true, ts_host: 'decoder.example.com', ts_port: '5004', ts_ttl: '1' };
+    assert.equal(h.validateTs(good, t), null);
+    assert.equal(h.validateTs({ ...good, ts_port: '0' }, t), 'ERR_PORT {"field":"TS_PORT"}');
+    assert.equal(h.validateTs({ ...good, ts_ttl: '300' }, t), 'ERR_RANGE {"field":"TS_TTL","min":1,"max":255}');
+    const kept = {};
+    h.applyTs(good, (k, v) => { kept[k] = v; });
+    assert.equal(h.uplinksFrom((k, d) => (k in kept ? kept[k] : d)).ts.transport, 'tcp');
+    h.applyTs({ ...good, ts_transport: { value: 'udp' }, ts_host: '239.1.1.1', ts_ttl: '4', ts_preset: { value: 'mp2-192-48000' } }, (k, v) => { kept[k] = v; });
+    const u = h.uplinksFrom((k, d) => (k in kept ? kept[k] : d)).ts;
+    assert.deepEqual(u, { enabled: true, transport: 'udp', host: '239.1.1.1', port: 5004, ttl: 4, codec: 'mp2', bitrate: 192, rate: 48000, channels: 2, keep_alive: true });
+    assert.equal(h.uplinksFrom((k, d) => d).ts.transport, 'tcp');
+});
+
 test('the dead-air watch takes a level and a time, and the file carries them', () => {
     assert.equal(h.validateMonitor({ mon_level: '-60', mon_seconds: '30' }, t), null);
     assert.equal(h.validateMonitor({ mon_level: '-45.5', mon_seconds: '0' }, t), null);

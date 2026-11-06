@@ -92,7 +92,9 @@ const PRESETS = {
     'mp3-192-44100': { codec: 'mp3', bitrate: 192, rate: 44100, channels: 2 },
     'mp3-320-44100': { codec: 'mp3', bitrate: 320, rate: 44100, channels: 2 },
     'aac-96-44100': { codec: 'aac', bitrate: 96, rate: 44100, channels: 2 },
+    'aac-128-44100': { codec: 'aac', bitrate: 128, rate: 44100, channels: 2 },
     'aac-128-48000': { codec: 'aac', bitrate: 128, rate: 48000, channels: 2 },
+    'aac-160-44100': { codec: 'aac', bitrate: 160, rate: 44100, channels: 2 },
     'aac-192-48000': { codec: 'aac', bitrate: 192, rate: 48000, channels: 2 },
     'aac-256-48000': { codec: 'aac', bitrate: 256, rate: 48000, channels: 2 },
     'mp2-192-48000': { codec: 'mp2', bitrate: 192, rate: 48000, channels: 2 },
@@ -104,7 +106,7 @@ const PRESETS = {
     'flac-0': { codec: 'flac', bitrate: 0, rate: 0, channels: 0 },
     'wav-0': { codec: 'wav', bitrate: 0, rate: 0, channels: 0 }
 };
-const DEFAULT_PRESET = { ice: 'mp3-128-44100', ice2: 'mp3-128-44100', ice3: 'mp3-128-44100', lan: 'mp3-128-44100', rec: 'flac-0', srt: 'aac-128-48000' };
+const DEFAULT_PRESET = { ice: 'mp3-128-44100', ice2: 'mp3-128-44100', ice3: 'mp3-128-44100', lan: 'mp3-128-44100', rec: 'flac-0', srt: 'aac-128-48000', rtmp: 'aac-128-44100', ts: 'aac-128-48000' };
 
 function checkWhole(v, field, t) {
     const s = String(v === undefined || v === null ? '' : v).trim();
@@ -206,6 +208,47 @@ function applySrt(data, set) {
     set('srt_latency', String(data.srt_latency).trim());
     applyEncoding(data, 'srt', set);
     set('srt_keep_alive', data.srt_keep_alive !== false);
+}
+
+function validateRtmp(data, t) {
+    if (data.rtmp_enabled !== true) return null;
+    const url = String(data.rtmp_url || '').trim();
+    return (!/^rtmp:\/\/[^\s/]+\/\S+$/.test(url) ? t('ERR_RTMP_URL') : null) ||
+        (!String(data.rtmp_key || '').trim() ? t('ERR_RTMP_KEY') : null) ||
+        checkText(data.rtmp_key, 'RTMP_KEY', t) ||
+        validateEncoding(data, 'rtmp', t) ||
+        null;
+}
+
+function applyRtmp(data, set) {
+    const on = data.rtmp_enabled === true;
+    set('rtmp_enabled', on);
+    if (!on) return;
+    set('rtmp_url', String(data.rtmp_url).trim());
+    set('rtmp_key', String(data.rtmp_key).trim());
+    applyEncoding(data, 'rtmp', set);
+    set('rtmp_keep_alive', data.rtmp_keep_alive !== false);
+}
+
+function validateTs(data, t) {
+    if (data.ts_enabled !== true) return null;
+    return (!String(data.ts_host || '').trim() ? t('ERR_HOST') : null) ||
+        checkPort(data.ts_port, 'TS_PORT', t) ||
+        checkRange(data.ts_ttl, 'TS_TTL', 1, 255, t) ||
+        validateEncoding(data, 'ts', t) ||
+        null;
+}
+
+function applyTs(data, set) {
+    const on = data.ts_enabled === true;
+    set('ts_enabled', on);
+    if (!on) return;
+    set('ts_transport', sel(data.ts_transport) === 'udp' ? 'udp' : 'tcp');
+    set('ts_host', String(data.ts_host).trim());
+    set('ts_port', String(data.ts_port).trim());
+    set('ts_ttl', String(data.ts_ttl).trim());
+    applyEncoding(data, 'ts', set);
+    set('ts_keep_alive', data.ts_keep_alive !== false);
 }
 
 function validateMonitor(data, t) {
@@ -337,6 +380,22 @@ function uplinksFrom(get) {
             ...encodingFrom(get, 'srt'),
             keep_alive: get('srt_keep_alive', true) !== false
         },
+        rtmp: {
+            enabled: bool('rtmp_enabled'),
+            url: str('rtmp_url', ''),
+            stream_key: str('rtmp_key', ''),
+            ...encodingFrom(get, 'rtmp'),
+            keep_alive: get('rtmp_keep_alive', true) !== false
+        },
+        ts: {
+            enabled: bool('ts_enabled'),
+            transport: str('ts_transport', 'tcp') === 'udp' ? 'udp' : 'tcp',
+            host: str('ts_host', ''),
+            port: num(get('ts_port', '5004'), 5004),
+            ttl: num(get('ts_ttl', '1'), 1),
+            ...encodingFrom(get, 'ts'),
+            keep_alive: get('ts_keep_alive', true) !== false
+        },
         monitor: {
             dead_air_level: Number.isFinite(parseFloat(get('mon_level', '-60'))) ? parseFloat(get('mon_level', '-60')) : -60,
             dead_air_seconds: get('mon_enabled', true) === false ? 0 : num(get('mon_seconds', '30'), 30)
@@ -386,7 +445,7 @@ function summarize(status, audioPath, audioPathError, t) {
     if (audioPath === 'ready') lines.push(t('STATUS_TAP_READY'));
     else if (audioPath === 'lost') lines.push(t('STATUS_TAP_LOST'));
     else lines.push(t('STATUS_TAP_FAILED', { error: audioPathError || '' }));
-    const names = { icecast: 'UPLINK_ICECAST', lan: 'UPLINK_LAN', record: 'UPLINK_RECORD', srt: 'UPLINK_SRT' };
+    const names = { icecast: 'UPLINK_ICECAST', lan: 'UPLINK_LAN', record: 'UPLINK_RECORD', srt: 'UPLINK_SRT', rtmp: 'UPLINK_RTMP', ts: 'UPLINK_TS' };
     if (!status || !Array.isArray(status.uplinks) || status.uplinks.length === 0) {
         lines.push(t('STATUS_NO_UPLINKS'));
     } else {
@@ -411,6 +470,6 @@ function summarize(status, audioPath, audioPathError, t) {
 
 module.exports = {
     screenTitle, checkConfig, chainHasTap, fill, sel, PRESETS, DEFAULT_PRESET, ICE_SLOTS,
-    validateIcecast, validateLan, validateRecord, validateMonitor, validateSrt,
-    applyIcecast, applyLan, applyRecord, applyMonitor, applySrt, uplinksFrom, summarize, hideWhenOff
+    validateIcecast, validateLan, validateRecord, validateMonitor, validateSrt, validateRtmp, validateTs,
+    applyIcecast, applyLan, applyRecord, applyMonitor, applySrt, applyRtmp, applyTs, uplinksFrom, summarize, hideWhenOff
 };

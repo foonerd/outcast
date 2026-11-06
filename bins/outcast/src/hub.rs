@@ -133,6 +133,22 @@ impl Hub {
             listed.push(ctx.entry(&format!("srt://{}:{}", cfg.host, cfg.port)));
             (cfg, ctx)
         });
+        let rtmp = uplinks.rtmp.enabled.then(|| {
+            let cfg = uplinks.rtmp.clone();
+            let ctx = self.ctx("rtmp", "rtmp");
+            listed.push(ctx.entry(&cfg.url.clone()));
+            (cfg, ctx)
+        });
+        let ts = uplinks.ts.enabled.then(|| {
+            let cfg = uplinks.ts.clone();
+            let ctx = self.ctx("ts", "ts");
+            let scheme = match cfg.transport {
+                crate::config::Transport::Tcp => "tcp",
+                crate::config::Transport::Udp => "udp",
+            };
+            listed.push(ctx.entry(&format!("{scheme}://{}:{}", cfg.host, cfg.port)));
+            (cfg, ctx)
+        });
         {
             let mut s = self.status.lock().unwrap_or_else(|e| e.into_inner());
             s.uplinks = listed;
@@ -153,6 +169,14 @@ impl Hub {
         }
         if let Some((cfg, ctx)) = srt {
             self.start("srt", move |ctl, pcm| uplink::srt::run(cfg, ctx, ctl, pcm));
+        }
+        if let Some((cfg, ctx)) = rtmp {
+            self.start("rtmp", move |ctl, pcm| {
+                uplink::rtmp::run(cfg, ctx, ctl, pcm)
+            });
+        }
+        if let Some((cfg, ctx)) = ts {
+            self.start("ts", move |ctl, pcm| uplink::ts::run(cfg, ctx, ctl, pcm));
         }
         if !self.title.is_empty() {
             self.broadcast(Event::Title(self.title.clone()));

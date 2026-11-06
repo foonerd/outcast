@@ -2,6 +2,13 @@
 
 All notable changes to Outcast Uplink. The format follows Keep a Changelog; the versions follow Semantic Versioning.
 
+## [0.1.9] - 2026-11-06
+
+### Added
+
+- The RTMP uplink: the stream published to an RTMP ingest (a streaming platform, a media server, a CDN) with the address and the stream key the platform gives, as AAC or MP3, a preset or the operator's own; the session pure Rust. The stream key is never shown or logged. A server that stops reading is found by the acknowledgements it stops sending, within seconds even while the player stands still, and the stream is published again with a backoff; silence keeps it published while the player pauses or stops, unless set to follow the player.
+- The transport-stream uplink: the stream as an MPEG transport stream straight to a receiver over TCP (the player connecting to a listener; a receiver that stops taking bytes is found and the connection made again) or over UDP (datagrams to a host or a multicast group, with the hop count set); AAC, MP2, MP3 or Opus in the stream, a preset or the operator's own.
+
 ## [0.1.8] - 2026-11-06
 
 ### Added

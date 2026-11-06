@@ -229,6 +229,70 @@
       ]
     },
     {
+      "id": "rtmp_section",
+      "element": "section",
+      "label": "TRANSLATE.OUTCAST.RTMP_SECTION",
+      "icon": "fa-cloud-upload",
+      "description": "TRANSLATE.OUTCAST.RTMP_SECTION_DESC",
+      "onSave": { "type": "controller", "endpoint": "audio_interface/outcast", "method": "updateRtmp" },
+      "saveButton": {
+        "label": "TRANSLATE.OUTCAST.SAVE",
+        "data": ["rtmp_enabled", "rtmp_url", "rtmp_key", "rtmp_preset", "rtmp_advanced", "rtmp_codec", "rtmp_bitrate", "rtmp_rate", "rtmp_channels", "rtmp_keep_alive"]
+      },
+      "content": [
+        { "id": "rtmp_enabled", "element": "switch", "label": "TRANSLATE.OUTCAST.RTMP_ENABLE", "doc": "TRANSLATE.OUTCAST.RTMP_ENABLE_DESC", "value": false },
+        { "id": "rtmp_url", "element": "input", "label": "TRANSLATE.OUTCAST.RTMP_URL", "doc": "TRANSLATE.OUTCAST.RTMP_URL_DESC", "value": "", "visibleIf": { "field": "rtmp_enabled", "value": true } },
+        { "id": "rtmp_key", "element": "input", "type": "password", "label": "TRANSLATE.OUTCAST.RTMP_KEY", "doc": "TRANSLATE.OUTCAST.RTMP_KEY_DESC", "value": "", "visibleIf": { "field": "rtmp_enabled", "value": true } },
+        { "id": "rtmp_preset", "element": "select", "label": "TRANSLATE.OUTCAST.PRESET", "doc": "TRANSLATE.OUTCAST.RTMP_PRESET_DESC", "value": { "value": "aac-128-44100", "label": "AAC 128 kbit/s, 44.1 kHz" },
+          "options": [ { "value": "aac-128-44100", "label": "AAC 128 kbit/s, 44.1 kHz" }, { "value": "aac-160-44100", "label": "AAC 160 kbit/s, 44.1 kHz" }, { "value": "aac-128-48000", "label": "AAC 128 kbit/s, 48 kHz" }, { "value": "aac-192-48000", "label": "AAC 192 kbit/s, 48 kHz" }, { "value": "mp3-128-44100", "label": "MP3 128 kbit/s, 44.1 kHz" } ],
+          "visibleIf": { "field": "rtmp_enabled", "value": true } },
+        { "id": "rtmp_advanced", "element": "switch", "label": "TRANSLATE.OUTCAST.ADVANCED", "doc": "TRANSLATE.OUTCAST.ADVANCED_DESC", "value": false, "visibleIf": { "field": "rtmp_enabled", "value": true } },
+        { "id": "rtmp_codec", "element": "select", "label": "TRANSLATE.OUTCAST.CODEC", "doc": "TRANSLATE.OUTCAST.RTMP_CODEC_DESC", "value": { "value": "aac", "label": "AAC" },
+          "options": [ { "value": "aac", "label": "AAC" }, { "value": "mp3", "label": "MP3" } ],
+          "visibleIf": { "field": "rtmp_advanced", "value": true } },
+        { "id": "rtmp_bitrate", "element": "input", "label": "TRANSLATE.OUTCAST.BITRATE", "doc": "TRANSLATE.OUTCAST.BITRATE_DESC", "value": "128", "visibleIf": { "field": "rtmp_advanced", "value": true } },
+        { "id": "rtmp_rate", "element": "input", "label": "TRANSLATE.OUTCAST.RATE", "doc": "TRANSLATE.OUTCAST.RATE_DESC", "value": "44100", "visibleIf": { "field": "rtmp_advanced", "value": true } },
+        { "id": "rtmp_channels", "element": "select", "label": "TRANSLATE.OUTCAST.CHANNELS", "doc": "TRANSLATE.OUTCAST.CHANNELS_DESC", "value": { "value": "2", "label": "TRANSLATE.OUTCAST.CHANNELS_STEREO" },
+          "options": [ { "value": "2", "label": "TRANSLATE.OUTCAST.CHANNELS_STEREO" }, { "value": "1", "label": "TRANSLATE.OUTCAST.CHANNELS_MONO" }, { "value": "0", "label": "TRANSLATE.OUTCAST.RATE_SOURCE" } ],
+          "visibleIf": { "field": "rtmp_advanced", "value": true } },
+        { "id": "rtmp_keep_alive", "element": "switch", "label": "TRANSLATE.OUTCAST.KEEP_ALIVE", "doc": "TRANSLATE.OUTCAST.RTMP_KEEP_ALIVE_DESC", "value": true, "visibleIf": { "field": "rtmp_enabled", "value": true } }
+      ]
+    },
+    {
+      "id": "ts_section",
+      "element": "section",
+      "label": "TRANSLATE.OUTCAST.TS_SECTION",
+      "icon": "fa-exchange",
+      "description": "TRANSLATE.OUTCAST.TS_SECTION_DESC",
+      "onSave": { "type": "controller", "endpoint": "audio_interface/outcast", "method": "updateTs" },
+      "saveButton": {
+        "label": "TRANSLATE.OUTCAST.SAVE",
+        "data": ["ts_enabled", "ts_transport", "ts_host", "ts_port", "ts_ttl", "ts_preset", "ts_advanced", "ts_codec", "ts_bitrate", "ts_rate", "ts_channels", "ts_keep_alive"]
+      },
+      "content": [
+        { "id": "ts_enabled", "element": "switch", "label": "TRANSLATE.OUTCAST.TS_ENABLE", "doc": "TRANSLATE.OUTCAST.TS_ENABLE_DESC", "value": false },
+        { "id": "ts_transport", "element": "select", "label": "TRANSLATE.OUTCAST.TS_TRANSPORT", "doc": "TRANSLATE.OUTCAST.TS_TRANSPORT_DESC", "value": { "value": "tcp", "label": "TCP" },
+          "options": [ { "value": "tcp", "label": "TCP" }, { "value": "udp", "label": "UDP" } ],
+          "visibleIf": { "field": "ts_enabled", "value": true } },
+        { "id": "ts_host", "element": "input", "label": "TRANSLATE.OUTCAST.TS_HOST", "doc": "TRANSLATE.OUTCAST.TS_HOST_DESC", "value": "", "visibleIf": { "field": "ts_enabled", "value": true } },
+        { "id": "ts_port", "element": "input", "label": "TRANSLATE.OUTCAST.TS_PORT", "doc": "TRANSLATE.OUTCAST.TS_PORT_DESC", "value": "5004", "visibleIf": { "field": "ts_enabled", "value": true } },
+        { "id": "ts_ttl", "element": "input", "label": "TRANSLATE.OUTCAST.TS_TTL", "doc": "TRANSLATE.OUTCAST.TS_TTL_DESC", "value": "1", "visibleIf": { "field": "ts_enabled", "value": true } },
+        { "id": "ts_preset", "element": "select", "label": "TRANSLATE.OUTCAST.PRESET", "doc": "TRANSLATE.OUTCAST.TS_PRESET_DESC", "value": { "value": "aac-128-48000", "label": "AAC 128 kbit/s, 48 kHz" },
+          "options": [ { "value": "aac-128-48000", "label": "AAC 128 kbit/s, 48 kHz" }, { "value": "aac-192-48000", "label": "AAC 192 kbit/s, 48 kHz" }, { "value": "aac-256-48000", "label": "AAC 256 kbit/s, 48 kHz" }, { "value": "mp2-192-48000", "label": "MP2 192 kbit/s, 48 kHz" }, { "value": "mp2-256-48000", "label": "MP2 256 kbit/s, 48 kHz" }, { "value": "mp3-128-44100", "label": "MP3 128 kbit/s, 44.1 kHz" } ],
+          "visibleIf": { "field": "ts_enabled", "value": true } },
+        { "id": "ts_advanced", "element": "switch", "label": "TRANSLATE.OUTCAST.ADVANCED", "doc": "TRANSLATE.OUTCAST.ADVANCED_DESC", "value": false, "visibleIf": { "field": "ts_enabled", "value": true } },
+        { "id": "ts_codec", "element": "select", "label": "TRANSLATE.OUTCAST.CODEC", "doc": "TRANSLATE.OUTCAST.TS_CODEC_DESC", "value": { "value": "aac", "label": "AAC" },
+          "options": [ { "value": "aac", "label": "AAC" }, { "value": "mp2", "label": "MP2" }, { "value": "mp3", "label": "MP3" }, { "value": "opus", "label": "Opus" } ],
+          "visibleIf": { "field": "ts_advanced", "value": true } },
+        { "id": "ts_bitrate", "element": "input", "label": "TRANSLATE.OUTCAST.BITRATE", "doc": "TRANSLATE.OUTCAST.BITRATE_DESC", "value": "128", "visibleIf": { "field": "ts_advanced", "value": true } },
+        { "id": "ts_rate", "element": "input", "label": "TRANSLATE.OUTCAST.RATE", "doc": "TRANSLATE.OUTCAST.RATE_DESC", "value": "48000", "visibleIf": { "field": "ts_advanced", "value": true } },
+        { "id": "ts_channels", "element": "select", "label": "TRANSLATE.OUTCAST.CHANNELS", "doc": "TRANSLATE.OUTCAST.CHANNELS_DESC", "value": { "value": "2", "label": "TRANSLATE.OUTCAST.CHANNELS_STEREO" },
+          "options": [ { "value": "2", "label": "TRANSLATE.OUTCAST.CHANNELS_STEREO" }, { "value": "1", "label": "TRANSLATE.OUTCAST.CHANNELS_MONO" }, { "value": "0", "label": "TRANSLATE.OUTCAST.RATE_SOURCE" } ],
+          "visibleIf": { "field": "ts_advanced", "value": true } },
+        { "id": "ts_keep_alive", "element": "switch", "label": "TRANSLATE.OUTCAST.KEEP_ALIVE", "doc": "TRANSLATE.OUTCAST.TS_KEEP_ALIVE_DESC", "value": true, "visibleIf": { "field": "ts_enabled", "value": true } }
+      ]
+    },
+    {
       "id": "monitor_section",
       "element": "section",
       "label": "TRANSLATE.OUTCAST.MON_SECTION",

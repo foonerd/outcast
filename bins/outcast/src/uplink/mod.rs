@@ -5,8 +5,11 @@
 pub mod icecast;
 pub mod lan;
 pub mod record;
+pub mod rtmp;
 pub mod srt;
+pub mod ts;
 
+use std::net::TcpStream;
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, RecvTimeoutError, TryRecvError};
 use std::sync::{Arc, Mutex};
@@ -128,4 +131,46 @@ pub fn clean_line(s: &str) -> String {
         .filter(|part| !part.is_empty())
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+/// Bytes written to the socket and not yet taken by the peer, as the kernel
+/// counts them: a peer that stops taking (frozen, black-holed, half-open)
+/// shows here long before a write blocks, since the send buffer is large.
+pub fn unsent(stream: &TcpStream) -> u64 {
+    use std::os::unix::io::AsRawFd;
+    const SIOCOUTQ: libc::c_ulong = 0x5411;
+    let mut n: libc::c_int = 0;
+    let rc = unsafe {
+        libc::ioctl(
+            stream.as_raw_fd(),
+            SIOCOUTQ as _,
+            &mut n as *mut libc::c_int,
+        )
+    };
+    if rc == 0 {
+        n.max(0) as u64
+    } else {
+        0
+    }
+}
+
+/// The socket's send buffer, fixed: the kernel would otherwise grow it to
+/// megabytes on a fast network, and a peer that stopped taking bytes would
+/// not show for minutes at a stream's bitrate.
+pub const SEND_BUFFER: libc::c_int = 128 * 1024;
+/// Half the send buffer: a peer taking bytes keeps the queue far below it.
+pub const STALL_THRESHOLD: u64 = (SEND_BUFFER / 2) as u64;
+
+pub fn fix_send_buffer(stream: &TcpStream) {
+    use std::os::unix::io::AsRawFd;
+    let value = SEND_BUFFER;
+    unsafe {
+        libc::setsockopt(
+            stream.as_raw_fd(),
+            libc::SOL_SOCKET,
+            libc::SO_SNDBUF,
+            &value as *const libc::c_int as *const libc::c_void,
+            size_of::<libc::c_int>() as libc::socklen_t,
+        );
+    }
 }
