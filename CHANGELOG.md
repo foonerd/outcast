@@ -2,6 +2,17 @@
 
 All notable changes to Outcast Uplink. The format follows Keep a Changelog; the versions follow Semantic Versioning.
 
+## [0.1.8] - 2026-11-06
+
+### Added
+
+- The SRT uplink: the stream as an MPEG transport stream over SRT to a listener (a production switcher, a broadcast encoder, a gateway, a server), this player the caller, with a stream id, a passphrase for an encrypted link and the link's latency as the listener needs them; AAC, MP2, MP3 or Opus in the stream, a preset or the operator's own. The transport is the core's own, pure Rust. A link that goes away is made again with a backoff; the link is kept up with silence while the player stands still unless set to follow it; the status says the round trip and the packets lost.
+- MP2, the broadcast transport stream's own codec, for the SRT uplink.
+
+### Changed
+
+- Every section of the page shows its switch alone while it is off: the mount point, the source user and the stream number sit behind the uplink's switch (their words say which server type each is for), the programme watch has a switch of its own, and a field behind a nested switch (Advanced, More settings) is hidden while its section is off.
+
 ## [0.1.7] - 2026-11-06
 
 ### Added

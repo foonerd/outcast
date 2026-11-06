@@ -425,7 +425,7 @@ checksum = "65cd87c9a6d60536580b316ad985726104730a5151c99845f2490428ef91240a"
 
 [[package]]
 name = "lite-client"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "serde",
  "serde_json",
@@ -479,7 +479,7 @@ dependencies = [
 
 [[package]]
 name = "outcast"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "bytes",
  "libc",
@@ -493,7 +493,7 @@ dependencies = [
 
 [[package]]
 name = "outcast-lite"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "libc",
  "serde",
@@ -818,7 +818,7 @@ checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
 
 [[package]]
 name = "stream"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "rubato",
  "tap",
