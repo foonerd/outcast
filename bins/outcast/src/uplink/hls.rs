@@ -22,6 +22,7 @@ use stream::feed::{Event, Segment as Shape};
 use crate::config::{Codec, Hls, OriginKind};
 use crate::encoder::{Container, Encoder, Output, Recipe};
 use crate::uplink::http::{Client, Target};
+use crate::uplink::s3::Signer;
 use crate::uplink::{self, Ctx, Next, Silence, GRACE, STILL};
 
 /// Segments kept past the playlist's window, for a player still fetching the
@@ -471,6 +472,65 @@ fn serve(mut stream: TcpStream, store: Arc<Mutex<Store>>) {
     let _ = stream.shutdown(Shutdown::Both);
 }
 
+/// The origin as the log names it.
+fn origin_name(cfg: &Hls) -> String {
+    match cfg.origin {
+        OriginKind::None => String::new(),
+        OriginKind::Http => cfg.origin_url.clone(),
+        OriginKind::S3 => format!("the bucket {} at {}", cfg.s3_bucket, cfg.s3_endpoint),
+    }
+}
+
+/// The client for the origin the settings name: an HTTP origin with its
+/// credentials, or a bucket (the endpoint with the bucket in the path, or as
+/// the first label of the host, and the prefix under it) with its keys.
+fn origin_client(cfg: &Hls) -> Result<Client, String> {
+    match cfg.origin {
+        OriginKind::None => Err("no origin".to_string()),
+        OriginKind::Http => Ok(Client::new(
+            Target::parse(&cfg.origin_url)?,
+            &cfg.origin_user,
+            &cfg.origin_password,
+            &cfg.ca_file,
+        )),
+        OriginKind::S3 => {
+            let mut target = Target::parse(&cfg.s3_endpoint)?;
+            let bucket = cfg.s3_bucket.trim().trim_matches('/');
+            if bucket.is_empty() {
+                return Err("the bucket is missing".to_string());
+            }
+            let prefix = cfg.s3_prefix.trim().trim_matches('/');
+            let mut path = target.path.clone();
+            if cfg.s3_path_style {
+                path.push_str(bucket);
+                path.push('/');
+            } else {
+                target.host = format!("{bucket}.{}", target.host);
+            }
+            if !prefix.is_empty() {
+                path.push_str(prefix);
+                path.push('/');
+            }
+            target.path = path;
+            let region = cfg.s3_region.trim();
+            Ok(Client::signed(
+                target,
+                Signer {
+                    access_key: cfg.s3_access_key.trim().to_string(),
+                    secret_key: cfg.s3_secret_key.trim().to_string(),
+                    region: if region.is_empty() {
+                        "us-east-1"
+                    } else {
+                        region
+                    }
+                    .to_string(),
+                },
+                &cfg.ca_file,
+            ))
+        }
+    }
+}
+
 /// The uploader: the window's pieces put on the origin as they come, oldest
 /// first, then the playlist naming those that landed; pieces that fell out of
 /// the window and the hold removed. An origin that refuses is tried again with
@@ -482,8 +542,8 @@ fn upload(
     landed_count: Arc<AtomicU64>,
     ctx: Ctx,
 ) {
-    let target = match Target::parse(&cfg.origin_url) {
-        Ok(t) => t,
+    let mut client = match origin_client(&cfg) {
+        Ok(c) => c,
         Err(e) => {
             ctx.state("error", Some(&format!("origin: {e}")));
             ctx.log(&format!("origin: {e}"));
@@ -491,7 +551,6 @@ fn upload(
             return;
         }
     };
-    let mut client = Client::new(target, &cfg.origin_user, &cfg.origin_password, &cfg.ca_file);
     let playlist_type = "application/vnd.apple.mpegurl";
     let mut landed: VecDeque<Arc<Piece>> = VecDeque::new();
     let mut attempt: u32 = 0;
@@ -530,7 +589,7 @@ fn upload(
             .collect();
         let mut failed = None;
         for p in due {
-            match client.put(&p.name, content_type, &p.bytes) {
+            match client.put(&p.name, content_type, "max-age=3600", &p.bytes) {
                 Ok(code) if (200..300).contains(&code) => {
                     landed_count.store(p.seq + 1, Ordering::Relaxed);
                     landed.push_back(p);
@@ -563,7 +622,7 @@ fn upload(
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
                 .playlist(&on_origin);
-            match client.put(&playlist_name, playlist_type, text.as_bytes()) {
+            match client.put(&playlist_name, playlist_type, "no-cache", text.as_bytes()) {
                 Ok(code) if (200..300).contains(&code) => {}
                 Ok(code) => failed = Some(format!("{playlist_name}: the origin answered {code}")),
                 Err(e) => failed = Some(format!("{playlist_name}: {e}")),
@@ -582,7 +641,7 @@ fn upload(
             }
             None => {
                 if attempt > 0 || !told_ok {
-                    ctx.log(&format!("origin: {} up to date", cfg.origin_url));
+                    ctx.log(&format!("origin: {} up to date", origin_name(&cfg)));
                     told_ok = true;
                 }
                 attempt = 0;
@@ -612,6 +671,7 @@ pub fn run(cfg: Hls, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u8>>>
         match cfg.origin {
             OriginKind::None => String::new(),
             OriginKind::Http => format!(", put on {}", cfg.origin_url),
+            OriginKind::S3 => format!(", put in {}", origin_name(&cfg)),
         },
         if cfg.keep_alive { ", kept alive" } else { "" }
     ));
@@ -654,7 +714,7 @@ pub fn run(cfg: Hls, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u8>>>
     // The uploader, where an origin is set; what landed is counted for the status.
     let landed_count = Arc::new(AtomicU64::new(0));
     let (nudge, uploader): (Option<SyncSender<()>>, Option<JoinHandle<()>>) =
-        if cfg.origin == OriginKind::Http {
+        if cfg.origin != OriginKind::None {
             let (tx, rx) = mpsc::sync_channel::<()>(4);
             let store = Arc::clone(&store);
             let cfg2 = cfg.clone();

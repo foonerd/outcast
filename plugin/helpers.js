@@ -256,15 +256,24 @@ function applyTs(data, set) {
 function validateHls(data, t) {
     if (data.hls_enabled !== true) return null;
     const serve = data.hls_serve !== false;
-    const origin = sel(data.hls_origin) === 'http' ? 'http' : 'none';
+    const origin = originKind(data.hls_origin);
     const url = String(data.hls_origin_url || '').trim();
+    const endpoint = String(data.hls_s3_endpoint || '').trim();
     return (!serve && origin === 'none' ? t('ERR_HLS_NOWHERE') : null) ||
         (serve ? checkPort(data.hls_port, 'HLS_PORT', t) : null) ||
         (origin === 'http' && !/^https?:\/\/[^\s/]+(\/\S*)?$/.test(url) ? t('ERR_HLS_ORIGIN_URL') : null) ||
+        (origin === 's3' && !/^https?:\/\/[^\s/]+(\/\S*)?$/.test(endpoint) ? t('ERR_HLS_S3_ENDPOINT') : null) ||
+        (origin === 's3' && !/^[a-z0-9][a-z0-9.-]{1,62}$/.test(String(data.hls_s3_bucket || '').trim()) ? t('ERR_HLS_S3_BUCKET') : null) ||
+        (origin === 's3' && !(String(data.hls_s3_access_key || '').trim() && String(data.hls_s3_secret_key || '')) ? t('ERR_HLS_S3_KEYS') : null) ||
         validateEncoding(data, 'hls', t) ||
         (data.hls_advanced === true ? checkRange(data.hls_segment_seconds, 'HLS_SEGMENT', 1, 30, t) : null) ||
         (data.hls_advanced === true ? checkRange(data.hls_window, 'HLS_WINDOW', 3, 60, t) : null) ||
         null;
+}
+
+function originKind(v) {
+    const k = sel(v);
+    return k === 'http' || k === 's3' ? k : 'none';
 }
 
 function applyHls(data, set) {
@@ -280,13 +289,23 @@ function applyHls(data, set) {
     set('hls_serve', data.hls_serve !== false);
     if (data.hls_serve !== false) set('hls_port', String(data.hls_port).trim());
     set('hls_keep_alive', data.hls_keep_alive !== false);
-    const origin = sel(data.hls_origin) === 'http' ? 'http' : 'none';
+    const origin = originKind(data.hls_origin);
     set('hls_origin', origin);
     if (origin === 'http') {
         set('hls_origin_url', String(data.hls_origin_url).trim());
         set('hls_origin_user', String(data.hls_origin_user || '').trim());
         set('hls_origin_password', String(data.hls_origin_password || ''));
         set('hls_ca_file', String(data.hls_ca_file || '').trim());
+    }
+    if (origin === 's3') {
+        set('hls_s3_endpoint', String(data.hls_s3_endpoint).trim());
+        set('hls_s3_bucket', String(data.hls_s3_bucket).trim());
+        set('hls_s3_prefix', String(data.hls_s3_prefix || '').trim().replace(/^\/+|\/+$/g, ''));
+        set('hls_s3_region', String(data.hls_s3_region || '').trim() || 'us-east-1');
+        set('hls_s3_access_key', String(data.hls_s3_access_key).trim());
+        set('hls_s3_secret_key', String(data.hls_s3_secret_key));
+        set('hls_s3_path_style', data.hls_s3_path_style !== false);
+        set('hls_s3_ca_file', String(data.hls_s3_ca_file || '').trim());
     }
 }
 
@@ -444,11 +463,18 @@ function uplinksFrom(get) {
             window: num(get('hls_window', '6'), 6),
             port: get('hls_serve', true) === false ? 0 : num(get('hls_port', '8010'), 8010),
             keep_alive: get('hls_keep_alive', true) !== false,
-            origin: str('hls_origin', 'none') === 'http' ? 'http' : 'none',
+            origin: originKind(get('hls_origin', 'none')),
             origin_url: str('hls_origin_url', ''),
             origin_user: str('hls_origin_user', ''),
             origin_password: str('hls_origin_password', ''),
-            ca_file: str('hls_ca_file', '')
+            ca_file: originKind(get('hls_origin', 'none')) === 's3' ? str('hls_s3_ca_file', '') : str('hls_ca_file', ''),
+            s3_endpoint: str('hls_s3_endpoint', ''),
+            s3_bucket: str('hls_s3_bucket', ''),
+            s3_prefix: str('hls_s3_prefix', ''),
+            s3_region: str('hls_s3_region', 'us-east-1'),
+            s3_access_key: str('hls_s3_access_key', ''),
+            s3_secret_key: str('hls_s3_secret_key', ''),
+            s3_path_style: get('hls_s3_path_style', true) !== false
         },
         monitor: {
             dead_air_level: Number.isFinite(parseFloat(get('mon_level', '-60'))) ? parseFloat(get('mon_level', '-60')) : -60,

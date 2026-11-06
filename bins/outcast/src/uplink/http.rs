@@ -1,13 +1,15 @@
 //! A small HTTP/1.1 client for an origin that takes files: PUT and DELETE,
 //! over the bare socket or TLS, basic authentication where the operator set a
-//! user, the connection kept for the next request and made again when it is
-//! gone. Enough for an HLS origin (a WebDAV folder, a CDN's ingest, a media
-//! server's HTTP origin); nothing is fetched.
+//! user or an S3 signature where the origin is a bucket, the connection kept
+//! for the next request and made again when it is gone. Enough for an HLS
+//! origin (a WebDAV folder, a CDN's ingest, a media server's HTTP origin, an
+//! S3-compatible bucket); nothing is fetched.
 
 use std::io::{self, Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
 use std::time::Duration;
 
+use crate::uplink::s3::{self, Signer};
 use crate::uplink::tls::{wrap_tls, Wire};
 
 /// How long a connection, a request or an answer may take.
@@ -82,6 +84,7 @@ struct Answer {
 pub struct Client {
     target: Target,
     auth: Option<String>,
+    signer: Option<Signer>,
     ca_file: String,
     wire: Option<Wire>,
 }
@@ -97,6 +100,18 @@ impl Client {
         Client {
             target,
             auth,
+            signer: None,
+            ca_file: ca_file.to_string(),
+            wire: None,
+        }
+    }
+
+    /// A client for an S3-compatible bucket: every request signed.
+    pub fn signed(target: Target, signer: Signer, ca_file: &str) -> Client {
+        Client {
+            target,
+            auth: None,
+            signer: Some(signer),
             ca_file: ca_file.to_string(),
             wire: None,
         }
@@ -122,9 +137,16 @@ impl Client {
         Ok(())
     }
 
-    /// A file put under the target's path; the status code the server gave.
-    pub fn put(&mut self, name: &str, content_type: &str, body: &[u8]) -> Result<u16, String> {
-        self.request("PUT", name, Some((content_type, body)))
+    /// A file put under the target's path, with the caching a CDN should give
+    /// it; the status code the server gave.
+    pub fn put(
+        &mut self,
+        name: &str,
+        content_type: &str,
+        cache_control: &str,
+        body: &[u8],
+    ) -> Result<u16, String> {
+        self.request("PUT", name, Some((content_type, cache_control, body)))
     }
 
     /// A file removed from under the target's path; the status code.
@@ -138,9 +160,9 @@ impl Client {
         &mut self,
         method: &str,
         name: &str,
-        body: Option<(&str, &[u8])>,
+        body: Option<(&str, &str, &[u8])>,
     ) -> Result<u16, String> {
-        let head = self.head(method, name, body);
+        let head = self.head(method, name, body, s3::now_seconds());
         let had = self.wire.is_some();
         for attempt in 0..2 {
             if self.wire.is_none() {
@@ -150,7 +172,7 @@ impl Client {
             let sent = wire
                 .write_all(head.as_bytes())
                 .and_then(|()| match body {
-                    Some((_, b)) => wire.write_all(b),
+                    Some((_, _, b)) => wire.write_all(b),
                     None => Ok(()),
                 })
                 .and_then(|()| wire.flush());
@@ -183,21 +205,38 @@ impl Client {
         unreachable!()
     }
 
-    fn head(&self, method: &str, name: &str, body: Option<(&str, &[u8])>) -> String {
+    fn head(
+        &self,
+        method: &str,
+        name: &str,
+        body: Option<(&str, &str, &[u8])>,
+        now: u64,
+    ) -> String {
+        let path = format!("{}{name}", self.target.path);
+        let host = self.target.host_header();
         let mut h = vec![
-            format!("{method} {}{name} HTTP/1.1", self.target.path),
-            format!("Host: {}", self.target.host_header()),
+            format!("{method} {path} HTTP/1.1"),
+            format!("Host: {host}"),
             format!("User-Agent: outcast/{}", env!("CARGO_PKG_VERSION")),
         ];
         if let Some(a) = &self.auth {
             h.push(format!("Authorization: {a}"));
         }
         match body {
-            Some((t, b)) => {
+            Some((t, cache, b)) => {
                 h.push(format!("Content-Type: {t}"));
                 h.push(format!("Content-Length: {}", b.len()));
+                if !cache.is_empty() {
+                    h.push(format!("Cache-Control: {cache}"));
+                }
             }
             None => h.push("Content-Length: 0".to_string()),
+        }
+        if let Some(signer) = &self.signer {
+            let payload = body.map(|(_, _, b)| b).unwrap_or(&[]);
+            for (k, v) in signer.headers(method, &path, &host, payload, now) {
+                h.push(format!("{k}: {v}"));
+            }
         }
         h.join("\r\n") + "\r\n\r\n"
     }
@@ -340,15 +379,35 @@ mod tests {
         let h = c.head(
             "PUT",
             "live.m3u8",
-            Some(("application/vnd.apple.mpegurl", b"#EXTM3U\n")),
+            Some(("application/vnd.apple.mpegurl", "no-cache", b"#EXTM3U\n")),
+            0,
         );
         assert!(h.starts_with("PUT /radio/live.m3u8 HTTP/1.1\r\nHost: origin.example.com\r\n"));
         assert!(h.contains("\r\nAuthorization: Basic aW5nZXN0OnNlY3JldA==\r\n"));
-        assert!(h.contains("\r\nContent-Length: 8\r\n"));
+        assert!(h.contains("\r\nContent-Length: 8\r\nCache-Control: no-cache\r\n"));
         assert!(h.ends_with("\r\n\r\n"));
-        let h = c.head("DELETE", "live-7.aac", None);
+        let h = c.head("DELETE", "live-7.aac", None, 0);
         assert!(h.starts_with("DELETE /radio/live-7.aac HTTP/1.1\r\n"));
         assert!(h.contains("Content-Length: 0"));
+        // A bucket: the request signed, the host as sent.
+        let c = Client::signed(
+            Target::parse("http://10.0.0.9:9000/radio/live/").unwrap(),
+            Signer {
+                access_key: "AKIAIOSFODNN7EXAMPLE".into(),
+                secret_key: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY".into(),
+                region: "us-east-1".into(),
+            },
+            "",
+        );
+        let h = c.head(
+            "PUT",
+            "live-7.aac",
+            Some(("audio/aac", "max-age=3600", b"abc")),
+            1_369_353_600,
+        );
+        assert!(h.contains("\r\nx-amz-date: 20130524T000000Z\r\n"));
+        assert!(h.contains("\r\nx-amz-content-sha256: ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\r\n"));
+        assert!(h.contains("\r\nAuthorization: AWS4-HMAC-SHA256 Credential=AKIAIOSFODNN7EXAMPLE/20130524/us-east-1/s3/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature="));
     }
 
     #[test]

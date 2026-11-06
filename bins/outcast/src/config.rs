@@ -362,6 +362,8 @@ pub enum OriginKind {
     /// An HTTP(S) origin taking PUT and DELETE: a WebDAV folder, a CDN's ingest, a
     /// media server's HTTP origin.
     Http,
+    /// An S3-compatible bucket: AWS S3, Cloudflare R2, Backblaze B2, MinIO, Wasabi.
+    S3,
 }
 
 /// An HLS uplink: the stream cut into segments of packed audio with a sliding
@@ -408,6 +410,26 @@ pub struct Hls {
     /// A PEM file of certificate authorities to trust beside the public ones.
     #[serde(default)]
     pub ca_file: String,
+    /// The bucket's endpoint, `https://s3.<region>.amazonaws.com` or a server of
+    /// the operator's.
+    #[serde(default)]
+    pub s3_endpoint: String,
+    #[serde(default)]
+    pub s3_bucket: String,
+    /// The folder in the bucket the files go under; empty for the bucket's root.
+    #[serde(default)]
+    pub s3_prefix: String,
+    /// The region the signature is scoped to; `us-east-1` unless set.
+    #[serde(default)]
+    pub s3_region: String,
+    #[serde(default)]
+    pub s3_access_key: String,
+    #[serde(default)]
+    pub s3_secret_key: String,
+    /// The bucket in the path (`endpoint/bucket/…`, what MinIO and most take) rather
+    /// than as the host's first label (`bucket.endpoint`, AWS's own way).
+    #[serde(default = "default_true")]
+    pub s3_path_style: bool,
 }
 
 impl Hls {
@@ -449,7 +471,14 @@ impl Hls {
             self.window = 3;
         }
         self.origin_url = self.origin_url.trim().to_string();
+        self.s3_endpoint = self.s3_endpoint.trim().to_string();
+        self.s3_bucket = self.s3_bucket.trim().to_string();
         if self.origin == OriginKind::Http && self.origin_url.is_empty() {
+            self.origin = OriginKind::None;
+        }
+        if self.origin == OriginKind::S3
+            && (self.s3_endpoint.is_empty() || self.s3_bucket.is_empty())
+        {
             self.origin = OriginKind::None;
         }
         if self.enabled && self.port == 0 && self.origin == OriginKind::None {
@@ -476,6 +505,13 @@ impl Default for Hls {
             origin_user: String::new(),
             origin_password: String::new(),
             ca_file: String::new(),
+            s3_endpoint: String::new(),
+            s3_bucket: String::new(),
+            s3_prefix: String::new(),
+            s3_region: String::new(),
+            s3_access_key: String::new(),
+            s3_secret_key: String::new(),
+            s3_path_style: true,
         }
     }
 }
@@ -916,6 +952,25 @@ mod tests {
         v.tidy();
         assert_eq!(v.hls.origin, OriginKind::None);
         assert!(!v.hls.enabled);
+        let mut w: Uplinks = serde_json::from_str(
+            r#"{"hls":{"enabled":true,"origin":"s3","s3_endpoint":" http://10.0.0.9:9000 ","s3_bucket":"radio"}}"#,
+        )
+        .unwrap();
+        w.tidy();
+        assert_eq!(
+            (
+                w.hls.origin,
+                w.hls.s3_endpoint.as_str(),
+                w.hls.s3_path_style
+            ),
+            (OriginKind::S3, "http://10.0.0.9:9000", true)
+        );
+        let mut x: Uplinks = serde_json::from_str(
+            r#"{"hls":{"enabled":true,"origin":"s3","s3_endpoint":"http://x"}}"#,
+        )
+        .unwrap();
+        x.tidy();
+        assert_eq!(x.hls.origin, OriginKind::None, "no bucket, no origin");
         assert_eq!(Hls::default().name, "stream");
     }
 

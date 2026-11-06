@@ -1,6 +1,6 @@
 {
   "name": "outcast",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "description": "Casts whatever the player plays out to any uplink: Icecast, SHOUTcast, RTMP, SRT, HLS, the LAN or a file. An evo framework plugin built on evotap.",
   "main": "index.js",
   "scripts": {
@@ -21,7 +21,7 @@
     "os": ["bookworm"],
     "architectures": ["armhf", "amd64"],
     "details": "Streams whatever the player plays, from any service, to Icecast, SHOUTcast, RTMP, SRT, HLS, the LAN or a file, with the screen's title. Built on evotap.",
-    "changelog": "0.1.11 The HLS uplink: segments and a playlist served from the player and put on your own HTTP origin."
+    "changelog": "0.1.12 An S3-compatible bucket as the HLS origin: AWS S3, Cloudflare R2, Backblaze B2 or your own server, every request signed."
   },
   "dependencies": {
     "kew": "^0.7.0",

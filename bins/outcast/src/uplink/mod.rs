@@ -8,6 +8,7 @@ pub mod icecast;
 pub mod lan;
 pub mod record;
 pub mod rtmp;
+pub mod s3;
 pub mod srt;
 pub mod tls;
 pub mod ts;

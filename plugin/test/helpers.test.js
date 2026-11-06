@@ -247,7 +247,18 @@ test('the HLS uplink serves on a port, goes to an origin, or both, never nowhere
     const kept = {};
     h.applyHls({ ...good, hls_name: ' my station ', hls_origin: { value: 'http' }, hls_origin_url: ' http://o.example.com/radio ', hls_origin_user: 'ingest', hls_origin_password: 'pw' }, (k, v) => { kept[k] = v; });
     let u = h.uplinksFrom((k, d) => (k in kept ? kept[k] : d)).hls;
-    assert.deepEqual(u, { enabled: true, name: 'my station', codec: 'aac', bitrate: 128, rate: 48000, channels: 2, segment_seconds: 4, window: 6, port: 8010, keep_alive: true, origin: 'http', origin_url: 'http://o.example.com/radio', origin_user: 'ingest', origin_password: 'pw', ca_file: '' });
+    assert.deepEqual(u, { enabled: true, name: 'my station', codec: 'aac', bitrate: 128, rate: 48000, channels: 2, segment_seconds: 4, window: 6, port: 8010, keep_alive: true, origin: 'http', origin_url: 'http://o.example.com/radio', origin_user: 'ingest', origin_password: 'pw', ca_file: '',
+        s3_endpoint: '', s3_bucket: '', s3_prefix: '', s3_region: 'us-east-1', s3_access_key: '', s3_secret_key: '', s3_path_style: true });
+    // A bucket: the endpoint, the bucket name, the keys are needed; the prefix is bare of slashes.
+    const s3 = { ...good, hls_origin: { value: 's3' }, hls_s3_endpoint: 'https://s3.eu-west-1.amazonaws.com', hls_s3_bucket: 'my-radio', hls_s3_access_key: 'AKIA', hls_s3_secret_key: 'sk' };
+    assert.equal(h.validateHls(s3, t), null);
+    assert.equal(h.validateHls({ ...s3, hls_s3_endpoint: 's3.amazonaws.com' }, t), 'ERR_HLS_S3_ENDPOINT');
+    assert.equal(h.validateHls({ ...s3, hls_s3_bucket: 'My Radio' }, t), 'ERR_HLS_S3_BUCKET');
+    assert.equal(h.validateHls({ ...s3, hls_s3_secret_key: '' }, t), 'ERR_HLS_S3_KEYS');
+    h.applyHls({ ...s3, hls_s3_prefix: '/station/live/', hls_s3_region: ' ', hls_s3_path_style: false, hls_s3_ca_file: '/data/ca.pem' }, (k, v) => { kept[k] = v; });
+    u = h.uplinksFrom((k, d) => (k in kept ? kept[k] : d)).hls;
+    assert.deepEqual([u.origin, u.s3_endpoint, u.s3_bucket, u.s3_prefix, u.s3_region, u.s3_access_key, u.s3_secret_key, u.s3_path_style, u.ca_file],
+        ['s3', 'https://s3.eu-west-1.amazonaws.com', 'my-radio', 'station/live', 'us-east-1', 'AKIA', 'sk', false, '/data/ca.pem']);
     // Not served on the player: the port is 0 for the core; the segment length and the
     // window are Advanced settings.
     h.applyHls({ ...good, hls_serve: false, hls_origin: { value: 'http' }, hls_origin_url: 'https://o.example.com/', hls_advanced: true, hls_codec: { value: 'mp3' }, hls_bitrate: '192', hls_rate: '44100', hls_channels: { value: '2' }, hls_segment_seconds: '6', hls_window: '10' }, (k, v) => { kept[k] = v; });

@@ -2,6 +2,12 @@
 
 All notable changes to Outcast Uplink. The format follows Keep a Changelog; the versions follow Semantic Versioning.
 
+## [0.1.12] - 2026-11-06
+
+### Added
+
+- An S3-compatible bucket as the HLS origin (AWS S3, Cloudflare R2, Backblaze B2, a server of the operator's): the endpoint, the bucket, a folder in it, the region, the keys, the bucket in the path or as the host's first label; every request signed (Signature Version 4, pure Rust), each object put with its content type and the caching a CDN wants (the playlist uncached, the segments an hour), the stale ones removed. The secret is never shown or logged.
+
 ## [0.1.11] - 2026-11-06
 
 ### Added

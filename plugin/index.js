@@ -434,8 +434,10 @@ Outcast.prototype.getUIConfig = function () {
             setValue(hls, 'hls_enabled', c.get('hls_enabled', false) === true);
             setValue(hls, 'hls_name', String(c.get('hls_name', 'stream')));
             encoding(hls, 'hls');
-            ['hls_segment_seconds', 'hls_window', 'hls_port', 'hls_origin_url', 'hls_origin_user', 'hls_origin_password', 'hls_ca_file']
+            ['hls_segment_seconds', 'hls_window', 'hls_port', 'hls_origin_url', 'hls_origin_user', 'hls_origin_password', 'hls_ca_file',
+                'hls_s3_endpoint', 'hls_s3_bucket', 'hls_s3_prefix', 'hls_s3_region', 'hls_s3_access_key', 'hls_s3_secret_key', 'hls_s3_ca_file']
                 .forEach((k) => setValue(hls, k, String(c.get(k, ''))));
+            setValue(hls, 'hls_s3_path_style', c.get('hls_s3_path_style', true) !== false);
             setValue(hls, 'hls_serve', c.get('hls_serve', true) !== false);
             setValue(hls, 'hls_keep_alive', c.get('hls_keep_alive', true) !== false);
             setSelect(hls, 'hls_origin', c.get('hls_origin', 'none'));

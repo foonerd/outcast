@@ -22,6 +22,8 @@ rml_rtmp = "0.8.0"
 # TLS for rtmps://, pure Rust with ring's cryptography; the public roots are Mozilla's.
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 webpki-roots = "1"
+# SHA-256 and HMAC for the S3 signature, the same ring rustls uses.
+ring = "0.17"
 bytes = "1"
 rand = "0.8"
 serde = { version = "1", features = ["derive"] }

@@ -152,10 +152,21 @@ impl Hub {
         let hls = uplinks.hls.enabled.then(|| {
             let cfg = uplinks.hls.clone();
             let ctx = self.ctx("hls", "hls");
-            let detail = match (cfg.port, cfg.origin) {
-                (0, _) => cfg.origin_url.clone(),
-                (p, crate::config::OriginKind::None) => format!("port {p}"),
-                (p, _) => format!("port {p}, {}", cfg.origin_url),
+            let origin = match cfg.origin {
+                crate::config::OriginKind::None => String::new(),
+                crate::config::OriginKind::Http => cfg.origin_url.clone(),
+                crate::config::OriginKind::S3 => {
+                    format!(
+                        "{}/{}",
+                        cfg.s3_endpoint.trim_end_matches('/'),
+                        cfg.s3_bucket
+                    )
+                }
+            };
+            let detail = match (cfg.port, origin.is_empty()) {
+                (0, _) => origin,
+                (p, true) => format!("port {p}"),
+                (p, false) => format!("port {p}, {origin}"),
             };
             listed.push(ctx.entry(&detail));
             (cfg, ctx)
