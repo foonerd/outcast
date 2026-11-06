@@ -177,6 +177,28 @@ test('the second and third Icecast slots are their own sections and their own up
     ]);
 });
 
+test('the SRT uplink takes a listener, a stream id, a passphrase and a latency', () => {
+    const good = { srt_enabled: true, srt_host: 'switcher.example.com', srt_port: '9000', srt_stream_id: '', srt_passphrase: '', srt_latency: '120' };
+    assert.equal(h.validateSrt(good, t), null);
+    assert.equal(h.validateSrt({ srt_enabled: false }, t), null);
+    assert.equal(h.validateSrt({ ...good, srt_host: '' }, t), 'ERR_HOST');
+    assert.equal(h.validateSrt({ ...good, srt_port: '0' }, t), 'ERR_PORT {"field":"SRT_PORT"}');
+    assert.equal(h.validateSrt({ ...good, srt_passphrase: 'short' }, t), 'ERR_PASSPHRASE');
+    assert.equal(h.validateSrt({ ...good, srt_passphrase: 'long enough one' }, t), null);
+    assert.equal(h.validateSrt({ ...good, srt_latency: 'soon' }, t), 'ERR_NUMBER {"field":"SRT_LATENCY"}');
+    assert.equal(h.validateSrt({ ...good, srt_advanced: true, srt_codec: { value: 'mp2' }, srt_bitrate: '192', srt_rate: '48000' }, t), null);
+    const kept = {};
+    h.applySrt({ ...good, srt_stream_id: ' live/one ', srt_latency: ' 250 ', srt_preset: { value: 'mp2-192-48000' } }, (k, v) => { kept[k] = v; });
+    const u = h.uplinksFrom((k, d) => (k in kept ? kept[k] : d)).srt;
+    assert.deepEqual(u, { enabled: true, host: 'switcher.example.com', port: 9000, stream_id: 'live/one', passphrase: '', latency_ms: 250, codec: 'mp2', bitrate: 192, rate: 48000, channels: 2, keep_alive: true });
+    const defaults = h.uplinksFrom((k, d) => d).srt;
+    assert.deepEqual([defaults.enabled, defaults.port, defaults.latency_ms, defaults.codec, defaults.rate], [false, 9000, 120, 'aac', 48000]);
+    const s = { ring: null, segments: 0, bytes: 0, uplinks: [{ id: 'srt', kind: 'srt', state: 'connected', detail: 'srt://x:9000', last_error: '', rtt_ms: 3, lost_packets: 0 }] };
+    const line = h.summarize(s, 'ready', '', t)[2];
+    assert.ok(line.startsWith('STATUS_UPLINK {"name":"UPLINK_SRT","state":"connected","detail":"srt://x:9000, STATUS_SRT_LINK '), line);
+    assert.ok(line.includes('rtt') && line.includes(':3') && line.includes('lost'), line);
+});
+
 test('the dead-air watch takes a level and a time, and the file carries them', () => {
     assert.equal(h.validateMonitor({ mon_level: '-60', mon_seconds: '30' }, t), null);
     assert.equal(h.validateMonitor({ mon_level: '-45.5', mon_seconds: '0' }, t), null);

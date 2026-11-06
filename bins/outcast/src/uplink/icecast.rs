@@ -17,7 +17,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::config::{Codec, Icecast, Protocol};
-use crate::encoder::{Encoder, Output, Recipe};
+use crate::encoder::{Container, Encoder, Output, Recipe};
 use crate::uplink::{self, clean_line, Ctx, Next, Silence, GRACE, STILL};
 use stream::conform::Conformer;
 use stream::feed::{Event, Segment};
@@ -654,6 +654,7 @@ pub fn run(cfg: Icecast, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u
                             String::new()
                         },
                         output: Output::Pipe,
+                        container: Container::Native,
                     };
                     match Encoder::start(&ctx.evopeg, &shape, &recipe, Some(tx), &ctx.id) {
                         Ok(e) => {

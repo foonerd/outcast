@@ -9,7 +9,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::config::{Record, Split};
-use crate::encoder::{Encoder, Output, Recipe};
+use crate::encoder::{Container, Encoder, Output, Recipe};
 use crate::uplink::{self, Ctx, Next, GRACE};
 use stream::conform::Conformer;
 use stream::feed::{Event, Segment};
@@ -87,6 +87,7 @@ fn begin(
         rate: cfg.rate,
         title: title.to_string(),
         output: Output::File(path.clone()),
+        container: Container::Native,
     };
     match Encoder::start(&ctx.evopeg, seg, &recipe, None, &ctx.id) {
         Ok(mut e) => {

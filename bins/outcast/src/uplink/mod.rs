@@ -5,6 +5,7 @@
 pub mod icecast;
 pub mod lan;
 pub mod record;
+pub mod srt;
 
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, RecvTimeoutError, TryRecvError};

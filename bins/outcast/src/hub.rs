@@ -127,6 +127,12 @@ impl Hub {
             listed.push(ctx.entry(&cfg.folder.clone()));
             (cfg, ctx)
         });
+        let srt = uplinks.srt.enabled.then(|| {
+            let cfg = uplinks.srt.clone();
+            let ctx = self.ctx("srt", "srt");
+            listed.push(ctx.entry(&format!("srt://{}:{}", cfg.host, cfg.port)));
+            (cfg, ctx)
+        });
         {
             let mut s = self.status.lock().unwrap_or_else(|e| e.into_inner());
             s.uplinks = listed;
@@ -144,6 +150,9 @@ impl Hub {
             self.start("record", move |ctl, pcm| {
                 uplink::record::run(cfg, ctx, ctl, pcm)
             });
+        }
+        if let Some((cfg, ctx)) = srt {
+            self.start("srt", move |ctl, pcm| uplink::srt::run(cfg, ctx, ctl, pcm));
         }
         if !self.title.is_empty() {
             self.broadcast(Event::Title(self.title.clone()));

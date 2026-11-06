@@ -30,6 +30,18 @@ pub struct Recipe {
     pub title: String,
     /// Where the output goes: a pipe the caller reads, or a file the child writes.
     pub output: Output,
+    /// The container: the codec's own, or an MPEG transport stream for SRT.
+    pub container: Container,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Container {
+    /// What the codec is usually carried in: MP3 and ADTS bare, Ogg for Opus,
+    /// Vorbis and streamed FLAC, FLAC and WAV files.
+    #[default]
+    Native,
+    /// An MPEG transport stream, every codec the muxer takes.
+    MpegTs,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -63,6 +75,7 @@ pub fn arguments(segment: &Segment, recipe: &Recipe) -> Vec<String> {
     }
     let (encoder, muxer): (&str, &str) = match (recipe.codec, &recipe.output) {
         (Codec::Mp3, _) => ("libmp3lame", "mp3"),
+        (Codec::Mp2, _) => ("mp2", "mp2"),
         (Codec::Aac, _) => ("aac", "adts"),
         (Codec::Opus, _) => ("libopus", "ogg"),
         (Codec::Vorbis, _) => ("libvorbis", "ogg"),
@@ -83,7 +96,10 @@ pub fn arguments(segment: &Segment, recipe: &Recipe) -> Vec<String> {
         a.push(format!("title={}", recipe.title));
     }
     a.push("-f".into());
-    a.push(muxer.into());
+    a.push(match recipe.container {
+        Container::Native => muxer.into(),
+        Container::MpegTs => "mpegts".into(),
+    });
     match &recipe.output {
         Output::Pipe => a.push("pipe:1".into()),
         Output::File(path) => {
@@ -252,10 +268,37 @@ mod tests {
                 rate: 44100,
                 title: "Artist - Title".into(),
                 output: Output::Pipe,
+                container: Container::Native,
             },
         );
         let s = a.join(" ");
         assert!(s.starts_with("-hide_banner -loglevel error -nostdin -f s32le -ar 96000 -ac 2 -i pipe:0 -ar 44100 -c:a libmp3lame -b:a 192k -metadata title=Artist - Title -f mp3 pipe:1"), "{s}");
+    }
+
+    #[test]
+    fn a_transport_stream_takes_the_mpegts_muxer_whatever_the_codec() {
+        for (codec, enc) in [
+            (Codec::Aac, "aac"),
+            (Codec::Mp2, "mp2"),
+            (Codec::Mp3, "libmp3lame"),
+        ] {
+            let a = arguments(
+                &segment(),
+                &Recipe {
+                    codec,
+                    bitrate: 128,
+                    rate: 48000,
+                    title: String::new(),
+                    output: Output::Pipe,
+                    container: Container::MpegTs,
+                },
+            );
+            let s = a.join(" ");
+            assert!(
+                s.ends_with(&format!("-ar 48000 -c:a {enc} -b:a 128k -f mpegts pipe:1")),
+                "{s}"
+            );
+        }
     }
 
     #[test]
@@ -268,6 +311,7 @@ mod tests {
                 rate: 0,
                 title: String::new(),
                 output: Output::File(PathBuf::from("/tmp/x.flac")),
+                container: Container::Native,
             },
         );
         let s = a.join(" ");
@@ -288,6 +332,7 @@ mod tests {
                 rate: 0,
                 title: String::new(),
                 output: Output::Pipe,
+                container: Container::Native,
             },
         );
         assert!(flac.join(" ").ends_with("-c:a flac -f ogg pipe:1"));
@@ -299,6 +344,7 @@ mod tests {
                 rate: 48000,
                 title: String::new(),
                 output: Output::Pipe,
+                container: Container::Native,
             },
         );
         assert!(opus

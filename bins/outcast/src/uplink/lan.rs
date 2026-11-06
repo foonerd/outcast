@@ -13,7 +13,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use crate::config::{Codec, Lan};
-use crate::encoder::{Encoder, Output, Recipe};
+use crate::encoder::{Container, Encoder, Output, Recipe};
 use crate::uplink::{self, clean_line, Ctx, Next, Silence, GRACE, STILL};
 use stream::conform::Conformer;
 use stream::feed::{Event, Segment};
@@ -243,6 +243,7 @@ pub fn run(cfg: Lan, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u8>>>
                     rate: cfg.rate,
                     title: if ogg { title.clone() } else { String::new() },
                     output: Output::Pipe,
+                    container: Container::Native,
                 };
                 match Encoder::start(&ctx.evopeg, &wanted, &recipe, Some(tx), &ctx.id) {
                     Ok(e) => {

@@ -12,6 +12,9 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "lowercase")]
 pub enum Codec {
     Mp3,
+    /// MPEG-1 layer II, the broadcast transport stream's own; in a transport
+    /// stream only.
+    Mp2,
     Aac,
     Opus,
     Vorbis,
@@ -28,13 +31,17 @@ impl Codec {
 
     /// Whether a bitrate means anything.
     pub fn lossy(self) -> bool {
-        matches!(self, Codec::Mp3 | Codec::Aac | Codec::Opus | Codec::Vorbis)
+        matches!(
+            self,
+            Codec::Mp3 | Codec::Mp2 | Codec::Aac | Codec::Opus | Codec::Vorbis
+        )
     }
 
     /// The file extension a recording of it takes.
     pub fn extension(self) -> &'static str {
         match self {
             Codec::Mp3 => "mp3",
+            Codec::Mp2 => "mp2",
             Codec::Aac => "aac",
             Codec::Opus => "opus",
             Codec::Vorbis => "ogg",
@@ -46,7 +53,7 @@ impl Codec {
     /// The content type a stream of it is served as.
     pub fn content_type(self) -> &'static str {
         match self {
-            Codec::Mp3 => "audio/mpeg",
+            Codec::Mp3 | Codec::Mp2 => "audio/mpeg",
             Codec::Aac => "audio/aac",
             Codec::Opus | Codec::Vorbis | Codec::Flac => "audio/ogg",
             Codec::Wav => "audio/wav",
@@ -334,7 +341,90 @@ pub struct Uplinks {
     #[serde(default)]
     pub record: Record,
     #[serde(default)]
+    pub srt: Srt,
+    #[serde(default)]
     pub monitor: Monitor,
+}
+
+/// An SRT uplink: the stream as an MPEG transport stream to an SRT listener
+/// (a switcher, an encoder, a gateway), this side the caller.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Srt {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub host: String,
+    #[serde(default = "Srt::default_port")]
+    pub port: u16,
+    /// The stream id the listener asks for, if any.
+    #[serde(default)]
+    pub stream_id: String,
+    /// The passphrase for encryption, empty for none.
+    #[serde(default)]
+    pub passphrase: String,
+    /// The latency the link is allowed, in milliseconds.
+    #[serde(default = "Srt::default_latency")]
+    pub latency_ms: u32,
+    #[serde(default = "Srt::default_codec")]
+    pub codec: Codec,
+    #[serde(default = "Srt::default_bitrate")]
+    pub bitrate: u32,
+    /// The sample rate sent, 0 for the stream's own.
+    #[serde(default = "Srt::default_rate")]
+    pub rate: u32,
+    /// The channels sent, 0 for the stream's own.
+    #[serde(default)]
+    pub channels: u32,
+    /// The link kept up with silence while the player pauses or stops.
+    #[serde(default = "default_true")]
+    pub keep_alive: bool,
+}
+
+impl Srt {
+    fn default_port() -> u16 {
+        9000
+    }
+    fn default_latency() -> u32 {
+        120
+    }
+    fn default_codec() -> Codec {
+        Codec::Aac
+    }
+    fn default_bitrate() -> u32 {
+        128
+    }
+    fn default_rate() -> u32 {
+        48000
+    }
+    /// What cannot run turned off.
+    pub fn tidy(&mut self) {
+        self.host = self.host.trim().to_string();
+        self.stream_id = self.stream_id.trim().to_string();
+        if self.enabled && self.host.is_empty() {
+            self.enabled = false;
+        }
+        if self.latency_ms == 0 {
+            self.latency_ms = Self::default_latency();
+        }
+    }
+}
+
+impl Default for Srt {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            host: String::new(),
+            port: Self::default_port(),
+            stream_id: String::new(),
+            passphrase: String::new(),
+            latency_ms: Self::default_latency(),
+            codec: Self::default_codec(),
+            bitrate: Self::default_bitrate(),
+            rate: Self::default_rate(),
+            channels: 0,
+            keep_alive: true,
+        }
+    }
 }
 
 /// What the status watches the programme for.
@@ -395,6 +485,7 @@ impl Uplinks {
         for i in std::iter::once(&mut self.icecast).chain(self.icecasts.iter_mut()) {
             i.tidy();
         }
+        self.srt.tidy();
         // The codec, the bitrate, the rate and the channels are the operator's,
         // whatever they are: the destination is the one to refuse them, and the
         // encoder's own refusal is shown as it comes.
@@ -431,6 +522,16 @@ mod tests {
             (-45.5, 0)
         );
         assert!(u.icecasts.is_empty() && u.slots().len() == 1);
+        assert!(!u.srt.enabled);
+        assert_eq!(
+            (u.srt.port, u.srt.latency_ms, u.srt.codec, u.srt.rate),
+            (9000, 120, Codec::Aac, 48000)
+        );
+        let mut s: Uplinks =
+            serde_json::from_str(r#"{"srt":{"enabled":true,"host":" ","latency_ms":0}}"#).unwrap();
+        s.tidy();
+        assert!(!s.srt.enabled && s.srt.latency_ms == 120);
+        assert!(Codec::Mp2.lossy() && Codec::Mp2.content_type() == "audio/mpeg");
     }
 
     #[test]

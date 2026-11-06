@@ -196,6 +196,39 @@
       ]
     },
     {
+      "id": "srt_section",
+      "element": "section",
+      "label": "TRANSLATE.OUTCAST.SRT_SECTION",
+      "icon": "fa-video-camera",
+      "description": "TRANSLATE.OUTCAST.SRT_SECTION_DESC",
+      "onSave": { "type": "controller", "endpoint": "audio_interface/outcast", "method": "updateSrt" },
+      "saveButton": {
+        "label": "TRANSLATE.OUTCAST.SAVE",
+        "data": ["srt_enabled", "srt_host", "srt_port", "srt_stream_id", "srt_passphrase", "srt_latency", "srt_preset", "srt_advanced", "srt_codec", "srt_bitrate", "srt_rate", "srt_channels", "srt_keep_alive"]
+      },
+      "content": [
+        { "id": "srt_enabled", "element": "switch", "label": "TRANSLATE.OUTCAST.SRT_ENABLE", "doc": "TRANSLATE.OUTCAST.SRT_ENABLE_DESC", "value": false },
+        { "id": "srt_host", "element": "input", "label": "TRANSLATE.OUTCAST.SRT_HOST", "doc": "TRANSLATE.OUTCAST.SRT_HOST_DESC", "value": "", "visibleIf": { "field": "srt_enabled", "value": true } },
+        { "id": "srt_port", "element": "input", "label": "TRANSLATE.OUTCAST.SRT_PORT", "doc": "TRANSLATE.OUTCAST.SRT_PORT_DESC", "value": "9000", "visibleIf": { "field": "srt_enabled", "value": true } },
+        { "id": "srt_stream_id", "element": "input", "label": "TRANSLATE.OUTCAST.SRT_STREAM_ID", "doc": "TRANSLATE.OUTCAST.SRT_STREAM_ID_DESC", "value": "", "visibleIf": { "field": "srt_enabled", "value": true } },
+        { "id": "srt_passphrase", "element": "input", "type": "password", "label": "TRANSLATE.OUTCAST.SRT_PASSPHRASE", "doc": "TRANSLATE.OUTCAST.SRT_PASSPHRASE_DESC", "value": "", "visibleIf": { "field": "srt_enabled", "value": true } },
+        { "id": "srt_latency", "element": "input", "label": "TRANSLATE.OUTCAST.SRT_LATENCY", "doc": "TRANSLATE.OUTCAST.SRT_LATENCY_DESC", "value": "120", "visibleIf": { "field": "srt_enabled", "value": true } },
+        { "id": "srt_preset", "element": "select", "label": "TRANSLATE.OUTCAST.PRESET", "doc": "TRANSLATE.OUTCAST.SRT_PRESET_DESC", "value": { "value": "aac-128-48000", "label": "AAC 128 kbit/s, 48 kHz" },
+          "options": [ { "value": "aac-128-48000", "label": "AAC 128 kbit/s, 48 kHz" }, { "value": "aac-192-48000", "label": "AAC 192 kbit/s, 48 kHz" }, { "value": "aac-256-48000", "label": "AAC 256 kbit/s, 48 kHz" }, { "value": "mp2-192-48000", "label": "MP2 192 kbit/s, 48 kHz" }, { "value": "mp2-256-48000", "label": "MP2 256 kbit/s, 48 kHz" }, { "value": "mp3-128-44100", "label": "MP3 128 kbit/s, 44.1 kHz" } ],
+          "visibleIf": { "field": "srt_enabled", "value": true } },
+        { "id": "srt_advanced", "element": "switch", "label": "TRANSLATE.OUTCAST.ADVANCED", "doc": "TRANSLATE.OUTCAST.ADVANCED_DESC", "value": false, "visibleIf": { "field": "srt_enabled", "value": true } },
+        { "id": "srt_codec", "element": "select", "label": "TRANSLATE.OUTCAST.CODEC", "doc": "TRANSLATE.OUTCAST.SRT_CODEC_DESC", "value": { "value": "aac", "label": "AAC" },
+          "options": [ { "value": "aac", "label": "AAC" }, { "value": "mp2", "label": "MP2" }, { "value": "mp3", "label": "MP3" }, { "value": "opus", "label": "Opus" } ],
+          "visibleIf": { "field": "srt_advanced", "value": true } },
+        { "id": "srt_bitrate", "element": "input", "label": "TRANSLATE.OUTCAST.BITRATE", "doc": "TRANSLATE.OUTCAST.BITRATE_DESC", "value": "128", "visibleIf": { "field": "srt_advanced", "value": true } },
+        { "id": "srt_rate", "element": "input", "label": "TRANSLATE.OUTCAST.RATE", "doc": "TRANSLATE.OUTCAST.RATE_DESC", "value": "48000", "visibleIf": { "field": "srt_advanced", "value": true } },
+        { "id": "srt_channels", "element": "select", "label": "TRANSLATE.OUTCAST.CHANNELS", "doc": "TRANSLATE.OUTCAST.CHANNELS_DESC", "value": { "value": "2", "label": "TRANSLATE.OUTCAST.CHANNELS_STEREO" },
+          "options": [ { "value": "2", "label": "TRANSLATE.OUTCAST.CHANNELS_STEREO" }, { "value": "1", "label": "TRANSLATE.OUTCAST.CHANNELS_MONO" }, { "value": "0", "label": "TRANSLATE.OUTCAST.RATE_SOURCE" } ],
+          "visibleIf": { "field": "srt_advanced", "value": true } },
+        { "id": "srt_keep_alive", "element": "switch", "label": "TRANSLATE.OUTCAST.KEEP_ALIVE", "doc": "TRANSLATE.OUTCAST.SRT_KEEP_ALIVE_DESC", "value": true, "visibleIf": { "field": "srt_enabled", "value": true } }
+      ]
+    },
+    {
       "id": "monitor_section",
       "element": "section",
       "label": "TRANSLATE.OUTCAST.MON_SECTION",

@@ -402,6 +402,13 @@ Outcast.prototype.getUIConfig = function () {
             setSelect(rec, 'rec_split', c.get('rec_split', 'track'));
             setValue(rec, 'rec_title_in_name', c.get('rec_title_in_name', true) !== false);
 
+            const srt = section('srt_section');
+            setValue(srt, 'srt_enabled', c.get('srt_enabled', false) === true);
+            ['srt_host', 'srt_port', 'srt_stream_id', 'srt_passphrase', 'srt_latency']
+                .forEach((k) => setValue(srt, k, String(c.get(k, ''))));
+            encoding(srt, 'srt');
+            setValue(srt, 'srt_keep_alive', c.get('srt_keep_alive', true) !== false);
+
             const mon = section('monitor_section');
             setValue(mon, 'mon_level', String(c.get('mon_level', '-60')));
             setValue(mon, 'mon_seconds', String(c.get('mon_seconds', '30')));
@@ -453,6 +460,10 @@ Outcast.prototype.updateLan = function (data) {
 
 Outcast.prototype.updateRecord = function (data) {
     return this.saveSection(data, h.validateRecord, h.applyRecord);
+};
+
+Outcast.prototype.updateSrt = function (data) {
+    return this.saveSection(data, h.validateSrt, h.applySrt);
 };
 
 Outcast.prototype.updateMonitor = function (data) {

@@ -15,6 +15,10 @@ tap = { git = "https://github.com/foonerd/glass", branch = "main" }
 # The segment, the feed and the conformer, shared with outcast-lite.
 stream = { path = "../../crates/stream" }
 libc = "0.2"
+# The SRT transport: the protocol's state machines, pure Rust, driven over UDP here.
+srt-protocol = "0.4.4"
+bytes = "1"
+rand = "0.8"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 

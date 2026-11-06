@@ -93,6 +93,10 @@ const PRESETS = {
     'mp3-320-44100': { codec: 'mp3', bitrate: 320, rate: 44100, channels: 2 },
     'aac-96-44100': { codec: 'aac', bitrate: 96, rate: 44100, channels: 2 },
     'aac-128-48000': { codec: 'aac', bitrate: 128, rate: 48000, channels: 2 },
+    'aac-192-48000': { codec: 'aac', bitrate: 192, rate: 48000, channels: 2 },
+    'aac-256-48000': { codec: 'aac', bitrate: 256, rate: 48000, channels: 2 },
+    'mp2-192-48000': { codec: 'mp2', bitrate: 192, rate: 48000, channels: 2 },
+    'mp2-256-48000': { codec: 'mp2', bitrate: 256, rate: 48000, channels: 2 },
     'opus-64-48000': { codec: 'opus', bitrate: 64, rate: 48000, channels: 2 },
     'opus-96-48000': { codec: 'opus', bitrate: 96, rate: 48000, channels: 2 },
     'vorbis-128-44100': { codec: 'vorbis', bitrate: 128, rate: 44100, channels: 2 },
@@ -100,7 +104,7 @@ const PRESETS = {
     'flac-0': { codec: 'flac', bitrate: 0, rate: 0, channels: 0 },
     'wav-0': { codec: 'wav', bitrate: 0, rate: 0, channels: 0 }
 };
-const DEFAULT_PRESET = { ice: 'mp3-128-44100', ice2: 'mp3-128-44100', ice3: 'mp3-128-44100', lan: 'mp3-128-44100', rec: 'flac-0' };
+const DEFAULT_PRESET = { ice: 'mp3-128-44100', ice2: 'mp3-128-44100', ice3: 'mp3-128-44100', lan: 'mp3-128-44100', rec: 'flac-0', srt: 'aac-128-48000' };
 
 function checkWhole(v, field, t) {
     const s = String(v === undefined || v === null ? '' : v).trim();
@@ -177,6 +181,31 @@ function validateLan(data, t) {
 function checkSigned(v, field, t) {
     const s = String(v === undefined || v === null ? '' : v).trim();
     return /^-?\d+(\.\d+)?$/.test(s) ? null : t('ERR_NUMBER', { field: t(field) });
+}
+
+function validateSrt(data, t) {
+    if (data.srt_enabled !== true) return null;
+    return (!String(data.srt_host || '').trim() ? t('ERR_HOST') : null) ||
+        checkPort(data.srt_port, 'SRT_PORT', t) ||
+        checkText(data.srt_stream_id, 'SRT_STREAM_ID', t) ||
+        checkText(data.srt_passphrase, 'SRT_PASSPHRASE', t) ||
+        (String(data.srt_passphrase || '').length > 0 && String(data.srt_passphrase).length < 10 ? t('ERR_PASSPHRASE') : null) ||
+        checkWhole(data.srt_latency, 'SRT_LATENCY', t) ||
+        validateEncoding(data, 'srt', t) ||
+        null;
+}
+
+function applySrt(data, set) {
+    const on = data.srt_enabled === true;
+    set('srt_enabled', on);
+    if (!on) return;
+    set('srt_host', String(data.srt_host).trim());
+    set('srt_port', String(data.srt_port).trim());
+    set('srt_stream_id', String(data.srt_stream_id || '').trim());
+    set('srt_passphrase', String(data.srt_passphrase || ''));
+    set('srt_latency', String(data.srt_latency).trim());
+    applyEncoding(data, 'srt', set);
+    set('srt_keep_alive', data.srt_keep_alive !== false);
 }
 
 function validateMonitor(data, t) {
@@ -295,6 +324,16 @@ function uplinksFrom(get) {
             split: str('rec_split', 'track'),
             title_in_name: get('rec_title_in_name', true) !== false
         },
+        srt: {
+            enabled: bool('srt_enabled'),
+            host: str('srt_host', ''),
+            port: num(get('srt_port', '9000'), 9000),
+            stream_id: str('srt_stream_id', ''),
+            passphrase: str('srt_passphrase', ''),
+            latency_ms: num(get('srt_latency', '120'), 120),
+            ...encodingFrom(get, 'srt'),
+            keep_alive: get('srt_keep_alive', true) !== false
+        },
         monitor: {
             dead_air_level: Number.isFinite(parseFloat(get('mon_level', '-60'))) ? parseFloat(get('mon_level', '-60')) : -60,
             dead_air_seconds: num(get('mon_seconds', '30'), 30)
@@ -328,7 +367,7 @@ function summarize(status, audioPath, audioPathError, t) {
     if (audioPath === 'ready') lines.push(t('STATUS_TAP_READY'));
     else if (audioPath === 'lost') lines.push(t('STATUS_TAP_LOST'));
     else lines.push(t('STATUS_TAP_FAILED', { error: audioPathError || '' }));
-    const names = { icecast: 'UPLINK_ICECAST', lan: 'UPLINK_LAN', record: 'UPLINK_RECORD' };
+    const names = { icecast: 'UPLINK_ICECAST', lan: 'UPLINK_LAN', record: 'UPLINK_RECORD', srt: 'UPLINK_SRT' };
     if (!status || !Array.isArray(status.uplinks) || status.uplinks.length === 0) {
         lines.push(t('STATUS_NO_UPLINKS'));
     } else {
@@ -337,6 +376,7 @@ function summarize(status, audioPath, audioPathError, t) {
             const name = (names[u.kind] ? t(names[u.kind]) : u.id) + (slot ? ' ' + slot[1] : '');
             let detail = u.detail || '';
             if (u.kind === 'lan') detail += ', ' + u.listeners + ' listening';
+            if (u.kind === 'srt' && u.state === 'connected') detail += ', ' + t('STATUS_SRT_LINK', { rtt: u.rtt_ms, lost: u.lost_packets });
             if (u.silence) detail += ', silence';
             if (u.kind === 'record' && u.files) detail += ', ' + u.files + ' files';
             if (u.title) detail += ', ' + u.title;
@@ -352,6 +392,6 @@ function summarize(status, audioPath, audioPathError, t) {
 
 module.exports = {
     screenTitle, checkConfig, chainHasTap, fill, sel, PRESETS, DEFAULT_PRESET, ICE_SLOTS,
-    validateIcecast, validateLan, validateRecord, validateMonitor,
-    applyIcecast, applyLan, applyRecord, applyMonitor, uplinksFrom, summarize
+    validateIcecast, validateLan, validateRecord, validateMonitor, validateSrt,
+    applyIcecast, applyLan, applyRecord, applyMonitor, applySrt, uplinksFrom, summarize
 };

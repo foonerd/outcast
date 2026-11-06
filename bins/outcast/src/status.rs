@@ -97,6 +97,10 @@ pub struct Uplink {
     pub title: String,
     /// The stream is silence of the uplink's making: the player stands still.
     pub silence: bool,
+    /// An SRT link's round trip, in milliseconds.
+    pub rtt_ms: u32,
+    /// Packets an SRT link lost on the way, as the peer reported them.
+    pub lost_packets: u64,
 }
 
 pub fn now() -> u64 {
