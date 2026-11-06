@@ -2,6 +2,12 @@
 
 All notable changes to Outcast Uplink. The format follows Keep a Changelog; the versions follow Semantic Versioning.
 
+## [0.1.7] - 2026-11-06
+
+### Added
+
+- Three Icecast or SHOUTcast destinations at once: the page has Icecast 2 and Icecast 3 beside the first, each with its own settings, encoder, connection and status; one failing never stops another. The core takes any number.
+
 ## [0.1.6] - 2026-11-04
 
 ### Added
