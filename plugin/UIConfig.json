@@ -21,9 +21,9 @@
         { "id": "ice_protocol", "element": "select", "label": "TRANSLATE.OUTCAST.ICE_PROTOCOL", "doc": "TRANSLATE.OUTCAST.ICE_PROTOCOL_DESC", "value": { "value": "icecast2", "label": "Icecast 2" },
           "options": [ { "value": "icecast2", "label": "Icecast 2" }, { "value": "shoutcast1", "label": "SHOUTcast" } ],
           "visibleIf": { "field": "ice_enabled", "value": true } },
-        { "id": "ice_mount", "element": "input", "label": "TRANSLATE.OUTCAST.ICE_MOUNT", "doc": "TRANSLATE.OUTCAST.ICE_MOUNT_DESC", "value": "/volumio.mp3", "visibleIf": { "field": "ice_protocol", "value": "icecast2" } },
-        { "id": "ice_stream_id", "element": "input", "label": "TRANSLATE.OUTCAST.ICE_STREAM_ID", "doc": "TRANSLATE.OUTCAST.ICE_STREAM_ID_DESC", "value": "1", "visibleIf": { "field": "ice_protocol", "value": "shoutcast1" } },
-        { "id": "ice_user", "element": "input", "label": "TRANSLATE.OUTCAST.ICE_USER", "doc": "TRANSLATE.OUTCAST.ICE_USER_DESC", "value": "source", "visibleIf": { "field": "ice_protocol", "value": "icecast2" } },
+        { "id": "ice_mount", "element": "input", "label": "TRANSLATE.OUTCAST.ICE_MOUNT", "doc": "TRANSLATE.OUTCAST.ICE_MOUNT_DESC", "value": "/volumio.mp3", "visibleIf": { "field": "ice_enabled", "value": true } },
+        { "id": "ice_stream_id", "element": "input", "label": "TRANSLATE.OUTCAST.ICE_STREAM_ID", "doc": "TRANSLATE.OUTCAST.ICE_STREAM_ID_DESC", "value": "1", "visibleIf": { "field": "ice_enabled", "value": true } },
+        { "id": "ice_user", "element": "input", "label": "TRANSLATE.OUTCAST.ICE_USER", "doc": "TRANSLATE.OUTCAST.ICE_USER_DESC", "value": "source", "visibleIf": { "field": "ice_enabled", "value": true } },
         { "id": "ice_password", "element": "input", "type": "password", "label": "TRANSLATE.OUTCAST.ICE_PASSWORD", "doc": "TRANSLATE.OUTCAST.ICE_PASSWORD_DESC", "value": "", "visibleIf": { "field": "ice_enabled", "value": true } },
         { "id": "ice_preset", "element": "select", "label": "TRANSLATE.OUTCAST.PRESET", "doc": "TRANSLATE.OUTCAST.ICE_PRESET_DESC", "value": { "value": "mp3-128-44100", "label": "MP3 128 kbit/s, 44.1 kHz" },
           "options": [ { "value": "mp3-128-44100", "label": "MP3 128 kbit/s, 44.1 kHz" }, { "value": "mp3-192-44100", "label": "MP3 192 kbit/s, 44.1 kHz" }, { "value": "mp3-320-44100", "label": "MP3 320 kbit/s, 44.1 kHz" }, { "value": "aac-96-44100", "label": "AAC 96 kbit/s, 44.1 kHz" }, { "value": "aac-128-48000", "label": "AAC 128 kbit/s, 48 kHz" }, { "value": "opus-64-48000", "label": "Opus 64 kbit/s, 48 kHz" }, { "value": "opus-96-48000", "label": "Opus 96 kbit/s, 48 kHz" }, { "value": "vorbis-128-44100", "label": "Ogg Vorbis 128 kbit/s, 44.1 kHz" }, { "value": "flac-48000", "label": "FLAC, 48 kHz" } ],
@@ -64,9 +64,9 @@
         { "id": "ice2_protocol", "element": "select", "label": "TRANSLATE.OUTCAST.ICE_PROTOCOL", "doc": "TRANSLATE.OUTCAST.ICE_PROTOCOL_DESC", "value": { "value": "icecast2", "label": "Icecast 2" },
           "options": [ { "value": "icecast2", "label": "Icecast 2" }, { "value": "shoutcast1", "label": "SHOUTcast" } ],
           "visibleIf": { "field": "ice2_enabled", "value": true } },
-        { "id": "ice2_mount", "element": "input", "label": "TRANSLATE.OUTCAST.ICE_MOUNT", "doc": "TRANSLATE.OUTCAST.ICE_MOUNT_DESC", "value": "/volumio.mp3", "visibleIf": { "field": "ice2_protocol", "value": "icecast2" } },
-        { "id": "ice2_stream_id", "element": "input", "label": "TRANSLATE.OUTCAST.ICE_STREAM_ID", "doc": "TRANSLATE.OUTCAST.ICE_STREAM_ID_DESC", "value": "1", "visibleIf": { "field": "ice2_protocol", "value": "shoutcast1" } },
-        { "id": "ice2_user", "element": "input", "label": "TRANSLATE.OUTCAST.ICE_USER", "doc": "TRANSLATE.OUTCAST.ICE_USER_DESC", "value": "source", "visibleIf": { "field": "ice2_protocol", "value": "icecast2" } },
+        { "id": "ice2_mount", "element": "input", "label": "TRANSLATE.OUTCAST.ICE_MOUNT", "doc": "TRANSLATE.OUTCAST.ICE_MOUNT_DESC", "value": "/volumio.mp3", "visibleIf": { "field": "ice2_enabled", "value": true } },
+        { "id": "ice2_stream_id", "element": "input", "label": "TRANSLATE.OUTCAST.ICE_STREAM_ID", "doc": "TRANSLATE.OUTCAST.ICE_STREAM_ID_DESC", "value": "1", "visibleIf": { "field": "ice2_enabled", "value": true } },
+        { "id": "ice2_user", "element": "input", "label": "TRANSLATE.OUTCAST.ICE_USER", "doc": "TRANSLATE.OUTCAST.ICE_USER_DESC", "value": "source", "visibleIf": { "field": "ice2_enabled", "value": true } },
         { "id": "ice2_password", "element": "input", "type": "password", "label": "TRANSLATE.OUTCAST.ICE_PASSWORD", "doc": "TRANSLATE.OUTCAST.ICE_PASSWORD_DESC", "value": "", "visibleIf": { "field": "ice2_enabled", "value": true } },
         { "id": "ice2_preset", "element": "select", "label": "TRANSLATE.OUTCAST.PRESET", "doc": "TRANSLATE.OUTCAST.ICE_PRESET_DESC", "value": { "value": "mp3-128-44100", "label": "MP3 128 kbit/s, 44.1 kHz" },
           "options": [ { "value": "mp3-128-44100", "label": "MP3 128 kbit/s, 44.1 kHz" }, { "value": "mp3-192-44100", "label": "MP3 192 kbit/s, 44.1 kHz" }, { "value": "mp3-320-44100", "label": "MP3 320 kbit/s, 44.1 kHz" }, { "value": "aac-96-44100", "label": "AAC 96 kbit/s, 44.1 kHz" }, { "value": "aac-128-48000", "label": "AAC 128 kbit/s, 48 kHz" }, { "value": "opus-64-48000", "label": "Opus 64 kbit/s, 48 kHz" }, { "value": "opus-96-48000", "label": "Opus 96 kbit/s, 48 kHz" }, { "value": "vorbis-128-44100", "label": "Ogg Vorbis 128 kbit/s, 44.1 kHz" }, { "value": "flac-48000", "label": "FLAC, 48 kHz" } ],
@@ -107,9 +107,9 @@
         { "id": "ice3_protocol", "element": "select", "label": "TRANSLATE.OUTCAST.ICE_PROTOCOL", "doc": "TRANSLATE.OUTCAST.ICE_PROTOCOL_DESC", "value": { "value": "icecast2", "label": "Icecast 2" },
           "options": [ { "value": "icecast2", "label": "Icecast 2" }, { "value": "shoutcast1", "label": "SHOUTcast" } ],
           "visibleIf": { "field": "ice3_enabled", "value": true } },
-        { "id": "ice3_mount", "element": "input", "label": "TRANSLATE.OUTCAST.ICE_MOUNT", "doc": "TRANSLATE.OUTCAST.ICE_MOUNT_DESC", "value": "/volumio.mp3", "visibleIf": { "field": "ice3_protocol", "value": "icecast2" } },
-        { "id": "ice3_stream_id", "element": "input", "label": "TRANSLATE.OUTCAST.ICE_STREAM_ID", "doc": "TRANSLATE.OUTCAST.ICE_STREAM_ID_DESC", "value": "1", "visibleIf": { "field": "ice3_protocol", "value": "shoutcast1" } },
-        { "id": "ice3_user", "element": "input", "label": "TRANSLATE.OUTCAST.ICE_USER", "doc": "TRANSLATE.OUTCAST.ICE_USER_DESC", "value": "source", "visibleIf": { "field": "ice3_protocol", "value": "icecast2" } },
+        { "id": "ice3_mount", "element": "input", "label": "TRANSLATE.OUTCAST.ICE_MOUNT", "doc": "TRANSLATE.OUTCAST.ICE_MOUNT_DESC", "value": "/volumio.mp3", "visibleIf": { "field": "ice3_enabled", "value": true } },
+        { "id": "ice3_stream_id", "element": "input", "label": "TRANSLATE.OUTCAST.ICE_STREAM_ID", "doc": "TRANSLATE.OUTCAST.ICE_STREAM_ID_DESC", "value": "1", "visibleIf": { "field": "ice3_enabled", "value": true } },
+        { "id": "ice3_user", "element": "input", "label": "TRANSLATE.OUTCAST.ICE_USER", "doc": "TRANSLATE.OUTCAST.ICE_USER_DESC", "value": "source", "visibleIf": { "field": "ice3_enabled", "value": true } },
         { "id": "ice3_password", "element": "input", "type": "password", "label": "TRANSLATE.OUTCAST.ICE_PASSWORD", "doc": "TRANSLATE.OUTCAST.ICE_PASSWORD_DESC", "value": "", "visibleIf": { "field": "ice3_enabled", "value": true } },
         { "id": "ice3_preset", "element": "select", "label": "TRANSLATE.OUTCAST.PRESET", "doc": "TRANSLATE.OUTCAST.ICE_PRESET_DESC", "value": { "value": "mp3-128-44100", "label": "MP3 128 kbit/s, 44.1 kHz" },
           "options": [ { "value": "mp3-128-44100", "label": "MP3 128 kbit/s, 44.1 kHz" }, { "value": "mp3-192-44100", "label": "MP3 192 kbit/s, 44.1 kHz" }, { "value": "mp3-320-44100", "label": "MP3 320 kbit/s, 44.1 kHz" }, { "value": "aac-96-44100", "label": "AAC 96 kbit/s, 44.1 kHz" }, { "value": "aac-128-48000", "label": "AAC 128 kbit/s, 48 kHz" }, { "value": "opus-64-48000", "label": "Opus 64 kbit/s, 48 kHz" }, { "value": "opus-96-48000", "label": "Opus 96 kbit/s, 48 kHz" }, { "value": "vorbis-128-44100", "label": "Ogg Vorbis 128 kbit/s, 44.1 kHz" }, { "value": "flac-48000", "label": "FLAC, 48 kHz" } ],
@@ -237,11 +237,12 @@
       "onSave": { "type": "controller", "endpoint": "audio_interface/outcast", "method": "updateMonitor" },
       "saveButton": {
         "label": "TRANSLATE.OUTCAST.SAVE",
-        "data": ["mon_level", "mon_seconds"]
+        "data": ["mon_enabled", "mon_level", "mon_seconds"]
       },
       "content": [
-        { "id": "mon_level", "element": "input", "label": "TRANSLATE.OUTCAST.MON_LEVEL", "doc": "TRANSLATE.OUTCAST.MON_LEVEL_DESC", "value": "-60" },
-        { "id": "mon_seconds", "element": "input", "label": "TRANSLATE.OUTCAST.MON_SECONDS", "doc": "TRANSLATE.OUTCAST.MON_SECONDS_DESC", "value": "30" }
+        { "id": "mon_enabled", "element": "switch", "label": "TRANSLATE.OUTCAST.MON_ENABLE", "doc": "TRANSLATE.OUTCAST.MON_ENABLE_DESC", "value": true },
+        { "id": "mon_level", "element": "input", "label": "TRANSLATE.OUTCAST.MON_LEVEL", "doc": "TRANSLATE.OUTCAST.MON_LEVEL_DESC", "value": "-60", "visibleIf": { "field": "mon_enabled", "value": true } },
+        { "id": "mon_seconds", "element": "input", "label": "TRANSLATE.OUTCAST.MON_SECONDS", "doc": "TRANSLATE.OUTCAST.MON_SECONDS_DESC", "value": "30", "visibleIf": { "field": "mon_enabled", "value": true } }
       ]
     },
     {

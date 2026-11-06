@@ -209,12 +209,15 @@ function applySrt(data, set) {
 }
 
 function validateMonitor(data, t) {
+    if (data.mon_enabled === false) return null;
     return checkSigned(data.mon_level, 'MON_LEVEL', t) ||
         checkWhole(data.mon_seconds, 'MON_SECONDS', t) ||
         null;
 }
 
 function applyMonitor(data, set) {
+    set('mon_enabled', data.mon_enabled !== false);
+    if (data.mon_enabled === false) return;
     set('mon_level', String(data.mon_level).trim());
     set('mon_seconds', String(data.mon_seconds).trim());
 }
@@ -336,9 +339,25 @@ function uplinksFrom(get) {
         },
         monitor: {
             dead_air_level: Number.isFinite(parseFloat(get('mon_level', '-60'))) ? parseFloat(get('mon_level', '-60')) : -60,
-            dead_air_seconds: num(get('mon_seconds', '30'), 30)
+            dead_air_seconds: get('mon_enabled', true) === false ? 0 : num(get('mon_seconds', '30'), 30)
         }
     };
+}
+
+// A section switched off shows its switch and nothing else. The page shows a field
+// when one other field has one value, so a field behind the section's own nested
+// switch (Advanced, More settings) would still show while the section is off and the
+// nested switch on; those are marked hidden for the page as it is built.
+function hideWhenOff(content, prefix, get) {
+    if (get(prefix + '_enabled', false) === true) return;
+    const nested = { advanced: ['codec', 'bitrate', 'rate', 'channels'], more: ['description', 'genre', 'url', 'public'] };
+    Object.keys(nested).forEach((toggle) => {
+        if (get(prefix + '_' + toggle, false) !== true) return;
+        nested[toggle].forEach((k) => {
+            const item = content.find((c) => c.id === prefix + '_' + k);
+            if (item) item.hidden = true;
+        });
+    });
 }
 
 // -------------------------------------------------------------------- the status
@@ -393,5 +412,5 @@ function summarize(status, audioPath, audioPathError, t) {
 module.exports = {
     screenTitle, checkConfig, chainHasTap, fill, sel, PRESETS, DEFAULT_PRESET, ICE_SLOTS,
     validateIcecast, validateLan, validateRecord, validateMonitor, validateSrt,
-    applyIcecast, applyLan, applyRecord, applyMonitor, applySrt, uplinksFrom, summarize
+    applyIcecast, applyLan, applyRecord, applyMonitor, applySrt, uplinksFrom, summarize, hideWhenOff
 };

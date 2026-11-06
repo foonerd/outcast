@@ -208,6 +208,22 @@ test('the dead-air watch takes a level and a time, and the file carries them', (
     h.applyMonitor({ mon_level: ' -50 ', mon_seconds: ' 12 ' }, (k, v) => { kept[k] = v; });
     assert.deepEqual(h.uplinksFrom((k, d) => (k in kept ? kept[k] : d)).monitor, { dead_air_level: -50, dead_air_seconds: 12 });
     assert.deepEqual(h.uplinksFrom((k, d) => d).monitor, { dead_air_level: -60, dead_air_seconds: 30 });
+    // Switched off: nothing checked, nothing kept but the switch, no dead air for the core.
+    assert.equal(h.validateMonitor({ mon_enabled: false, mon_level: 'x' }, t), null);
+    const off = {};
+    h.applyMonitor({ mon_enabled: false, mon_level: '-10' }, (k, v) => { off[k] = v; });
+    assert.deepEqual(off, { mon_enabled: false });
+    assert.equal(h.uplinksFrom((k, d) => (k in off ? off[k] : d)).monitor.dead_air_seconds, 0);
+});
+
+test('a section switched off shows its switch alone, whatever its nested switches say', () => {
+    const content = ['enabled', 'advanced', 'codec', 'bitrate', 'more', 'genre', 'name'].map((k) => ({ id: 'ice_' + k }));
+    const cfg = { ice_enabled: false, ice_advanced: true, ice_more: true };
+    h.hideWhenOff(content, 'ice', (k, d) => (k in cfg ? cfg[k] : d));
+    assert.deepEqual(content.filter((c) => c.hidden).map((c) => c.id), ['ice_codec', 'ice_bitrate', 'ice_genre']);
+    const on = ['enabled', 'advanced', 'codec'].map((k) => ({ id: 'lan_' + k }));
+    h.hideWhenOff(on, 'lan', (k, d) => ({ lan_enabled: true, lan_advanced: true }[k] ?? d));
+    assert.equal(on.some((c) => c.hidden), false);
 });
 
 test('the status summary says the level and dead air', () => {

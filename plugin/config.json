@@ -98,6 +98,7 @@
   "srt_rate": { "type": "string", "value": "48000" },
   "srt_channels": { "type": "string", "value": "2" },
   "srt_keep_alive": { "type": "boolean", "value": true },
+  "mon_enabled": { "type": "boolean", "value": true },
   "mon_level": { "type": "string", "value": "-60" },
   "mon_seconds": { "type": "string", "value": "30" }
 }

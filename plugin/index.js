@@ -385,6 +385,7 @@ Outcast.prototype.getUIConfig = function () {
                 setValue(ice, p + '_more', c.get(p + '_more', false) === true);
                 setValue(ice, p + '_public', c.get(p + '_public', false) === true);
                 setValue(ice, p + '_keep_alive', c.get(p + '_keep_alive', true) !== false);
+                h.hideWhenOff(ice, p, (k, d) => c.get(k, d));
             });
 
             const lan = section('lan_section');
@@ -394,6 +395,7 @@ Outcast.prototype.getUIConfig = function () {
             setValue(lan, 'lan_name', String(c.get('lan_name', 'Volumio')));
             setValue(lan, 'lan_max_listeners', String(c.get('lan_max_listeners', '5')));
             setValue(lan, 'lan_keep_alive', c.get('lan_keep_alive', true) !== false);
+            h.hideWhenOff(lan, 'lan', (k, d) => c.get(k, d));
 
             const rec = section('record_section');
             setValue(rec, 'rec_enabled', c.get('rec_enabled', false) === true);
@@ -401,6 +403,7 @@ Outcast.prototype.getUIConfig = function () {
             encoding(rec, 'rec');
             setSelect(rec, 'rec_split', c.get('rec_split', 'track'));
             setValue(rec, 'rec_title_in_name', c.get('rec_title_in_name', true) !== false);
+            h.hideWhenOff(rec, 'rec', (k, d) => c.get(k, d));
 
             const srt = section('srt_section');
             setValue(srt, 'srt_enabled', c.get('srt_enabled', false) === true);
@@ -408,8 +411,10 @@ Outcast.prototype.getUIConfig = function () {
                 .forEach((k) => setValue(srt, k, String(c.get(k, ''))));
             encoding(srt, 'srt');
             setValue(srt, 'srt_keep_alive', c.get('srt_keep_alive', true) !== false);
+            h.hideWhenOff(srt, 'srt', (k, d) => c.get(k, d));
 
             const mon = section('monitor_section');
+            setValue(mon, 'mon_enabled', c.get('mon_enabled', true) !== false);
             setValue(mon, 'mon_level', String(c.get('mon_level', '-60')));
             setValue(mon, 'mon_seconds', String(c.get('mon_seconds', '30')));
             defer.resolve(uiconf);
