@@ -149,6 +149,17 @@ impl Hub {
             listed.push(ctx.entry(&format!("{scheme}://{}:{}", cfg.host, cfg.port)));
             (cfg, ctx)
         });
+        let hls = uplinks.hls.enabled.then(|| {
+            let cfg = uplinks.hls.clone();
+            let ctx = self.ctx("hls", "hls");
+            let detail = match (cfg.port, cfg.origin) {
+                (0, _) => cfg.origin_url.clone(),
+                (p, crate::config::OriginKind::None) => format!("port {p}"),
+                (p, _) => format!("port {p}, {}", cfg.origin_url),
+            };
+            listed.push(ctx.entry(&detail));
+            (cfg, ctx)
+        });
         {
             let mut s = self.status.lock().unwrap_or_else(|e| e.into_inner());
             s.uplinks = listed;
@@ -177,6 +188,9 @@ impl Hub {
         }
         if let Some((cfg, ctx)) = ts {
             self.start("ts", move |ctl, pcm| uplink::ts::run(cfg, ctx, ctl, pcm));
+        }
+        if let Some((cfg, ctx)) = hls {
+            self.start("hls", move |ctl, pcm| uplink::hls::run(cfg, ctx, ctl, pcm));
         }
         if !self.title.is_empty() {
             self.broadcast(Event::Title(self.title.clone()));

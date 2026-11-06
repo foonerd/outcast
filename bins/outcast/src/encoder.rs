@@ -44,6 +44,9 @@ pub enum Container {
     MpegTs,
     /// FLV, for RTMP: AAC or MP3.
     Flv,
+    /// Bare frames for a segmenter: ADTS for AAC, MP3 frames without an ID3 tag
+    /// or a Xing frame.
+    Frames,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -97,9 +100,17 @@ pub fn arguments(segment: &Segment, recipe: &Recipe) -> Vec<String> {
         a.push("-metadata".into());
         a.push(format!("title={}", recipe.title));
     }
+    if recipe.container == Container::Frames && recipe.codec == Codec::Mp3 {
+        // Bare frames: no ID3 tag at the head, no Xing frame, so a cut on a frame
+        // boundary is a cut on a frame boundary.
+        a.push("-id3v2_version".into());
+        a.push("0".into());
+        a.push("-write_xing".into());
+        a.push("0".into());
+    }
     a.push("-f".into());
     a.push(match recipe.container {
-        Container::Native => muxer.into(),
+        Container::Native | Container::Frames => muxer.into(),
         Container::MpegTs => "mpegts".into(),
         Container::Flv => "flv".into(),
     });
@@ -276,6 +287,40 @@ mod tests {
         );
         let s = a.join(" ");
         assert!(s.starts_with("-hide_banner -loglevel error -nostdin -f s32le -ar 96000 -ac 2 -i pipe:0 -ar 44100 -c:a libmp3lame -b:a 192k -metadata title=Artist - Title -f mp3 pipe:1"), "{s}");
+    }
+
+    #[test]
+    fn bare_mp3_frames_carry_no_tag_and_no_xing() {
+        let seg = segment();
+        let a = arguments(
+            &seg,
+            &Recipe {
+                codec: Codec::Mp3,
+                bitrate: 128,
+                rate: 44100,
+                title: String::new(),
+                output: Output::Pipe,
+                container: Container::Frames,
+            },
+        );
+        let s = a.join(" ");
+        assert!(
+            s.contains("-id3v2_version 0 -write_xing 0 -f mp3 pipe:1"),
+            "{s}"
+        );
+        let a = arguments(
+            &seg,
+            &Recipe {
+                codec: Codec::Aac,
+                bitrate: 128,
+                rate: 48000,
+                title: String::new(),
+                output: Output::Pipe,
+                container: Container::Frames,
+            },
+        );
+        let s = a.join(" ");
+        assert!(s.ends_with("-f adts pipe:1") && !s.contains("xing"), "{s}");
     }
 
     #[test]

@@ -9,7 +9,6 @@
 
 use std::io::{self, Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
-use std::path::Path;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
@@ -22,14 +21,12 @@ use rml_rtmp::sessions::{
     PublishRequestType, StreamMetadata,
 };
 use rml_rtmp::time::RtmpTimestamp;
-use rustls::pki_types::pem::PemObject;
-use rustls::pki_types::{CertificateDer, ServerName};
-use rustls::{ClientConfig, ClientConnection, RootCertStore, StreamOwned};
 use stream::conform::Conformer;
 use stream::feed::{Event, Segment};
 
 use crate::config::{Codec, Rtmp};
 use crate::encoder::{Container, Encoder, Output, Recipe};
+use crate::uplink::tls::{wrap_tls, Wire};
 use crate::uplink::{
     self, fix_send_buffer, unsent, Ctx, Next, Silence, GRACE, STALL_THRESHOLD, STILL,
 };
@@ -106,88 +103,6 @@ pub fn parse_url(url: &str) -> Result<Target, String> {
         app,
         tls: scheme == "rtmps",
     })
-}
-
-/// The wire: the socket bare, or inside TLS.
-enum Wire {
-    Plain(TcpStream),
-    Tls(Box<StreamOwned<ClientConnection, TcpStream>>),
-}
-
-impl Wire {
-    fn socket(&self) -> &TcpStream {
-        match self {
-            Wire::Plain(s) => s,
-            Wire::Tls(t) => t.get_ref(),
-        }
-    }
-}
-
-impl Read for Wire {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        match self {
-            Wire::Plain(s) => s.read(buf),
-            Wire::Tls(t) => t.read(buf),
-        }
-    }
-}
-
-impl Write for Wire {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        match self {
-            Wire::Plain(s) => s.write(buf),
-            Wire::Tls(t) => t.write(buf),
-        }
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        match self {
-            Wire::Plain(s) => s.flush(),
-            Wire::Tls(t) => t.flush(),
-        }
-    }
-}
-
-/// The roots a server's certificate may chain to: the public ones (Mozilla's, as
-/// carried by webpki-roots), and those of the operator's PEM file when one is named.
-fn roots(ca_file: &str) -> Result<RootCertStore, String> {
-    let mut roots = RootCertStore::empty();
-    roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
-    if !ca_file.trim().is_empty() {
-        let path = Path::new(ca_file.trim());
-        let mut added = 0;
-        for cert in
-            CertificateDer::pem_file_iter(path).map_err(|e| format!("{}: {e}", path.display()))?
-        {
-            let cert = cert.map_err(|e| format!("{}: {e}", path.display()))?;
-            roots
-                .add(cert)
-                .map_err(|e| format!("{}: {e}", path.display()))?;
-            added += 1;
-        }
-        if added == 0 {
-            return Err(format!("{}: no certificate in it", path.display()));
-        }
-    }
-    Ok(roots)
-}
-
-/// The socket wrapped in TLS and the handshake done, the server's certificate
-/// checked against the roots and the host name.
-fn wrap_tls(sock: TcpStream, host: &str, ca_file: &str) -> Result<Wire, String> {
-    let config = ClientConfig::builder()
-        .with_root_certificates(roots(ca_file)?)
-        .with_no_client_auth();
-    let name = ServerName::try_from(host.to_string())
-        .map_err(|_| format!("{host}: not a name TLS takes"))?;
-    let conn = ClientConnection::new(Arc::new(config), name).map_err(|e| format!("tls: {e}"))?;
-    let mut tls = StreamOwned::new(conn, sock);
-    while tls.conn.is_handshaking() {
-        tls.conn
-            .complete_io(&mut tls.sock)
-            .map_err(|e| format!("tls handshake with {host}: {e}"))?;
-    }
-    Ok(Wire::Tls(Box::new(tls)))
 }
 
 /// One FLV tag's audio payload and its timestamp.
@@ -961,20 +876,6 @@ mod tests {
         assert!(parse_url("rtmp://host:abc/live")
             .unwrap_err()
             .contains("port"));
-    }
-
-    #[test]
-    fn the_roots_are_the_public_ones_and_the_operators_file() {
-        assert!(roots("").unwrap().len() > 100, "the public roots");
-        assert!(roots("/nonexistent/ca.pem").unwrap_err().contains("ca.pem"));
-        let dir = std::env::temp_dir().join(format!("outcast-roots-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let empty = dir.join("empty.pem");
-        std::fs::write(&empty, "nothing here\n").unwrap();
-        assert!(roots(empty.to_str().unwrap())
-            .unwrap_err()
-            .contains("no certificate"));
-        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

@@ -235,6 +235,31 @@ test('the transport-stream uplink goes over TCP unless told UDP', () => {
     assert.equal(h.uplinksFrom((k, d) => d).ts.transport, 'tcp');
 });
 
+test('the HLS uplink serves on a port, goes to an origin, or both, never nowhere', () => {
+    const good = { hls_enabled: true, hls_name: 'live', hls_serve: true, hls_port: '8001', hls_origin: { value: 'none' } };
+    assert.equal(h.validateHls(good, t), null);
+    assert.equal(h.validateHls({ hls_enabled: false }, t), null);
+    assert.equal(h.validateHls({ ...good, hls_serve: false }, t), 'ERR_HLS_NOWHERE');
+    assert.equal(h.validateHls({ ...good, hls_port: 'x' }, t), 'ERR_PORT {"field":"HLS_PORT"}');
+    assert.equal(h.validateHls({ ...good, hls_origin: { value: 'http' }, hls_origin_url: 'ftp://x/y' }, t), 'ERR_HLS_ORIGIN_URL');
+    assert.equal(h.validateHls({ ...good, hls_serve: false, hls_origin: { value: 'http' }, hls_origin_url: 'https://o.example.com/radio/' }, t), null);
+    assert.equal(h.validateHls({ ...good, hls_advanced: true, hls_codec: { value: 'aac' }, hls_bitrate: '128', hls_rate: '48000', hls_segment_seconds: '0', hls_window: '6' }, t), 'ERR_RANGE {"field":"HLS_SEGMENT","min":1,"max":30}');
+    const kept = {};
+    h.applyHls({ ...good, hls_name: ' my station ', hls_origin: { value: 'http' }, hls_origin_url: ' http://o.example.com/radio ', hls_origin_user: 'ingest', hls_origin_password: 'pw' }, (k, v) => { kept[k] = v; });
+    let u = h.uplinksFrom((k, d) => (k in kept ? kept[k] : d)).hls;
+    assert.deepEqual(u, { enabled: true, name: 'my station', codec: 'aac', bitrate: 128, rate: 48000, channels: 2, segment_seconds: 4, window: 6, port: 8001, keep_alive: true, origin: 'http', origin_url: 'http://o.example.com/radio', origin_user: 'ingest', origin_password: 'pw', ca_file: '' });
+    // Not served on the player: the port is 0 for the core; the segment length and the
+    // window are Advanced settings.
+    h.applyHls({ ...good, hls_serve: false, hls_origin: { value: 'http' }, hls_origin_url: 'https://o.example.com/', hls_advanced: true, hls_codec: { value: 'mp3' }, hls_bitrate: '192', hls_rate: '44100', hls_channels: { value: '2' }, hls_segment_seconds: '6', hls_window: '10' }, (k, v) => { kept[k] = v; });
+    u = h.uplinksFrom((k, d) => (k in kept ? kept[k] : d)).hls;
+    assert.equal(u.port, 0);
+    assert.deepEqual([u.codec, u.bitrate, u.rate, u.segment_seconds, u.window], ['mp3', 192, 44100, 6, 10]);
+    assert.equal(h.uplinksFrom((k, d) => d).hls.origin, 'none');
+    const content = [{ id: 'hls_enabled' }, { id: 'hls_port' }, { id: 'hls_window' }];
+    h.hideWhenOff(content, 'hls', (k, d) => ({ hls_enabled: false, hls_serve: true, hls_advanced: true }[k] ?? d));
+    assert.deepEqual(content.map((c) => c.hidden === true), [false, true, true]);
+});
+
 test('the dead-air watch takes a level and a time, and the file carries them', () => {
     assert.equal(h.validateMonitor({ mon_level: '-60', mon_seconds: '30' }, t), null);
     assert.equal(h.validateMonitor({ mon_level: '-45.5', mon_seconds: '0' }, t), null);

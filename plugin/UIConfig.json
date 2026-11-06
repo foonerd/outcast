@@ -294,6 +294,46 @@
       ]
     },
     {
+      "id": "hls_section",
+      "element": "section",
+      "label": "TRANSLATE.OUTCAST.HLS_SECTION",
+      "icon": "fa-globe",
+      "description": "TRANSLATE.OUTCAST.HLS_SECTION_DESC",
+      "onSave": { "type": "controller", "endpoint": "audio_interface/outcast", "method": "updateHls" },
+      "saveButton": {
+        "label": "TRANSLATE.OUTCAST.SAVE",
+        "data": ["hls_enabled", "hls_name", "hls_preset", "hls_advanced", "hls_codec", "hls_bitrate", "hls_rate", "hls_channels", "hls_segment_seconds", "hls_window", "hls_serve", "hls_port", "hls_keep_alive", "hls_origin", "hls_origin_url", "hls_origin_user", "hls_origin_password", "hls_ca_file"]
+      },
+      "content": [
+        { "id": "hls_enabled", "element": "switch", "label": "TRANSLATE.OUTCAST.HLS_ENABLE", "doc": "TRANSLATE.OUTCAST.HLS_ENABLE_DESC", "value": false },
+        { "id": "hls_name", "element": "input", "label": "TRANSLATE.OUTCAST.HLS_NAME", "doc": "TRANSLATE.OUTCAST.HLS_NAME_DESC", "value": "stream", "visibleIf": { "field": "hls_enabled", "value": true } },
+        { "id": "hls_preset", "element": "select", "label": "TRANSLATE.OUTCAST.PRESET", "doc": "TRANSLATE.OUTCAST.HLS_PRESET_DESC", "value": { "value": "aac-128-48000", "label": "AAC 128 kbit/s, 48 kHz" },
+          "options": [ { "value": "aac-96-48000", "label": "AAC 96 kbit/s, 48 kHz" }, { "value": "aac-128-48000", "label": "AAC 128 kbit/s, 48 kHz" }, { "value": "aac-192-48000", "label": "AAC 192 kbit/s, 48 kHz" }, { "value": "aac-128-44100", "label": "AAC 128 kbit/s, 44.1 kHz" }, { "value": "mp3-128-44100", "label": "MP3 128 kbit/s, 44.1 kHz" }, { "value": "mp3-192-44100", "label": "MP3 192 kbit/s, 44.1 kHz" } ],
+          "visibleIf": { "field": "hls_enabled", "value": true } },
+        { "id": "hls_advanced", "element": "switch", "label": "TRANSLATE.OUTCAST.ADVANCED", "doc": "TRANSLATE.OUTCAST.ADVANCED_DESC", "value": false, "visibleIf": { "field": "hls_enabled", "value": true } },
+        { "id": "hls_codec", "element": "select", "label": "TRANSLATE.OUTCAST.CODEC", "doc": "TRANSLATE.OUTCAST.HLS_CODEC_DESC", "value": { "value": "aac", "label": "AAC" },
+          "options": [ { "value": "aac", "label": "AAC" }, { "value": "mp3", "label": "MP3" } ],
+          "visibleIf": { "field": "hls_advanced", "value": true } },
+        { "id": "hls_bitrate", "element": "input", "label": "TRANSLATE.OUTCAST.BITRATE", "doc": "TRANSLATE.OUTCAST.BITRATE_DESC", "value": "128", "visibleIf": { "field": "hls_advanced", "value": true } },
+        { "id": "hls_rate", "element": "input", "label": "TRANSLATE.OUTCAST.RATE", "doc": "TRANSLATE.OUTCAST.RATE_DESC", "value": "48000", "visibleIf": { "field": "hls_advanced", "value": true } },
+        { "id": "hls_channels", "element": "select", "label": "TRANSLATE.OUTCAST.CHANNELS", "doc": "TRANSLATE.OUTCAST.CHANNELS_DESC", "value": { "value": "2", "label": "TRANSLATE.OUTCAST.CHANNELS_STEREO" },
+          "options": [ { "value": "2", "label": "TRANSLATE.OUTCAST.CHANNELS_STEREO" }, { "value": "1", "label": "TRANSLATE.OUTCAST.CHANNELS_MONO" }, { "value": "0", "label": "TRANSLATE.OUTCAST.RATE_SOURCE" } ],
+          "visibleIf": { "field": "hls_advanced", "value": true } },
+        { "id": "hls_segment_seconds", "element": "input", "label": "TRANSLATE.OUTCAST.HLS_SEGMENT", "doc": "TRANSLATE.OUTCAST.HLS_SEGMENT_DESC", "value": "4", "visibleIf": { "field": "hls_advanced", "value": true } },
+        { "id": "hls_window", "element": "input", "label": "TRANSLATE.OUTCAST.HLS_WINDOW", "doc": "TRANSLATE.OUTCAST.HLS_WINDOW_DESC", "value": "6", "visibleIf": { "field": "hls_advanced", "value": true } },
+        { "id": "hls_serve", "element": "switch", "label": "TRANSLATE.OUTCAST.HLS_SERVE", "doc": "TRANSLATE.OUTCAST.HLS_SERVE_DESC", "value": true, "visibleIf": { "field": "hls_enabled", "value": true } },
+        { "id": "hls_port", "element": "input", "label": "TRANSLATE.OUTCAST.HLS_PORT", "doc": "TRANSLATE.OUTCAST.HLS_PORT_DESC", "value": "8001", "visibleIf": { "field": "hls_serve", "value": true } },
+        { "id": "hls_keep_alive", "element": "switch", "label": "TRANSLATE.OUTCAST.KEEP_ALIVE", "doc": "TRANSLATE.OUTCAST.HLS_KEEP_ALIVE_DESC", "value": true, "visibleIf": { "field": "hls_enabled", "value": true } },
+        { "id": "hls_origin", "element": "select", "label": "TRANSLATE.OUTCAST.HLS_ORIGIN", "doc": "TRANSLATE.OUTCAST.HLS_ORIGIN_DESC", "value": { "value": "none", "label": "TRANSLATE.OUTCAST.HLS_ORIGIN_NONE" },
+          "options": [ { "value": "none", "label": "TRANSLATE.OUTCAST.HLS_ORIGIN_NONE" }, { "value": "http", "label": "TRANSLATE.OUTCAST.HLS_ORIGIN_HTTP" } ],
+          "visibleIf": { "field": "hls_enabled", "value": true } },
+        { "id": "hls_origin_url", "element": "input", "label": "TRANSLATE.OUTCAST.HLS_ORIGIN_URL", "doc": "TRANSLATE.OUTCAST.HLS_ORIGIN_URL_DESC", "value": "", "visibleIf": { "field": "hls_origin", "value": "http" } },
+        { "id": "hls_origin_user", "element": "input", "label": "TRANSLATE.OUTCAST.HLS_ORIGIN_USER", "doc": "TRANSLATE.OUTCAST.HLS_ORIGIN_USER_DESC", "value": "", "visibleIf": { "field": "hls_origin", "value": "http" } },
+        { "id": "hls_origin_password", "element": "input", "type": "password", "label": "TRANSLATE.OUTCAST.HLS_ORIGIN_PASSWORD", "doc": "TRANSLATE.OUTCAST.HLS_ORIGIN_PASSWORD_DESC", "value": "", "visibleIf": { "field": "hls_origin", "value": "http" } },
+        { "id": "hls_ca_file", "element": "input", "label": "TRANSLATE.OUTCAST.RTMP_CA_FILE", "doc": "TRANSLATE.OUTCAST.HLS_CA_FILE_DESC", "value": "", "visibleIf": { "field": "hls_origin", "value": "http" } }
+      ]
+    },
+    {
       "id": "monitor_section",
       "element": "section",
       "label": "TRANSLATE.OUTCAST.MON_SECTION",

@@ -92,6 +92,7 @@ const PRESETS = {
     'mp3-192-44100': { codec: 'mp3', bitrate: 192, rate: 44100, channels: 2 },
     'mp3-320-44100': { codec: 'mp3', bitrate: 320, rate: 44100, channels: 2 },
     'aac-96-44100': { codec: 'aac', bitrate: 96, rate: 44100, channels: 2 },
+    'aac-96-48000': { codec: 'aac', bitrate: 96, rate: 48000, channels: 2 },
     'aac-128-44100': { codec: 'aac', bitrate: 128, rate: 44100, channels: 2 },
     'aac-128-48000': { codec: 'aac', bitrate: 128, rate: 48000, channels: 2 },
     'aac-160-44100': { codec: 'aac', bitrate: 160, rate: 44100, channels: 2 },
@@ -106,7 +107,7 @@ const PRESETS = {
     'flac-0': { codec: 'flac', bitrate: 0, rate: 0, channels: 0 },
     'wav-0': { codec: 'wav', bitrate: 0, rate: 0, channels: 0 }
 };
-const DEFAULT_PRESET = { ice: 'mp3-128-44100', ice2: 'mp3-128-44100', ice3: 'mp3-128-44100', lan: 'mp3-128-44100', rec: 'flac-0', srt: 'aac-128-48000', rtmp: 'aac-128-44100', ts: 'aac-128-48000' };
+const DEFAULT_PRESET = { ice: 'mp3-128-44100', ice2: 'mp3-128-44100', ice3: 'mp3-128-44100', lan: 'mp3-128-44100', rec: 'flac-0', srt: 'aac-128-48000', rtmp: 'aac-128-44100', ts: 'aac-128-48000', hls: 'aac-128-48000' };
 
 function checkWhole(v, field, t) {
     const s = String(v === undefined || v === null ? '' : v).trim();
@@ -250,6 +251,43 @@ function applyTs(data, set) {
     set('ts_ttl', String(data.ts_ttl).trim());
     applyEncoding(data, 'ts', set);
     set('ts_keep_alive', data.ts_keep_alive !== false);
+}
+
+function validateHls(data, t) {
+    if (data.hls_enabled !== true) return null;
+    const serve = data.hls_serve !== false;
+    const origin = sel(data.hls_origin) === 'http' ? 'http' : 'none';
+    const url = String(data.hls_origin_url || '').trim();
+    return (!serve && origin === 'none' ? t('ERR_HLS_NOWHERE') : null) ||
+        (serve ? checkPort(data.hls_port, 'HLS_PORT', t) : null) ||
+        (origin === 'http' && !/^https?:\/\/[^\s/]+(\/\S*)?$/.test(url) ? t('ERR_HLS_ORIGIN_URL') : null) ||
+        validateEncoding(data, 'hls', t) ||
+        (data.hls_advanced === true ? checkRange(data.hls_segment_seconds, 'HLS_SEGMENT', 1, 30, t) : null) ||
+        (data.hls_advanced === true ? checkRange(data.hls_window, 'HLS_WINDOW', 3, 60, t) : null) ||
+        null;
+}
+
+function applyHls(data, set) {
+    const on = data.hls_enabled === true;
+    set('hls_enabled', on);
+    if (!on) return;
+    set('hls_name', String(data.hls_name || '').trim() || 'stream');
+    applyEncoding(data, 'hls', set);
+    if (data.hls_advanced === true) {
+        set('hls_segment_seconds', String(data.hls_segment_seconds).trim());
+        set('hls_window', String(data.hls_window).trim());
+    }
+    set('hls_serve', data.hls_serve !== false);
+    if (data.hls_serve !== false) set('hls_port', String(data.hls_port).trim());
+    set('hls_keep_alive', data.hls_keep_alive !== false);
+    const origin = sel(data.hls_origin) === 'http' ? 'http' : 'none';
+    set('hls_origin', origin);
+    if (origin === 'http') {
+        set('hls_origin_url', String(data.hls_origin_url).trim());
+        set('hls_origin_user', String(data.hls_origin_user || '').trim());
+        set('hls_origin_password', String(data.hls_origin_password || ''));
+        set('hls_ca_file', String(data.hls_ca_file || '').trim());
+    }
 }
 
 function validateMonitor(data, t) {
@@ -398,6 +436,20 @@ function uplinksFrom(get) {
             ...encodingFrom(get, 'ts'),
             keep_alive: get('ts_keep_alive', true) !== false
         },
+        hls: {
+            enabled: bool('hls_enabled'),
+            name: str('hls_name', 'stream'),
+            ...encodingFrom(get, 'hls'),
+            segment_seconds: num(get('hls_segment_seconds', '4'), 4),
+            window: num(get('hls_window', '6'), 6),
+            port: get('hls_serve', true) === false ? 0 : num(get('hls_port', '8001'), 8001),
+            keep_alive: get('hls_keep_alive', true) !== false,
+            origin: str('hls_origin', 'none') === 'http' ? 'http' : 'none',
+            origin_url: str('hls_origin_url', ''),
+            origin_user: str('hls_origin_user', ''),
+            origin_password: str('hls_origin_password', ''),
+            ca_file: str('hls_ca_file', '')
+        },
         monitor: {
             dead_air_level: Number.isFinite(parseFloat(get('mon_level', '-60'))) ? parseFloat(get('mon_level', '-60')) : -60,
             dead_air_seconds: get('mon_enabled', true) === false ? 0 : num(get('mon_seconds', '30'), 30)
@@ -411,7 +463,7 @@ function uplinksFrom(get) {
 // nested switch on; those are marked hidden for the page as it is built.
 function hideWhenOff(content, prefix, get) {
     if (get(prefix + '_enabled', false) === true) return;
-    const nested = { advanced: ['codec', 'bitrate', 'rate', 'channels', 'ca_file'], more: ['description', 'genre', 'url', 'public'] };
+    const nested = { advanced: ['codec', 'bitrate', 'rate', 'channels', 'ca_file', 'segment_seconds', 'window'], more: ['description', 'genre', 'url', 'public'], serve: ['port'] };
     Object.keys(nested).forEach((toggle) => {
         if (get(prefix + '_' + toggle, false) !== true) return;
         nested[toggle].forEach((k) => {
@@ -447,7 +499,7 @@ function summarize(status, audioPath, audioPathError, t) {
     if (audioPath === 'ready') lines.push(t('STATUS_TAP_READY'));
     else if (audioPath === 'lost') lines.push(t('STATUS_TAP_LOST'));
     else lines.push(t('STATUS_TAP_FAILED', { error: audioPathError || '' }));
-    const names = { icecast: 'UPLINK_ICECAST', lan: 'UPLINK_LAN', record: 'UPLINK_RECORD', srt: 'UPLINK_SRT', rtmp: 'UPLINK_RTMP', ts: 'UPLINK_TS' };
+    const names = { icecast: 'UPLINK_ICECAST', lan: 'UPLINK_LAN', record: 'UPLINK_RECORD', srt: 'UPLINK_SRT', rtmp: 'UPLINK_RTMP', ts: 'UPLINK_TS', hls: 'UPLINK_HLS' };
     if (!status || !Array.isArray(status.uplinks) || status.uplinks.length === 0) {
         lines.push(t('STATUS_NO_UPLINKS'));
     } else {
@@ -457,6 +509,8 @@ function summarize(status, audioPath, audioPathError, t) {
             let detail = u.detail || '';
             if (u.kind === 'lan') detail += ', ' + u.listeners + ' listening';
             if (u.kind === 'srt' && u.state === 'connected') detail += ', ' + t('STATUS_SRT_LINK', { rtt: u.rtt_ms, lost: u.lost_packets });
+            if (u.kind === 'hls' && u.segments) detail += ', ' + t('STATUS_HLS_SEGMENTS', { segments: u.segments, pending: u.pending || 0 });
+            if (u.kind === 'hls' && u.last_error && u.state === 'streaming') detail += ', ' + u.last_error;
             if (u.silence) detail += ', silence';
             if (u.kind === 'record' && u.files) detail += ', ' + u.files + ' files';
             if (u.title) detail += ', ' + u.title;
@@ -472,6 +526,6 @@ function summarize(status, audioPath, audioPathError, t) {
 
 module.exports = {
     screenTitle, checkConfig, chainHasTap, fill, sel, PRESETS, DEFAULT_PRESET, ICE_SLOTS,
-    validateIcecast, validateLan, validateRecord, validateMonitor, validateSrt, validateRtmp, validateTs,
-    applyIcecast, applyLan, applyRecord, applyMonitor, applySrt, applyRtmp, applyTs, uplinksFrom, summarize, hideWhenOff
+    validateIcecast, validateLan, validateRecord, validateMonitor, validateSrt, validateRtmp, validateTs, validateHls,
+    applyIcecast, applyLan, applyRecord, applyMonitor, applySrt, applyRtmp, applyTs, applyHls, uplinksFrom, summarize, hideWhenOff
 };

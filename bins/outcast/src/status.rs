@@ -101,6 +101,10 @@ pub struct Uplink {
     pub rtt_ms: u32,
     /// Packets an SRT link lost on the way, as the peer reported them.
     pub lost_packets: u64,
+    /// Segments an HLS uplink cut.
+    pub segments: u64,
+    /// Segments cut and not yet on the origin.
+    pub pending: u64,
 }
 
 pub fn now() -> u64 {

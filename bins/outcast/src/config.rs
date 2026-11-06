@@ -347,7 +347,137 @@ pub struct Uplinks {
     #[serde(default)]
     pub ts: Ts,
     #[serde(default)]
+    pub hls: Hls,
+    #[serde(default)]
     pub monitor: Monitor,
+}
+
+/// Where an HLS uplink's files go beyond the player.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum OriginKind {
+    /// The player alone serves them.
+    #[default]
+    None,
+    /// An HTTP(S) origin taking PUT and DELETE: a WebDAV folder, a CDN's ingest, a
+    /// media server's HTTP origin.
+    Http,
+}
+
+/// An HLS uplink: the stream cut into segments of packed audio with a sliding
+/// playlist, served from the player's memory on a port of its own and put on
+/// the operator's origin for the world.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Hls {
+    #[serde(default)]
+    pub enabled: bool,
+    /// The playlist's name, `<name>.m3u8`, and the segments' stem.
+    #[serde(default = "Hls::default_name")]
+    pub name: String,
+    #[serde(default = "Hls::default_codec")]
+    pub codec: Codec,
+    #[serde(default = "Hls::default_bitrate")]
+    pub bitrate: u32,
+    /// The sample rate sent, 0 for the stream's own.
+    #[serde(default = "Hls::default_rate")]
+    pub rate: u32,
+    /// The channels sent, 0 for the stream's own.
+    #[serde(default)]
+    pub channels: u32,
+    /// How long a segment is meant to be, in seconds; a segment ends at the first
+    /// frame boundary past it.
+    #[serde(default = "Hls::default_segment_seconds")]
+    pub segment_seconds: u32,
+    /// Segments the playlist lists.
+    #[serde(default = "Hls::default_window")]
+    pub window: u32,
+    /// The port the player serves the playlist and the segments on; 0 for none.
+    #[serde(default = "Hls::default_port")]
+    pub port: u16,
+    #[serde(default = "default_true")]
+    pub keep_alive: bool,
+    #[serde(default)]
+    pub origin: OriginKind,
+    /// The origin's address, the folder the files go in: `https://host/path/`.
+    #[serde(default)]
+    pub origin_url: String,
+    #[serde(default)]
+    pub origin_user: String,
+    #[serde(default)]
+    pub origin_password: String,
+    /// A PEM file of certificate authorities to trust beside the public ones.
+    #[serde(default)]
+    pub ca_file: String,
+}
+
+impl Hls {
+    fn default_name() -> String {
+        "stream".to_string()
+    }
+    fn default_codec() -> Codec {
+        Codec::Aac
+    }
+    fn default_bitrate() -> u32 {
+        128
+    }
+    fn default_rate() -> u32 {
+        48000
+    }
+    fn default_segment_seconds() -> u32 {
+        4
+    }
+    fn default_window() -> u32 {
+        6
+    }
+    fn default_port() -> u16 {
+        8001
+    }
+    pub fn tidy(&mut self) {
+        self.name = self
+            .name
+            .trim()
+            .chars()
+            .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_'))
+            .collect();
+        if self.name.is_empty() {
+            self.name = Self::default_name();
+        }
+        if self.segment_seconds == 0 {
+            self.segment_seconds = Self::default_segment_seconds();
+        }
+        if self.window < 3 {
+            self.window = 3;
+        }
+        self.origin_url = self.origin_url.trim().to_string();
+        if self.origin == OriginKind::Http && self.origin_url.is_empty() {
+            self.origin = OriginKind::None;
+        }
+        if self.enabled && self.port == 0 && self.origin == OriginKind::None {
+            self.enabled = false;
+        }
+    }
+}
+
+impl Default for Hls {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            name: Self::default_name(),
+            codec: Self::default_codec(),
+            bitrate: Self::default_bitrate(),
+            rate: Self::default_rate(),
+            channels: 0,
+            segment_seconds: Self::default_segment_seconds(),
+            window: Self::default_window(),
+            port: Self::default_port(),
+            keep_alive: true,
+            origin: OriginKind::None,
+            origin_url: String::new(),
+            origin_user: String::new(),
+            origin_password: String::new(),
+            ca_file: String::new(),
+        }
+    }
 }
 
 /// How a transport stream travels.
@@ -647,6 +777,7 @@ impl Uplinks {
         self.srt.tidy();
         self.rtmp.tidy();
         self.ts.tidy();
+        self.hls.tidy();
         // The codec, the bitrate, the rate and the channels are the operator's,
         // whatever they are: the destination is the one to refuse them, and the
         // encoder's own refusal is shown as it comes.
@@ -762,6 +893,30 @@ mod tests {
         v.icecast.mount = "nomount".into();
         v.tidy();
         assert!(!v.icecast.enabled);
+    }
+
+    #[test]
+    fn an_hls_uplink_is_tidied_to_a_file_name_a_window_and_a_place_to_go() {
+        let mut u: Uplinks = serde_json::from_str(
+            r#"{"hls":{"enabled":true,"name":" my station/live ","segment_seconds":0,"window":1,"origin":"http","origin_url":" https://o.example.com/radio "}}"#,
+        )
+        .unwrap();
+        u.tidy();
+        assert_eq!(u.hls.name, "mystationlive");
+        assert_eq!(
+            (u.hls.segment_seconds, u.hls.window, u.hls.port),
+            (4, 3, 8001)
+        );
+        assert_eq!(u.hls.origin_url, "https://o.example.com/radio");
+        assert!(u.hls.enabled);
+        // An origin named without an address is no origin; an uplink with nowhere to
+        // serve from and nowhere to go is off.
+        let mut v: Uplinks =
+            serde_json::from_str(r#"{"hls":{"enabled":true,"port":0,"origin":"http"}}"#).unwrap();
+        v.tidy();
+        assert_eq!(v.hls.origin, OriginKind::None);
+        assert!(!v.hls.enabled);
+        assert_eq!(Hls::default().name, "stream");
     }
 
     #[test]

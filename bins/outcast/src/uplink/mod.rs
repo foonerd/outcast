@@ -2,11 +2,14 @@
 //! its transport. What they share is here: the status entry they keep, the
 //! encoder they run per segment, the way they wait on their two channels.
 
+pub mod hls;
+pub mod http;
 pub mod icecast;
 pub mod lan;
 pub mod record;
 pub mod rtmp;
 pub mod srt;
+pub mod tls;
 pub mod ts;
 
 use std::net::TcpStream;

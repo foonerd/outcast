@@ -2,6 +2,12 @@
 
 All notable changes to Outcast Uplink. The format follows Keep a Changelog; the versions follow Semantic Versioning.
 
+## [0.1.11] - 2026-11-06
+
+### Added
+
+- The HLS uplink: the stream as HTTP Live Streaming, packed audio (AAC or MP3) cut into segments of a few seconds with a sliding playlist, each segment tagged with its timestamp and the title; the segments and the playlist in the core's memory, served on a port of the player and put on the operator's own HTTP origin (PUT and DELETE, `http://` or `https://`, basic authentication, a private authority's file) by an uploader that never holds the stream up. The playlist on the origin only ever names segments that landed; an origin that goes away is tried again with a backoff while the player's own playlist goes on; the status says the segments cut and those waiting for the origin. The segment numbers and the timelines run on across saves on the page, so a player mid-stream sees a discontinuity, never a restart.
+
 ## [0.1.10] - 2026-11-06
 
 ### Added

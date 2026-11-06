@@ -430,6 +430,17 @@ Outcast.prototype.getUIConfig = function () {
             setValue(ts, 'ts_keep_alive', c.get('ts_keep_alive', true) !== false);
             h.hideWhenOff(ts, 'ts', (k, d) => c.get(k, d));
 
+            const hls = section('hls_section');
+            setValue(hls, 'hls_enabled', c.get('hls_enabled', false) === true);
+            setValue(hls, 'hls_name', String(c.get('hls_name', 'stream')));
+            encoding(hls, 'hls');
+            ['hls_segment_seconds', 'hls_window', 'hls_port', 'hls_origin_url', 'hls_origin_user', 'hls_origin_password', 'hls_ca_file']
+                .forEach((k) => setValue(hls, k, String(c.get(k, ''))));
+            setValue(hls, 'hls_serve', c.get('hls_serve', true) !== false);
+            setValue(hls, 'hls_keep_alive', c.get('hls_keep_alive', true) !== false);
+            setSelect(hls, 'hls_origin', c.get('hls_origin', 'none'));
+            h.hideWhenOff(hls, 'hls', (k, d) => c.get(k, d));
+
             const mon = section('monitor_section');
             setValue(mon, 'mon_enabled', c.get('mon_enabled', true) !== false);
             setValue(mon, 'mon_level', String(c.get('mon_level', '-60')));
@@ -494,6 +505,10 @@ Outcast.prototype.updateRtmp = function (data) {
 
 Outcast.prototype.updateTs = function (data) {
     return this.saveSection(data, h.validateTs, h.applyTs);
+};
+
+Outcast.prototype.updateHls = function (data) {
+    return this.saveSection(data, h.validateHls, h.applyHls);
 };
 
 Outcast.prototype.updateMonitor = function (data) {
