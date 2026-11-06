@@ -418,6 +418,7 @@ Outcast.prototype.getUIConfig = function () {
             setValue(rtmp, 'rtmp_url', String(c.get('rtmp_url', '')));
             setValue(rtmp, 'rtmp_key', String(c.get('rtmp_key', '')));
             encoding(rtmp, 'rtmp');
+            setValue(rtmp, 'rtmp_ca_file', String(c.get('rtmp_ca_file', '')));
             setValue(rtmp, 'rtmp_keep_alive', c.get('rtmp_keep_alive', true) !== false);
             h.hideWhenOff(rtmp, 'rtmp', (k, d) => c.get(k, d));
 

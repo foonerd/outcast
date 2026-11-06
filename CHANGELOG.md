@@ -2,6 +2,12 @@
 
 All notable changes to Outcast Uplink. The format follows Keep a Changelog; the versions follow Semantic Versioning.
 
+## [0.1.10] - 2026-11-06
+
+### Added
+
+- `rtmps://` for the RTMP uplink: the session inside TLS, the server's certificate checked against the public authorities, or against the operator's own authority's PEM file (an Advanced setting) for a private media server; the TLS pure Rust (rustls). Platforms that take only RTMPS (Facebook Live) are reachable; a bogus key on a public platform is now reported as the server closing at the publish, as it does.
+
 ## [0.1.9] - 2026-11-06
 
 ### Added

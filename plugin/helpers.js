@@ -213,7 +213,7 @@ function applySrt(data, set) {
 function validateRtmp(data, t) {
     if (data.rtmp_enabled !== true) return null;
     const url = String(data.rtmp_url || '').trim();
-    return (!/^rtmp:\/\/[^\s/]+\/\S+$/.test(url) ? t('ERR_RTMP_URL') : null) ||
+    return (!/^rtmps?:\/\/[^\s/]+\/\S+$/.test(url) ? t('ERR_RTMP_URL') : null) ||
         (!String(data.rtmp_key || '').trim() ? t('ERR_RTMP_KEY') : null) ||
         checkText(data.rtmp_key, 'RTMP_KEY', t) ||
         validateEncoding(data, 'rtmp', t) ||
@@ -227,6 +227,7 @@ function applyRtmp(data, set) {
     set('rtmp_url', String(data.rtmp_url).trim());
     set('rtmp_key', String(data.rtmp_key).trim());
     applyEncoding(data, 'rtmp', set);
+    if (data.rtmp_advanced === true) set('rtmp_ca_file', String(data.rtmp_ca_file || '').trim());
     set('rtmp_keep_alive', data.rtmp_keep_alive !== false);
 }
 
@@ -384,6 +385,7 @@ function uplinksFrom(get) {
             enabled: bool('rtmp_enabled'),
             url: str('rtmp_url', ''),
             stream_key: str('rtmp_key', ''),
+            ca_file: str('rtmp_ca_file', ''),
             ...encodingFrom(get, 'rtmp'),
             keep_alive: get('rtmp_keep_alive', true) !== false
         },
@@ -409,7 +411,7 @@ function uplinksFrom(get) {
 // nested switch on; those are marked hidden for the page as it is built.
 function hideWhenOff(content, prefix, get) {
     if (get(prefix + '_enabled', false) === true) return;
-    const nested = { advanced: ['codec', 'bitrate', 'rate', 'channels'], more: ['description', 'genre', 'url', 'public'] };
+    const nested = { advanced: ['codec', 'bitrate', 'rate', 'channels', 'ca_file'], more: ['description', 'genre', 'url', 'public'] };
     Object.keys(nested).forEach((toggle) => {
         if (get(prefix + '_' + toggle, false) !== true) return;
         nested[toggle].forEach((k) => {

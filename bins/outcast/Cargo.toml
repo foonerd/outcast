@@ -19,6 +19,9 @@ libc = "0.2"
 srt-protocol = "0.4.4"
 # The RTMP session: the handshake, the chunk stream and the commands, pure Rust.
 rml_rtmp = "0.8.0"
+# TLS for rtmps://, pure Rust with ring's cryptography; the public roots are Mozilla's.
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+webpki-roots = "1"
 bytes = "1"
 rand = "0.8"
 serde = { version = "1", features = ["derive"] }

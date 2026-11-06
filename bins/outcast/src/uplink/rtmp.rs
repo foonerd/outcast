@@ -1,13 +1,15 @@
 //! The RTMP uplink: the stream published to an RTMP server (nginx-rtmp,
-//! Wowza, Red5, Ant Media, a custom ingest) as AAC or MP3 audio messages,
-//! this side the publisher. The transport is the core's own over TCP, the
-//! session the `rml_rtmp` crate's (pure Rust); the encoder is evopeg making
-//! an FLV stream, whose audio tags become the messages. A server that goes
-//! away is tried again with a backoff; silence keeps the stream up while
+//! Wowza, Red5, Ant Media, a streaming platform, a custom ingest) as AAC or
+//! MP3 audio messages, this side the publisher. The transport is the core's
+//! own over TCP, or over TLS (`rtmps://`, rustls) for a server that wants it;
+//! the session the `rml_rtmp` crate's (pure Rust); the encoder is evopeg
+//! making an FLV stream, whose audio tags become the messages. A server that
+//! goes away is tried again with a backoff; silence keeps the stream up while
 //! the player stands still, as for Icecast.
 
 use std::io::{self, Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
+use std::path::Path;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
@@ -20,6 +22,9 @@ use rml_rtmp::sessions::{
     PublishRequestType, StreamMetadata,
 };
 use rml_rtmp::time::RtmpTimestamp;
+use rustls::pki_types::pem::PemObject;
+use rustls::pki_types::{CertificateDer, ServerName};
+use rustls::{ClientConfig, ClientConnection, RootCertStore, StreamOwned};
 use stream::conform::Conformer;
 use stream::feed::{Event, Segment};
 
@@ -58,18 +63,21 @@ pub struct Target {
     pub port: u16,
     pub app: String,
     pub tc_url: String,
+    /// `rtmps://`: the connection inside TLS.
+    pub tls: bool,
 }
 
-/// `rtmp://host[:port]/app[/...]` taken apart; the stream key is its own setting.
+/// `rtmp://host[:port]/app[/...]` or `rtmps://…` taken apart; the stream key is its
+/// own setting. The port is 1935 unless given, 443 for rtmps.
 pub fn parse_url(url: &str) -> Result<Target, String> {
     let url = url.trim();
-    let rest = url.strip_prefix("rtmp://").ok_or_else(|| {
-        if url.starts_with("rtmps://") {
-            "rtmps is not carried in this release; rtmp:// only".to_string()
-        } else {
-            "the address must start with rtmp://".to_string()
-        }
-    })?;
+    let (scheme, rest) = if let Some(r) = url.strip_prefix("rtmp://") {
+        ("rtmp", r)
+    } else if let Some(r) = url.strip_prefix("rtmps://") {
+        ("rtmps", r)
+    } else {
+        return Err("the address must start with rtmp:// or rtmps://".to_string());
+    };
     let (authority, path) = rest.split_once('/').unwrap_or((rest, ""));
     let (host, port) = match authority.rsplit_once(':') {
         Some((h, p)) if !h.contains(']') || h.ends_with(']') => (
@@ -79,7 +87,7 @@ pub fn parse_url(url: &str) -> Result<Target, String> {
         ),
         _ => (
             authority.trim_matches(|c| c == '[' || c == ']').to_string(),
-            1935,
+            if scheme == "rtmps" { 443 } else { 1935 },
         ),
     };
     if host.is_empty() {
@@ -92,11 +100,94 @@ pub fn parse_url(url: &str) -> Result<Target, String> {
         );
     }
     Ok(Target {
-        tc_url: format!("rtmp://{authority}/{app}"),
+        tc_url: format!("{scheme}://{authority}/{app}"),
         host,
         port,
         app,
+        tls: scheme == "rtmps",
     })
+}
+
+/// The wire: the socket bare, or inside TLS.
+enum Wire {
+    Plain(TcpStream),
+    Tls(Box<StreamOwned<ClientConnection, TcpStream>>),
+}
+
+impl Wire {
+    fn socket(&self) -> &TcpStream {
+        match self {
+            Wire::Plain(s) => s,
+            Wire::Tls(t) => t.get_ref(),
+        }
+    }
+}
+
+impl Read for Wire {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match self {
+            Wire::Plain(s) => s.read(buf),
+            Wire::Tls(t) => t.read(buf),
+        }
+    }
+}
+
+impl Write for Wire {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        match self {
+            Wire::Plain(s) => s.write(buf),
+            Wire::Tls(t) => t.write(buf),
+        }
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        match self {
+            Wire::Plain(s) => s.flush(),
+            Wire::Tls(t) => t.flush(),
+        }
+    }
+}
+
+/// The roots a server's certificate may chain to: the public ones (Mozilla's, as
+/// carried by webpki-roots), and those of the operator's PEM file when one is named.
+fn roots(ca_file: &str) -> Result<RootCertStore, String> {
+    let mut roots = RootCertStore::empty();
+    roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+    if !ca_file.trim().is_empty() {
+        let path = Path::new(ca_file.trim());
+        let mut added = 0;
+        for cert in
+            CertificateDer::pem_file_iter(path).map_err(|e| format!("{}: {e}", path.display()))?
+        {
+            let cert = cert.map_err(|e| format!("{}: {e}", path.display()))?;
+            roots
+                .add(cert)
+                .map_err(|e| format!("{}: {e}", path.display()))?;
+            added += 1;
+        }
+        if added == 0 {
+            return Err(format!("{}: no certificate in it", path.display()));
+        }
+    }
+    Ok(roots)
+}
+
+/// The socket wrapped in TLS and the handshake done, the server's certificate
+/// checked against the roots and the host name.
+fn wrap_tls(sock: TcpStream, host: &str, ca_file: &str) -> Result<Wire, String> {
+    let config = ClientConfig::builder()
+        .with_root_certificates(roots(ca_file)?)
+        .with_no_client_auth();
+    let name = ServerName::try_from(host.to_string())
+        .map_err(|_| format!("{host}: not a name TLS takes"))?;
+    let conn = ClientConnection::new(Arc::new(config), name).map_err(|e| format!("tls: {e}"))?;
+    let mut tls = StreamOwned::new(conn, sock);
+    while tls.conn.is_handshaking() {
+        tls.conn
+            .complete_io(&mut tls.sock)
+            .map_err(|e| format!("tls handshake with {host}: {e}"))?;
+    }
+    Ok(Wire::Tls(Box::new(tls)))
 }
 
 /// One FLV tag's audio payload and its timestamp.
@@ -258,7 +349,7 @@ impl Acks {
 
 /// The session's results acted on: packets written, events judged.
 fn act(
-    stream: &mut TcpStream,
+    stream: &mut Wire,
     results: Vec<ClientSessionResult>,
     sent: &mut u64,
     state: &mut Phase,
@@ -294,12 +385,17 @@ enum Phase {
 }
 
 /// Bytes the peer sent, if any, within the socket's read timeout.
-fn read_some(stream: &mut TcpStream, buf: &mut [u8]) -> Result<Option<usize>, String> {
+fn read_some(stream: &mut Wire, buf: &mut [u8]) -> Result<Option<usize>, String> {
     match stream.read(buf) {
         Ok(0) => Err("the server closed the connection".to_string()),
         Ok(n) => Ok(Some(n)),
         Err(e) if e.kind() == io::ErrorKind::WouldBlock || e.kind() == io::ErrorKind::TimedOut => {
             Ok(None)
+        }
+        // TLS: the server went without a close_notify, which the platforms do when
+        // they refuse a stream; it is a close all the same.
+        Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
+            Err("the server closed the connection".to_string())
         }
         Err(e) => Err(e.to_string()),
     }
@@ -317,14 +413,23 @@ fn drive(
         .map_err(|e| format!("{}: {e}", target.host))?
         .next()
         .ok_or_else(|| format!("{}: no address", target.host))?;
-    let mut stream = TcpStream::connect_timeout(&addr, CONNECT).map_err(|e| e.to_string())?;
-    let _ = stream.set_nodelay(true);
-    fix_send_buffer(&stream);
-    stream
-        .set_read_timeout(Some(Duration::from_millis(5)))
+    let sock = TcpStream::connect_timeout(&addr, CONNECT).map_err(|e| e.to_string())?;
+    let _ = sock.set_nodelay(true);
+    fix_send_buffer(&sock);
+    sock.set_write_timeout(Some(STALL))
         .map_err(|e| e.to_string())?;
+    // The TLS handshake first, with the connection's own patience; then the short
+    // read timeout the session loop polls with.
+    sock.set_read_timeout(Some(CONNECT))
+        .map_err(|e| e.to_string())?;
+    let mut stream = if target.tls {
+        wrap_tls(sock, &target.host, &cfg.ca_file)?
+    } else {
+        Wire::Plain(sock)
+    };
     stream
-        .set_write_timeout(Some(STALL))
+        .socket()
+        .set_read_timeout(Some(Duration::from_millis(5)))
         .map_err(|e| e.to_string())?;
     let mut sent: u64 = 0;
     let mut acks = Acks::default();
@@ -344,7 +449,9 @@ fn drive(
                 CONNECT.as_secs()
             ));
         }
-        let Some(n) = read_some(&mut stream, &mut buf)? else {
+        let Some(n) =
+            read_some(&mut stream, &mut buf).map_err(|e| format!("{e} during the handshake"))?
+        else {
             continue;
         };
         match handshake
@@ -409,7 +516,17 @@ fn drive(
             act(&mut stream, vec![r], &mut sent, &mut phase, &mut acks)?;
             asked = true;
         }
-        let Some(n) = read_some(&mut stream, &mut buf)? else {
+        let Some(n) = read_some(&mut stream, &mut buf).map_err(|e| {
+            format!(
+                "{e} while {}",
+                if asked {
+                    "asking to publish"
+                } else {
+                    "connecting"
+                }
+            )
+        })?
+        else {
             continue;
         };
         let results = session
@@ -458,7 +575,7 @@ fn drive(
                 STALL.as_secs()
             ));
         }
-        if unsent(&stream) > STALL_THRESHOLD {
+        if unsent(stream.socket()) > STALL_THRESHOLD {
             let since = *stall_since.get_or_insert_with(Instant::now);
             if since.elapsed() >= STALL {
                 return Err(format!(
@@ -816,12 +933,27 @@ mod tests {
             ("ingest.example.com", 1935, "live")
         );
         assert_eq!(t.tc_url, "rtmp://ingest.example.com/live");
+        assert!(!t.tls);
         let t = parse_url(" rtmp://10.0.0.5:1936/app/sub/ ").unwrap();
         assert_eq!(
             (t.host.as_str(), t.port, t.app.as_str()),
             ("10.0.0.5", 1936, "app/sub")
         );
-        assert!(parse_url("rtmps://x/live").unwrap_err().contains("rtmps"));
+        let t = parse_url("rtmps://live-api-s.facebook.com:443/rtmp").unwrap();
+        assert_eq!(
+            (t.host.as_str(), t.port, t.app.as_str(), t.tls),
+            ("live-api-s.facebook.com", 443, "rtmp", true)
+        );
+        assert_eq!(
+            parse_url("rtmps://a.rtmps.youtube.com/live2").unwrap().port,
+            443
+        );
+        assert_eq!(
+            parse_url("rtmps://a.rtmps.youtube.com/live2")
+                .unwrap()
+                .tc_url,
+            "rtmps://a.rtmps.youtube.com/live2"
+        );
         assert!(parse_url("http://x/live").unwrap_err().contains("rtmp://"));
         assert!(parse_url("rtmp://host")
             .unwrap_err()
@@ -829,6 +961,20 @@ mod tests {
         assert!(parse_url("rtmp://host:abc/live")
             .unwrap_err()
             .contains("port"));
+    }
+
+    #[test]
+    fn the_roots_are_the_public_ones_and_the_operators_file() {
+        assert!(roots("").unwrap().len() > 100, "the public roots");
+        assert!(roots("/nonexistent/ca.pem").unwrap_err().contains("ca.pem"));
+        let dir = std::env::temp_dir().join(format!("outcast-roots-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let empty = dir.join("empty.pem");
+        std::fs::write(&empty, "nothing here\n").unwrap();
+        assert!(roots(empty.to_str().unwrap())
+            .unwrap_err()
+            .contains("no certificate"));
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

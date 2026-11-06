@@ -1,6 +1,6 @@
 {
   "name": "outcast",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "Casts whatever the player plays out to any uplink: Icecast, SHOUTcast, RTMP, SRT, HLS, the LAN or a file. An evo framework plugin built on evotap.",
   "main": "index.js",
   "scripts": {
@@ -21,7 +21,7 @@
     "os": ["bookworm"],
     "architectures": ["armhf", "amd64"],
     "details": "Streams whatever the player plays, from any service, to Icecast, SHOUTcast, RTMP, SRT, HLS, the LAN or a file, with the screen's title. Built on evotap.",
-    "changelog": "0.1.9 The RTMP uplink, the stream published to a platform or a media server with its stream key; the transport-stream uplink over TCP or UDP."
+    "changelog": "0.1.10 rtmps:// for the RTMP uplink: TLS to the platforms and media servers that want it, a private authority's file under Advanced."
   },
   "dependencies": {
     "kew": "^0.7.0",

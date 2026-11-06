@@ -237,7 +237,7 @@
       "onSave": { "type": "controller", "endpoint": "audio_interface/outcast", "method": "updateRtmp" },
       "saveButton": {
         "label": "TRANSLATE.OUTCAST.SAVE",
-        "data": ["rtmp_enabled", "rtmp_url", "rtmp_key", "rtmp_preset", "rtmp_advanced", "rtmp_codec", "rtmp_bitrate", "rtmp_rate", "rtmp_channels", "rtmp_keep_alive"]
+        "data": ["rtmp_enabled", "rtmp_url", "rtmp_key", "rtmp_preset", "rtmp_advanced", "rtmp_codec", "rtmp_bitrate", "rtmp_rate", "rtmp_channels", "rtmp_ca_file", "rtmp_keep_alive"]
       },
       "content": [
         { "id": "rtmp_enabled", "element": "switch", "label": "TRANSLATE.OUTCAST.RTMP_ENABLE", "doc": "TRANSLATE.OUTCAST.RTMP_ENABLE_DESC", "value": false },
@@ -255,6 +255,7 @@
         { "id": "rtmp_channels", "element": "select", "label": "TRANSLATE.OUTCAST.CHANNELS", "doc": "TRANSLATE.OUTCAST.CHANNELS_DESC", "value": { "value": "2", "label": "TRANSLATE.OUTCAST.CHANNELS_STEREO" },
           "options": [ { "value": "2", "label": "TRANSLATE.OUTCAST.CHANNELS_STEREO" }, { "value": "1", "label": "TRANSLATE.OUTCAST.CHANNELS_MONO" }, { "value": "0", "label": "TRANSLATE.OUTCAST.RATE_SOURCE" } ],
           "visibleIf": { "field": "rtmp_advanced", "value": true } },
+        { "id": "rtmp_ca_file", "element": "input", "label": "TRANSLATE.OUTCAST.RTMP_CA_FILE", "doc": "TRANSLATE.OUTCAST.RTMP_CA_FILE_DESC", "value": "", "visibleIf": { "field": "rtmp_advanced", "value": true } },
         { "id": "rtmp_keep_alive", "element": "switch", "label": "TRANSLATE.OUTCAST.KEEP_ALIVE", "doc": "TRANSLATE.OUTCAST.RTMP_KEEP_ALIVE_DESC", "value": true, "visibleIf": { "field": "rtmp_enabled", "value": true } }
       ]
     },

@@ -12,10 +12,18 @@ ROOT=$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
 unset CARGO_TARGET_DIR
 
-# The cross compilers only drive the link; the C runtime and libc come with the Rust
-# musl targets themselves.
+# The cross compilers drive the link, and compile the one C part of the tree (ring's
+# cryptography, under rustls, for rtmps://); the C runtime and libc come with the Rust
+# musl targets themselves. The cc crate looks for a compiler named after the musl
+# triple and finds none, so each is named here.
 export CARGO_TARGET_ARMV7_UNKNOWN_LINUX_MUSLEABIHF_LINKER=arm-linux-gnueabihf-gcc
 export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=aarch64-linux-gnu-gcc
+export CC_x86_64_unknown_linux_musl=gcc
+export AR_x86_64_unknown_linux_musl=ar
+export CC_armv7_unknown_linux_musleabihf=arm-linux-gnueabihf-gcc
+export AR_armv7_unknown_linux_musleabihf=arm-linux-gnueabihf-ar
+export CC_aarch64_unknown_linux_musl=aarch64-linux-gnu-gcc
+export AR_aarch64_unknown_linux_musl=aarch64-linux-gnu-ar
 
 ship() {
   local triple=$1 arch=$2

@@ -203,13 +203,22 @@ test('the RTMP uplink takes an rtmp address with an application and a stream key
     const good = { rtmp_enabled: true, rtmp_url: 'rtmp://ingest.example.com/live', rtmp_key: 'abcd-1234' };
     assert.equal(h.validateRtmp(good, t), null);
     assert.equal(h.validateRtmp({ rtmp_enabled: false }, t), null);
-    assert.equal(h.validateRtmp({ ...good, rtmp_url: 'rtmps://x/live' }, t), 'ERR_RTMP_URL');
+    assert.equal(h.validateRtmp({ ...good, rtmp_url: 'rtmps://live-api-s.facebook.com:443/rtmp' }, t), null);
+    assert.equal(h.validateRtmp({ ...good, rtmp_url: 'http://x/live' }, t), 'ERR_RTMP_URL');
     assert.equal(h.validateRtmp({ ...good, rtmp_url: 'rtmp://host' }, t), 'ERR_RTMP_URL');
     assert.equal(h.validateRtmp({ ...good, rtmp_key: '' }, t), 'ERR_RTMP_KEY');
     const kept = {};
     h.applyRtmp({ ...good, rtmp_url: ' rtmp://x:1936/app ', rtmp_preset: { value: 'aac-160-44100' } }, (k, v) => { kept[k] = v; });
     const u = h.uplinksFrom((k, d) => (k in kept ? kept[k] : d)).rtmp;
-    assert.deepEqual(u, { enabled: true, url: 'rtmp://x:1936/app', stream_key: 'abcd-1234', codec: 'aac', bitrate: 160, rate: 44100, channels: 2, keep_alive: true });
+    assert.deepEqual(u, { enabled: true, url: 'rtmp://x:1936/app', stream_key: 'abcd-1234', ca_file: '', codec: 'aac', bitrate: 160, rate: 44100, channels: 2, keep_alive: true });
+    // A private authority's file is an Advanced setting, kept only when Advanced is on.
+    h.applyRtmp({ ...good, rtmp_ca_file: ' /data/ca.pem ' }, (k, v) => { kept[k] = v; });
+    assert.equal(h.uplinksFrom((k, d) => (k in kept ? kept[k] : d)).rtmp.ca_file, '');
+    h.applyRtmp({ ...good, rtmp_advanced: true, rtmp_codec: { value: 'aac' }, rtmp_bitrate: '128', rtmp_rate: '48000', rtmp_channels: { value: '2' }, rtmp_ca_file: ' /data/ca.pem ' }, (k, v) => { kept[k] = v; });
+    assert.equal(h.uplinksFrom((k, d) => (k in kept ? kept[k] : d)).rtmp.ca_file, '/data/ca.pem');
+    const content = [{ id: 'rtmp_enabled' }, { id: 'rtmp_codec' }, { id: 'rtmp_ca_file' }];
+    h.hideWhenOff(content, 'rtmp', (k, d) => ({ rtmp_enabled: false, rtmp_advanced: true }[k] ?? d));
+    assert.deepEqual(content.map((c) => c.hidden === true), [false, true, true]);
 });
 
 test('the transport-stream uplink goes over TCP unless told UDP', () => {

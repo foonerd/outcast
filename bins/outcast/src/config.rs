@@ -438,11 +438,15 @@ impl Default for Ts {
 pub struct Rtmp {
     #[serde(default)]
     pub enabled: bool,
-    /// `rtmp://host[:port]/application`.
+    /// `rtmp://host[:port]/application`, or `rtmps://` for a server behind TLS.
     #[serde(default)]
     pub url: String,
     #[serde(default)]
     pub stream_key: String,
+    /// A PEM file of certificate authorities to trust beside the public ones, for a
+    /// server with a certificate of a private authority; empty for the public ones alone.
+    #[serde(default)]
+    pub ca_file: String,
     #[serde(default = "Rtmp::default_codec")]
     pub codec: Codec,
     #[serde(default = "Rtmp::default_bitrate")]
@@ -491,6 +495,7 @@ impl Default for Rtmp {
             enabled: false,
             url: String::new(),
             stream_key: String::new(),
+            ca_file: String::new(),
             codec: Self::default_codec(),
             bitrate: Self::default_bitrate(),
             rate: Self::default_rate(),

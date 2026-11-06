@@ -107,6 +107,7 @@
   "rtmp_bitrate": { "type": "string", "value": "128" },
   "rtmp_rate": { "type": "string", "value": "44100" },
   "rtmp_channels": { "type": "string", "value": "2" },
+  "rtmp_ca_file": { "type": "string", "value": "" },
   "rtmp_keep_alive": { "type": "boolean", "value": true },
   "ts_enabled": { "type": "boolean", "value": false },
   "ts_transport": { "type": "string", "value": "tcp" },
