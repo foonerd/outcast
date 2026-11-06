@@ -236,7 +236,7 @@ test('the transport-stream uplink goes over TCP unless told UDP', () => {
 });
 
 test('the HLS uplink serves on a port, goes to an origin, or both, never nowhere', () => {
-    const good = { hls_enabled: true, hls_name: 'live', hls_serve: true, hls_port: '8001', hls_origin: { value: 'none' } };
+    const good = { hls_enabled: true, hls_name: 'live', hls_serve: true, hls_port: '8010', hls_origin: { value: 'none' } };
     assert.equal(h.validateHls(good, t), null);
     assert.equal(h.validateHls({ hls_enabled: false }, t), null);
     assert.equal(h.validateHls({ ...good, hls_serve: false }, t), 'ERR_HLS_NOWHERE');
@@ -247,7 +247,7 @@ test('the HLS uplink serves on a port, goes to an origin, or both, never nowhere
     const kept = {};
     h.applyHls({ ...good, hls_name: ' my station ', hls_origin: { value: 'http' }, hls_origin_url: ' http://o.example.com/radio ', hls_origin_user: 'ingest', hls_origin_password: 'pw' }, (k, v) => { kept[k] = v; });
     let u = h.uplinksFrom((k, d) => (k in kept ? kept[k] : d)).hls;
-    assert.deepEqual(u, { enabled: true, name: 'my station', codec: 'aac', bitrate: 128, rate: 48000, channels: 2, segment_seconds: 4, window: 6, port: 8001, keep_alive: true, origin: 'http', origin_url: 'http://o.example.com/radio', origin_user: 'ingest', origin_password: 'pw', ca_file: '' });
+    assert.deepEqual(u, { enabled: true, name: 'my station', codec: 'aac', bitrate: 128, rate: 48000, channels: 2, segment_seconds: 4, window: 6, port: 8010, keep_alive: true, origin: 'http', origin_url: 'http://o.example.com/radio', origin_user: 'ingest', origin_password: 'pw', ca_file: '' });
     // Not served on the player: the port is 0 for the core; the segment length and the
     // window are Advanced settings.
     h.applyHls({ ...good, hls_serve: false, hls_origin: { value: 'http' }, hls_origin_url: 'https://o.example.com/', hls_advanced: true, hls_codec: { value: 'mp3' }, hls_bitrate: '192', hls_rate: '44100', hls_channels: { value: '2' }, hls_segment_seconds: '6', hls_window: '10' }, (k, v) => { kept[k] = v; });

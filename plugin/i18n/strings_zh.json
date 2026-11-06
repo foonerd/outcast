@@ -143,7 +143,7 @@
     "HLS_SERVE": "由播放器提供",
     "HLS_SERVE_DESC": "播放列表和分片在 http://<播放器>:<端口>/<名称>.m3u8，从内存提供，网络上的任何设备都可播放。",
     "HLS_PORT": "端口",
-    "HLS_PORT_DESC": "播放器提供 HLS 的端口；未被占用时为 8001。",
+    "HLS_PORT_DESC": "播放器提供 HLS 的端口；未被占用时为 8010。",
     "HLS_KEEP_ALIVE_DESC": "播放器停止或暂停时继续切出静音分片，让听众的播放器不会停下；关闭则播放列表停止更新。",
     "HLS_ORIGIN": "源站",
     "HLS_ORIGIN_DESC": "文件在播放器之外的去处：无，或接受 PUT 和 DELETE 的 HTTP 源站（WebDAV 文件夹、CDN 的接收端、媒体服务器的 HTTP 源站）。",

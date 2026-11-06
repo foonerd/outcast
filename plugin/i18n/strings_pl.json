@@ -143,7 +143,7 @@
     "HLS_SERVE": "Serwuj z odtwarzacza",
     "HLS_SERVE_DESC": "Lista i segmenty pod http://<odtwarzacz>:<port>/<nazwa>.m3u8, z pamięci, dla wszystkiego w sieci.",
     "HLS_PORT": "Port",
-    "HLS_PORT_DESC": "Port, na którym odtwarzacz serwuje HLS; 8001, o ile wolny.",
+    "HLS_PORT_DESC": "Port, na którym odtwarzacz serwuje HLS; 8010, o ile wolny.",
     "HLS_KEEP_ALIVE_DESC": "Dalsze cięcie segmentów ciszy, gdy odtwarzacz jest zatrzymany lub wstrzymany, aby odtwarzacz słuchacza nie stanął; wyłączone zostawia listę w miejscu.",
     "HLS_ORIGIN": "Origin",
     "HLS_ORIGIN_DESC": "Dokąd trafiają pliki poza odtwarzaczem: nigdzie, albo na origin HTTP przyjmujący PUT i DELETE (folder WebDAV, ingest CDN, origin HTTP serwera mediów).",

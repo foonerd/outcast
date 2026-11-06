@@ -322,7 +322,7 @@
         { "id": "hls_segment_seconds", "element": "input", "label": "TRANSLATE.OUTCAST.HLS_SEGMENT", "doc": "TRANSLATE.OUTCAST.HLS_SEGMENT_DESC", "value": "4", "visibleIf": { "field": "hls_advanced", "value": true } },
         { "id": "hls_window", "element": "input", "label": "TRANSLATE.OUTCAST.HLS_WINDOW", "doc": "TRANSLATE.OUTCAST.HLS_WINDOW_DESC", "value": "6", "visibleIf": { "field": "hls_advanced", "value": true } },
         { "id": "hls_serve", "element": "switch", "label": "TRANSLATE.OUTCAST.HLS_SERVE", "doc": "TRANSLATE.OUTCAST.HLS_SERVE_DESC", "value": true, "visibleIf": { "field": "hls_enabled", "value": true } },
-        { "id": "hls_port", "element": "input", "label": "TRANSLATE.OUTCAST.HLS_PORT", "doc": "TRANSLATE.OUTCAST.HLS_PORT_DESC", "value": "8001", "visibleIf": { "field": "hls_serve", "value": true } },
+        { "id": "hls_port", "element": "input", "label": "TRANSLATE.OUTCAST.HLS_PORT", "doc": "TRANSLATE.OUTCAST.HLS_PORT_DESC", "value": "8010", "visibleIf": { "field": "hls_serve", "value": true } },
         { "id": "hls_keep_alive", "element": "switch", "label": "TRANSLATE.OUTCAST.KEEP_ALIVE", "doc": "TRANSLATE.OUTCAST.HLS_KEEP_ALIVE_DESC", "value": true, "visibleIf": { "field": "hls_enabled", "value": true } },
         { "id": "hls_origin", "element": "select", "label": "TRANSLATE.OUTCAST.HLS_ORIGIN", "doc": "TRANSLATE.OUTCAST.HLS_ORIGIN_DESC", "value": { "value": "none", "label": "TRANSLATE.OUTCAST.HLS_ORIGIN_NONE" },
           "options": [ { "value": "none", "label": "TRANSLATE.OUTCAST.HLS_ORIGIN_NONE" }, { "value": "http", "label": "TRANSLATE.OUTCAST.HLS_ORIGIN_HTTP" } ],

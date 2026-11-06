@@ -430,7 +430,7 @@ impl Hls {
         6
     }
     fn default_port() -> u16 {
-        8001
+        8010
     }
     pub fn tidy(&mut self) {
         self.name = self
@@ -905,7 +905,7 @@ mod tests {
         assert_eq!(u.hls.name, "mystationlive");
         assert_eq!(
             (u.hls.segment_seconds, u.hls.window, u.hls.port),
-            (4, 3, 8001)
+            (4, 3, 8010)
         );
         assert_eq!(u.hls.origin_url, "https://o.example.com/radio");
         assert!(u.hls.enabled);

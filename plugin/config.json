@@ -132,7 +132,7 @@
   "hls_segment_seconds": { "type": "string", "value": "4" },
   "hls_window": { "type": "string", "value": "6" },
   "hls_serve": { "type": "boolean", "value": true },
-  "hls_port": { "type": "string", "value": "8001" },
+  "hls_port": { "type": "string", "value": "8010" },
   "hls_keep_alive": { "type": "boolean", "value": true },
   "hls_origin": { "type": "string", "value": "none" },
   "hls_origin_url": { "type": "string", "value": "" },

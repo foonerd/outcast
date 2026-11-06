@@ -143,7 +143,7 @@
     "HLS_SERVE": "Aanbieden op de speler",
     "HLS_SERVE_DESC": "De afspeellijst en de segmenten op http://<speler>:<poort>/<naam>.m3u8, uit het geheugen, voor alles op het netwerk.",
     "HLS_PORT": "Poort",
-    "HLS_PORT_DESC": "De poort waarop de speler HLS aanbiedt; 8001 tenzij bezet.",
+    "HLS_PORT_DESC": "De poort waarop de speler HLS aanbiedt; 8010 tenzij bezet.",
     "HLS_KEEP_ALIVE_DESC": "Segmenten van stilte blijven knippen terwijl de speler gestopt of gepauzeerd is, zodat de speler van de luisteraar doorgaat; uit laat de afspeellijst stilstaan.",
     "HLS_ORIGIN": "Origin",
     "HLS_ORIGIN_DESC": "Waar de bestanden heen gaan buiten de speler: nergens, of naar een HTTP-origin die PUT en DELETE aanneemt (een WebDAV-map, de ingest van een CDN, de HTTP-origin van een mediaserver).",

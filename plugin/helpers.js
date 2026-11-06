@@ -442,7 +442,7 @@ function uplinksFrom(get) {
             ...encodingFrom(get, 'hls'),
             segment_seconds: num(get('hls_segment_seconds', '4'), 4),
             window: num(get('hls_window', '6'), 6),
-            port: get('hls_serve', true) === false ? 0 : num(get('hls_port', '8001'), 8001),
+            port: get('hls_serve', true) === false ? 0 : num(get('hls_port', '8010'), 8010),
             keep_alive: get('hls_keep_alive', true) !== false,
             origin: str('hls_origin', 'none') === 'http' ? 'http' : 'none',
             origin_url: str('hls_origin_url', ''),

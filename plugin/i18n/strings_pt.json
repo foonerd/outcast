@@ -143,7 +143,7 @@
     "HLS_SERVE": "Servir no leitor",
     "HLS_SERVE_DESC": "A lista e os segmentos em http://<leitor>:<porta>/<nome>.m3u8, da memória, para tudo o que esteja na rede.",
     "HLS_PORT": "Porta",
-    "HLS_PORT_DESC": "A porta em que o leitor serve HLS; 8001 salvo se ocupada.",
+    "HLS_PORT_DESC": "A porta em que o leitor serve HLS; 8010 salvo se ocupada.",
     "HLS_KEEP_ALIVE_DESC": "Continuar a cortar segmentos de silêncio enquanto o leitor está parado ou em pausa, para que o leitor do ouvinte continue; desligado deixa a lista parada.",
     "HLS_ORIGIN": "Origem",
     "HLS_ORIGIN_DESC": "Para onde vão os ficheiros além do leitor: para lado nenhum, ou para uma origem HTTP que aceite PUT e DELETE (uma pasta WebDAV, o ingest de uma CDN, a origem HTTP de um servidor de media).",

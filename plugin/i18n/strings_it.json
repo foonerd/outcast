@@ -143,7 +143,7 @@
     "HLS_SERVE": "Servire dal lettore",
     "HLS_SERVE_DESC": "La playlist e i segmenti su http://<lettore>:<porta>/<nome>.m3u8, dalla memoria, per qualsiasi cosa in rete.",
     "HLS_PORT": "Porta",
-    "HLS_PORT_DESC": "La porta su cui il lettore serve HLS; 8001 se libera.",
+    "HLS_PORT_DESC": "La porta su cui il lettore serve HLS; 8010 se libera.",
     "HLS_KEEP_ALIVE_DESC": "Continuare a tagliare segmenti di silenzio mentre il lettore è fermo o in pausa, così il lettore dell'ascoltatore prosegue; spento lascia ferma la playlist.",
     "HLS_ORIGIN": "Origine",
     "HLS_ORIGIN_DESC": "Dove vanno i file oltre il lettore: da nessuna parte, o a un'origine HTTP che accetta PUT e DELETE (una cartella WebDAV, l'ingest di una CDN, l'origine HTTP di un media server).",
