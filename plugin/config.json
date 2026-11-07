@@ -123,6 +123,8 @@
   "ts_keep_alive": { "type": "boolean", "value": true },
   "hls_enabled": { "type": "boolean", "value": false },
   "hls_name": { "type": "string", "value": "stream" },
+  "hls_form": { "type": "string", "value": "packed" },
+  "hls_dash": { "type": "boolean", "value": false },
   "hls_preset": { "type": "string", "value": "aac-128-48000" },
   "hls_advanced": { "type": "boolean", "value": false },
   "hls_codec": { "type": "string", "value": "aac" },

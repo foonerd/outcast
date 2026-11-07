@@ -2,6 +2,7 @@
 //! its transport. What they share is here: the status entry they keep, the
 //! encoder they run per segment, the way they wait on their two channels.
 
+pub mod fmp4;
 pub mod hls;
 pub mod http;
 pub mod icecast;

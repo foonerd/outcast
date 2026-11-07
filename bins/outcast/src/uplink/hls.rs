@@ -1,11 +1,13 @@
 //! The HLS uplink: the stream as HTTP Live Streaming, packed audio (AAC in
-//! ADTS or MP3 frames) cut into segments of a few seconds with a sliding
-//! playlist, the way a browser, a phone, a smart speaker and a CDN take it.
-//! The segments and the playlist live in the core's memory, never on the
-//! player's card: served from there on a port of the player's for the LAN,
-//! and put on the operator's origin by an uploader of their own, which never
-//! holds the stream up. Each segment carries an ID3 tag at its head with the
-//! timestamp HLS wants of packed audio, and the title the player shows.
+//! ADTS or MP3 frames) or fragmented MP4 (CMAF, from evopeg 0.2.0 on; the
+//! same segments as DASH when asked), cut into segments of a few seconds
+//! with a sliding playlist, the way a browser, a phone, a smart speaker and
+//! a CDN take it. The segments and the playlist live in the core's memory,
+//! never on the player's card: served from there on a port of the player's
+//! for the LAN, and put on the operator's origin by an uploader of their
+//! own, which never holds the stream up. Each packed segment carries an ID3
+//! tag at its head with the timestamp HLS wants and the title the player
+//! shows; a fragmented one carries the title as an `emsg` when it changes.
 
 use std::collections::VecDeque;
 use std::io::{Read, Write};
@@ -19,8 +21,9 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use stream::conform::Conformer;
 use stream::feed::{Event, Segment as Shape};
 
-use crate::config::{Codec, Hls, OriginKind};
+use crate::config::{Codec, Form, Hls, OriginKind};
 use crate::encoder::{Container, Encoder, Output, Recipe};
+use crate::uplink::fmp4::{self, Boxes, Part};
 use crate::uplink::http::{Client, Target};
 use crate::uplink::s3::Signer;
 use crate::uplink::{self, Ctx, Next, Silence, GRACE, STILL};
@@ -164,6 +167,15 @@ pub struct Piece {
     /// (the encoder started anew), and the number is the playlist's discontinuity
     /// sequence.
     pub timeline: u64,
+    /// Where it starts and how long it is on the track's clock (samples for
+    /// packed audio, the track's timescale for fragmented MP4).
+    pub tfdt: u64,
+    pub duration: u64,
+}
+
+/// The init segment's name for a timeline, `<name>-init-<timeline>.mp4`.
+pub fn init_name(name: &str, timeline: u64) -> String {
+    format!("{name}-init-{timeline}.mp4")
 }
 
 /// A syncsafe 28-bit size as ID3v2 writes it.
@@ -209,9 +221,13 @@ pub struct Segmenter {
     name: String,
     extension: &'static str,
     target: f64,
+    form: Form,
     frames: Frames,
+    boxes: Boxes,
     gathered: Vec<u8>,
     gathered_samples: u64,
+    /// Where the gathered fragments start on the track's clock.
+    gathered_tfdt: u64,
     rate: u32,
     /// Samples since the start, the timeline the ID3 timestamp follows.
     position: u64,
@@ -219,6 +235,10 @@ pub struct Segmenter {
     timeline: u64,
     began: f64,
     pub title: String,
+    /// The title changed since the last fragmented segment: the next carries it.
+    title_due: bool,
+    /// An init segment the reader found, for the store, with its timeline.
+    pub new_init: Option<(u64, Arc<Vec<u8>>)>,
 }
 
 fn now_seconds() -> f64 {
@@ -233,23 +253,47 @@ impl Segmenter {
     pub fn new(
         name: &str,
         codec: Codec,
+        form: Form,
         segment_seconds: u32,
         first_seq: u64,
         timeline: u64,
     ) -> Self {
         Self {
             name: name.to_string(),
-            extension: codec.extension(),
+            extension: match form {
+                Form::Packed => codec.extension(),
+                Form::Fmp4 => "m4s",
+            },
             target: f64::from(segment_seconds.max(1)),
+            form,
             frames: Frames::new(codec),
+            boxes: Boxes::default(),
             gathered: Vec::new(),
             gathered_samples: 0,
+            gathered_tfdt: 0,
             rate: 0,
             position: 0,
             next_seq: first_seq,
             timeline,
             began: 0.0,
             title: String::new(),
+            title_due: false,
+            new_init: None,
+        }
+    }
+
+    /// The title the next fragmented segment carries as timed metadata.
+    pub fn title_changed(&mut self, title: &str) {
+        self.title = title.to_string();
+        self.title_due = true;
+    }
+
+    /// The track's clock: samples per second for packed audio, the init's timescale
+    /// for fragmented MP4 (the same number with evopeg's muxer).
+    pub fn timescale(&self) -> u32 {
+        match self.form {
+            Form::Packed => self.rate,
+            Form::Fmp4 => self.boxes.timescale(),
         }
     }
 
@@ -260,18 +304,63 @@ impl Segmenter {
 
     /// The encoder's bytes in, the segments that became whole out.
     pub fn push(&mut self, bytes: &[u8], out: &mut Vec<Piece>) {
-        let mut frames = Vec::new();
-        self.frames.push(bytes, &mut frames);
-        for f in frames {
-            if self.gathered.is_empty() {
-                self.began = now_seconds();
-                self.rate = f.rate;
+        match self.form {
+            Form::Packed => {
+                let mut frames = Vec::new();
+                self.frames.push(bytes, &mut frames);
+                for f in frames {
+                    if self.gathered.is_empty() {
+                        self.began = now_seconds();
+                        self.rate = f.rate;
+                    }
+                    self.gathered.extend_from_slice(&f.bytes);
+                    self.gathered_samples += u64::from(f.samples);
+                    let seconds = self.gathered_samples as f64 / f64::from(self.rate.max(1));
+                    if seconds >= self.target {
+                        out.push(self.cut());
+                    }
+                }
             }
-            self.gathered.extend_from_slice(&f.bytes);
-            self.gathered_samples += u64::from(f.samples);
-            let seconds = self.gathered_samples as f64 / f64::from(self.rate.max(1));
-            if seconds >= self.target {
-                out.push(self.cut());
+            Form::Fmp4 => {
+                let mut parts = Vec::new();
+                self.boxes.push(bytes, &mut parts);
+                for part in parts {
+                    match part {
+                        Part::Init {
+                            bytes, timescale, ..
+                        } => {
+                            self.rate = timescale;
+                            self.new_init = Some((self.timeline, Arc::new(bytes)));
+                        }
+                        Part::Fragment {
+                            bytes,
+                            tfdt,
+                            duration,
+                            ..
+                        } => {
+                            if self.gathered.is_empty() {
+                                self.began = now_seconds();
+                                self.gathered_tfdt = tfdt;
+                                if self.title_due && !self.title.is_empty() {
+                                    let tag = id3_tag(0, &self.title);
+                                    self.gathered.extend_from_slice(&fmp4::emsg_id3(
+                                        self.rate.max(1),
+                                        tfdt,
+                                        &tag,
+                                    ));
+                                    self.title_due = false;
+                                }
+                            }
+                            self.gathered.extend_from_slice(&bytes);
+                            self.gathered_samples += duration;
+                            let seconds =
+                                self.gathered_samples as f64 / f64::from(self.rate.max(1));
+                            if seconds >= self.target {
+                                out.push(self.cut());
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -285,10 +374,16 @@ impl Segmenter {
 
     fn cut(&mut self) -> Piece {
         let rate = u64::from(self.rate.max(1));
-        let timestamp = self.position * 90_000 / rate;
-        let mut bytes = id3_tag(timestamp, &self.title);
+        let (mut bytes, tfdt) = match self.form {
+            Form::Packed => {
+                let timestamp = self.position * 90_000 / rate;
+                (id3_tag(timestamp, &self.title), self.position)
+            }
+            Form::Fmp4 => (Vec::new(), self.gathered_tfdt),
+        };
         bytes.append(&mut self.gathered);
         let seconds = self.gathered_samples as f64 / rate as f64;
+        let duration = self.gathered_samples;
         self.position += self.gathered_samples;
         self.gathered_samples = 0;
         let seq = self.next_seq;
@@ -301,6 +396,8 @@ impl Segmenter {
             seconds,
             began: self.began,
             timeline: self.timeline,
+            tfdt,
+            duration,
         }
     }
 }
@@ -309,10 +406,18 @@ impl Segmenter {
 /// uploader reads.
 pub struct Store {
     pub name: String,
-    content_type: &'static str,
+    pub content_type: &'static str,
+    pub form: Form,
+    pub dash: bool,
+    codec: Codec,
+    channels: u32,
     window: usize,
     target: u32,
     pieces: VecDeque<Arc<Piece>>,
+    /// The init segment of each timeline still held, fragmented MP4 only.
+    inits: Vec<(u64, Arc<Vec<u8>>)>,
+    /// The track's clock, from the segmenter.
+    pub timescale: u32,
     /// The number the next piece gets: the core's count of segments cut.
     pub next_seq: u64,
 }
@@ -321,10 +426,19 @@ impl Store {
     pub fn new(cfg: &Hls) -> Self {
         Self {
             name: cfg.name.clone(),
-            content_type: cfg.codec.content_type(),
+            content_type: match cfg.form {
+                Form::Packed => cfg.codec.content_type(),
+                Form::Fmp4 => "audio/mp4",
+            },
+            form: cfg.form,
+            dash: cfg.dash && cfg.form == Form::Fmp4,
+            codec: cfg.codec,
+            channels: if cfg.channels == 0 { 2 } else { cfg.channels },
             window: cfg.window as usize,
             target: cfg.segment_seconds,
             pieces: VecDeque::new(),
+            inits: Vec::new(),
+            timescale: 0,
             next_seq: SEQUENCE.load(Ordering::Relaxed),
         }
     }
@@ -333,12 +447,36 @@ impl Store {
         format!("{}.m3u8", self.name)
     }
 
+    pub fn manifest_name(&self) -> String {
+        format!("{}.mpd", self.name)
+    }
+
+    pub fn add_init(&mut self, timeline: u64, bytes: Arc<Vec<u8>>) {
+        self.inits.retain(|(t, _)| *t != timeline);
+        self.inits.push((timeline, bytes));
+    }
+
+    /// The inits of the timelines the pieces name, oldest first.
+    pub fn inits_for(&self, pieces: &[Arc<Piece>]) -> Vec<(u64, String, Arc<Vec<u8>>)> {
+        let mut out = Vec::new();
+        for (t, b) in &self.inits {
+            if pieces.iter().any(|p| p.timeline == *t) {
+                out.push((*t, init_name(&self.name, *t), Arc::clone(b)));
+            }
+        }
+        out
+    }
+
     pub fn push(&mut self, piece: Piece) {
         self.next_seq = piece.seq + 1;
         self.pieces.push_back(Arc::new(piece));
         while self.pieces.len() > self.window + HOLD {
             self.pieces.pop_front();
         }
+        // An init stays while a kept piece needs it, or while it is the newest.
+        let newest = self.inits.last().map(|(t, _)| *t);
+        self.inits
+            .retain(|(t, _)| Some(*t) == newest || self.pieces.iter().any(|p| p.timeline == *t));
     }
 
     /// The pieces the playlist lists: the newest `window`.
@@ -355,7 +493,10 @@ impl Store {
             target = target.max(p.seconds);
         }
         let mut out = String::new();
-        out.push_str("#EXTM3U\n#EXT-X-VERSION:3\n");
+        out.push_str(match self.form {
+            Form::Packed => "#EXTM3U\n#EXT-X-VERSION:3\n",
+            Form::Fmp4 => "#EXTM3U\n#EXT-X-VERSION:7\n",
+        });
         out.push_str(&format!("#EXT-X-TARGETDURATION:{}\n", target.ceil() as u64));
         let first = pieces.first();
         out.push_str(&format!(
@@ -366,11 +507,19 @@ impl Store {
             "#EXT-X-DISCONTINUITY-SEQUENCE:{}\n",
             first.map(|p| p.timeline).unwrap_or(0)
         ));
-        let mut timeline = first.map(|p| p.timeline).unwrap_or(0);
+        let mut timeline: Option<u64> = None;
         for p in pieces {
-            if p.timeline != timeline {
+            if timeline.is_some_and(|t| t != p.timeline) {
                 out.push_str("#EXT-X-DISCONTINUITY\n");
-                timeline = p.timeline;
+            }
+            if timeline != Some(p.timeline) {
+                if self.form == Form::Fmp4 {
+                    out.push_str(&format!(
+                        "#EXT-X-MAP:URI=\"{}\"\n",
+                        init_name(&self.name, p.timeline)
+                    ));
+                }
+                timeline = Some(p.timeline);
             }
             out.push_str(&format!("#EXT-X-PROGRAM-DATE-TIME:{}\n", iso8601(p.began)));
             out.push_str(&format!("#EXTINF:{:.3},\n{}\n", p.seconds, p.name));
@@ -378,13 +527,72 @@ impl Store {
         out
     }
 
+    /// The DASH manifest for a set of pieces, from the same segments.
+    pub fn manifest(&self, pieces: &[Arc<Piece>]) -> String {
+        let codecs = match self.codec {
+            Codec::Aac => "mp4a.40.2",
+            Codec::Mp3 => "mp4a.6B",
+            Codec::Flac => "fLaC",
+            Codec::Opus => "Opus",
+            _ => "mp4a.40.2",
+        };
+        // The bandwidth as measured: the fullest segment's bits per second.
+        let bandwidth = pieces
+            .iter()
+            .map(|p| (p.bytes.len() as f64 * 8.0 / p.seconds.max(0.001)) as u64)
+            .max()
+            .unwrap_or(0);
+        let names: Vec<String> = pieces
+            .iter()
+            .map(|p| init_name(&self.name, p.timeline))
+            .collect();
+        let listed: Vec<fmp4::Listed> = pieces
+            .iter()
+            .zip(names.iter())
+            .map(|(p, n)| fmp4::Listed {
+                seq: p.seq,
+                timeline: p.timeline,
+                tfdt: p.tfdt,
+                duration: p.duration,
+                began: p.began,
+                init_name: n,
+            })
+            .collect();
+        fmp4::mpd(
+            &self.name,
+            "m4s",
+            codecs,
+            "audio/mp4",
+            self.channels,
+            self.timescale,
+            bandwidth,
+            self.target,
+            self.window as u32,
+            self.timescale.max(1),
+            now_seconds(),
+            &listed,
+        )
+    }
+
+    /// A file by name: a segment, or an init segment.
+    pub fn file(&self, name: &str) -> Option<(Arc<Vec<u8>>, &'static str)> {
+        if let Some(p) = self.pieces.iter().find(|p| p.name == name) {
+            return Some((Arc::clone(&p.bytes), self.content_type));
+        }
+        self.inits
+            .iter()
+            .find(|(t, _)| init_name(&self.name, *t) == name)
+            .map(|(_, b)| (Arc::clone(b), "audio/mp4"))
+    }
+
+    #[cfg(test)]
     pub fn piece(&self, name: &str) -> Option<Arc<Piece>> {
         self.pieces.iter().find(|p| p.name == name).cloned()
     }
 }
 
 /// A moment as the playlist dates it: `2026-11-06T16:40:05.250Z`.
-fn iso8601(seconds: f64) -> String {
+pub fn iso8601(seconds: f64) -> String {
     let whole = seconds.floor() as i64;
     let millis = ((seconds - whole as f64) * 1000.0).round() as i64;
     let days = whole.div_euclid(86_400);
@@ -451,8 +659,14 @@ fn serve(mut stream: TcpStream, store: Arc<Mutex<Store>>) {
                 "no-cache, no-store",
                 Arc::new(s.playlist(&s.listed()).into_bytes()),
             )
-        } else if let Some(p) = s.piece(path) {
-            (s.content_type, "max-age=3600", Arc::clone(&p.bytes))
+        } else if s.dash && path == s.manifest_name() {
+            (
+                "application/dash+xml",
+                "no-cache, no-store",
+                Arc::new(s.manifest(&s.listed()).into_bytes()),
+            )
+        } else if let Some((bytes, content_type)) = s.file(path) {
+            (content_type, "max-age=3600", bytes)
         } else {
             drop(s);
             let _ = stream.write_all(
@@ -535,11 +749,15 @@ fn origin_client(cfg: &Hls) -> Result<Client, String> {
 /// first, then the playlist naming those that landed; pieces that fell out of
 /// the window and the hold removed. An origin that refuses is tried again with
 /// a backoff; the playlist on it is only ever written after its pieces.
+/// `first_seq` and `timeline` are the worker's own, read before anything was cut,
+/// so the sweep of a predecessor's files never touches this worker's.
 fn upload(
     cfg: Hls,
     store: Arc<Mutex<Store>>,
     nudge: Receiver<()>,
     landed_count: Arc<AtomicU64>,
+    first_seq: u64,
+    timeline: u64,
     ctx: Ctx,
 ) {
     let mut client = match origin_client(&cfg) {
@@ -558,11 +776,14 @@ fn upload(
     let mut told_ok = false;
     // The files a worker before this one left on the origin, under the same name:
     // the numbers just below this worker's first, swept once the origin answers.
-    let mut sweep: Option<std::ops::Range<u64>> = {
-        let first = SEQUENCE.load(Ordering::Relaxed);
-        (first > 0).then(|| first.saturating_sub((cfg.window as usize + HOLD) as u64 * 2)..first)
+    let mut sweep: Option<std::ops::Range<u64>> = (first_seq > 0)
+        .then(|| first_seq.saturating_sub((cfg.window as usize + HOLD) as u64 * 2)..first_seq);
+    let first_timeline = timeline;
+    let extension = match cfg.form {
+        Form::Packed => cfg.codec.extension(),
+        Form::Fmp4 => "m4s",
     };
-    let extension = cfg.codec.extension();
+    let mut inits_landed: Vec<u64> = Vec::new();
     // A nudge for every segment cut; the worker gone ends the uploader.
     while let Ok(()) | Err(RecvTimeoutError::Timeout) =
         nudge.recv_timeout(Duration::from_millis(500))
@@ -570,9 +791,11 @@ fn upload(
         if Instant::now() < next_try {
             continue;
         }
-        let (listed, content_type, playlist_name) = {
+        let (listed, content_type, playlist_name, inits) = {
             let s = store.lock().unwrap_or_else(|e| e.into_inner());
-            (s.listed(), s.content_type, s.playlist_name())
+            let listed = s.listed();
+            let inits = s.inits_for(&listed);
+            (listed, s.content_type, s.playlist_name(), inits)
         };
         let Some(newest) = listed.last().map(|p| p.seq) else {
             continue;
@@ -588,7 +811,32 @@ fn upload(
             .cloned()
             .collect();
         let mut failed = None;
+        // The init segments first: a playlist never names a segment whose init is
+        // not there.
+        for (t, name, bytes) in &inits {
+            if inits_landed.contains(t) {
+                continue;
+            }
+            match client.put(name, "audio/mp4", "max-age=3600", bytes) {
+                Ok(code) if (200..300).contains(&code) => inits_landed.push(*t),
+                Ok(code) => {
+                    failed = Some(format!("{name}: the origin answered {code}"));
+                    break;
+                }
+                Err(e) => {
+                    failed = Some(format!("{name}: {e}"));
+                    break;
+                }
+            }
+        }
         for p in due {
+            if failed.is_some() {
+                break;
+            }
+            if !inits.is_empty() && !inits_landed.contains(&p.timeline) {
+                // A segment whose init did not land stays for the next round.
+                break;
+            }
             match client.put(&p.name, content_type, "max-age=3600", &p.bytes) {
                 Ok(code) if (200..300).contains(&code) => {
                     landed_count.store(p.seq + 1, Ordering::Relaxed);
@@ -614,6 +862,9 @@ fn upload(
                 for n in range {
                     let _ = client.delete(&format!("{}-{n}.{extension}", cfg.name));
                 }
+                for t in first_timeline.saturating_sub(4)..first_timeline {
+                    let _ = client.delete(&init_name(&cfg.name, t));
+                }
             }
             // The playlist of what landed, in the window.
             let skip = landed.len().saturating_sub(cfg.window as usize);
@@ -626,6 +877,24 @@ fn upload(
                 Ok(code) if (200..300).contains(&code) => {}
                 Ok(code) => failed = Some(format!("{playlist_name}: the origin answered {code}")),
                 Err(e) => failed = Some(format!("{playlist_name}: {e}")),
+            }
+            let (dash, manifest_name, manifest) = {
+                let s = store.lock().unwrap_or_else(|e| e.into_inner());
+                (s.dash, s.manifest_name(), s.manifest(&on_origin))
+            };
+            if dash && failed.is_none() {
+                match client.put(
+                    &manifest_name,
+                    "application/dash+xml",
+                    "no-cache",
+                    manifest.as_bytes(),
+                ) {
+                    Ok(code) if (200..300).contains(&code) => {}
+                    Ok(code) => {
+                        failed = Some(format!("{manifest_name}: the origin answered {code}"))
+                    }
+                    Err(e) => failed = Some(format!("{manifest_name}: {e}")),
+                }
             }
         }
         match failed {
@@ -655,14 +924,23 @@ pub fn run(cfg: Hls, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u8>>>
     let store = Arc::new(Mutex::new(Store::new(&cfg)));
     ctx.state("idle", None);
     ctx.log(&format!(
-        "{} as {} in segments of {} s, {} listed{}{}{}",
+        "{} as {} in {} segments of {} s, {} listed{}{}{}{}",
         store
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .playlist_name(),
         cfg.codec.extension(),
+        match cfg.form {
+            Form::Packed => "packed",
+            Form::Fmp4 => "fragmented MP4",
+        },
         cfg.segment_seconds,
         cfg.window,
+        if cfg.dash && cfg.form == Form::Fmp4 {
+            ", DASH too"
+        } else {
+            ""
+        },
         if cfg.port != 0 {
             format!(", served on port {}", cfg.port)
         } else {
@@ -713,6 +991,10 @@ pub fn run(cfg: Hls, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u8>>>
 
     // The uploader, where an origin is set; what landed is counted for the status.
     let landed_count = Arc::new(AtomicU64::new(0));
+    // This worker's numbering, taken once: the uploader sweeps below it, the
+    // segmenter counts on from it.
+    let first_seq = SEQUENCE.load(Ordering::Relaxed);
+    let timeline = TIMELINES.fetch_add(1, Ordering::Relaxed);
     let (nudge, uploader): (Option<SyncSender<()>>, Option<JoinHandle<()>>) =
         if cfg.origin != OriginKind::None {
             let (tx, rx) = mpsc::sync_channel::<()>(4);
@@ -722,7 +1004,7 @@ pub fn run(cfg: Hls, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u8>>>
             let landed = Arc::clone(&landed_count);
             let t = std::thread::Builder::new()
                 .name("hls-upload".into())
-                .spawn(move || upload(cfg2, store, rx, landed, ctx2))
+                .spawn(move || upload(cfg2, store, rx, landed, first_seq, timeline, ctx2))
                 .expect("hls upload thread");
             (Some(tx), Some(t))
         } else {
@@ -732,9 +1014,10 @@ pub fn run(cfg: Hls, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u8>>>
     let mut segmenter = Segmenter::new(
         &cfg.name,
         cfg.codec,
+        cfg.form,
         cfg.segment_seconds,
-        SEQUENCE.load(Ordering::Relaxed),
-        TIMELINES.fetch_add(1, Ordering::Relaxed),
+        first_seq,
+        timeline,
     );
     let mut segment: Option<Shape> = None;
     let mut encoder: Option<Encoder> = None;
@@ -758,11 +1041,17 @@ pub fn run(cfg: Hls, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u8>>>
             *bytes += out.len() as u64;
             segmenter.push(&out, pieces);
         }
+        if let Some((timeline, init)) = segmenter.new_init.take() {
+            let mut s = store.lock().unwrap_or_else(|e| e.into_inner());
+            s.timescale = segmenter.timescale();
+            s.add_init(timeline, init);
+        }
         if pieces.is_empty() {
             return;
         }
         let (cut, listed) = {
             let mut s = store.lock().unwrap_or_else(|e| e.into_inner());
+            s.timescale = segmenter.timescale();
             for p in pieces.drain(..) {
                 s.push(p);
             }
@@ -799,7 +1088,12 @@ pub fn run(cfg: Hls, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u8>>>
                 rate: cfg.rate,
                 title: String::new(),
                 output: Output::Pipe,
-                container: Container::Frames,
+                container: match cfg.form {
+                    Form::Packed => Container::Frames,
+                    Form::Fmp4 => Container::Fmp4 {
+                        fragment_seconds: cfg.segment_seconds,
+                    },
+                },
             };
             match Encoder::start(&ctx.evopeg, &wanted, &recipe, Some(tx), &ctx.id) {
                 Ok(e) => {
@@ -904,7 +1198,7 @@ pub fn run(cfg: Hls, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u8>>>
                 }
             }
             Next::Event(Event::Title(t)) => {
-                segmenter.title = t.clone();
+                segmenter.title_changed(&t);
                 ctx.update(|u| u.title = t);
             }
             Next::Pcm(piece) => {
@@ -1023,7 +1317,7 @@ mod tests {
 
     #[test]
     fn segments_are_cut_on_a_frame_past_the_length_with_a_running_timeline() {
-        let mut seg = Segmenter::new("live", Codec::Aac, 1, 0, 0);
+        let mut seg = Segmenter::new("live", Codec::Aac, Form::Packed, 1, 0, 0);
         let mut out = Vec::new();
         // 48 frames of 1024 at 48 kHz are 1.024 s: the 47th frame crosses 1 s.
         for _ in 0..100 {
@@ -1047,7 +1341,7 @@ mod tests {
         assert_eq!(out.len(), 3);
         assert!(out[2].timeline > 0, "a new timeline");
         // A segmenter made after another numbers on from it.
-        let later = Segmenter::new("live", Codec::Aac, 1, 7, 3);
+        let later = Segmenter::new("live", Codec::Aac, Form::Packed, 1, 7, 3);
         assert_eq!((later.next_seq, later.timeline), (7, 3));
     }
 
@@ -1071,6 +1365,8 @@ mod tests {
                     2..=5 => 1,
                     _ => 2,
                 },
+                tfdt: seq * 192_512,
+                duration: 192_512,
             });
         }
         let listed = store.listed();

@@ -247,7 +247,7 @@ test('the HLS uplink serves on a port, goes to an origin, or both, never nowhere
     const kept = {};
     h.applyHls({ ...good, hls_name: ' my station ', hls_origin: { value: 'http' }, hls_origin_url: ' http://o.example.com/radio ', hls_origin_user: 'ingest', hls_origin_password: 'pw' }, (k, v) => { kept[k] = v; });
     let u = h.uplinksFrom((k, d) => (k in kept ? kept[k] : d)).hls;
-    assert.deepEqual(u, { enabled: true, name: 'my station', codec: 'aac', bitrate: 128, rate: 48000, channels: 2, segment_seconds: 4, window: 6, port: 8010, keep_alive: true, origin: 'http', origin_url: 'http://o.example.com/radio', origin_user: 'ingest', origin_password: 'pw', ca_file: '',
+    assert.deepEqual(u, { enabled: true, name: 'my station', codec: 'aac', bitrate: 128, rate: 48000, channels: 2, segment_seconds: 4, window: 6, form: 'packed', dash: false, port: 8010, keep_alive: true, origin: 'http', origin_url: 'http://o.example.com/radio', origin_user: 'ingest', origin_password: 'pw', ca_file: '',
         s3_endpoint: '', s3_bucket: '', s3_prefix: '', s3_region: 'us-east-1', s3_access_key: '', s3_secret_key: '', s3_path_style: true });
     // A bucket: the endpoint, the bucket name, the keys are needed; the prefix is bare of slashes.
     const s3 = { ...good, hls_origin: { value: 's3' }, hls_s3_endpoint: 'https://s3.eu-west-1.amazonaws.com', hls_s3_bucket: 'my-radio', hls_s3_access_key: 'AKIA', hls_s3_secret_key: 'sk' };
@@ -266,6 +266,16 @@ test('the HLS uplink serves on a port, goes to an origin, or both, never nowhere
     assert.equal(u.port, 0);
     assert.deepEqual([u.codec, u.bitrate, u.rate, u.segment_seconds, u.window], ['mp3', 192, 44100, 6, 10]);
     assert.equal(h.uplinksFrom((k, d) => d).hls.origin, 'none');
+    // Packed audio takes AAC or MP3 alone; fragmented MP4 takes FLAC and Opus, and DASH rides on it.
+    assert.equal(h.validateHls({ ...good, hls_preset: { value: 'flac-48000' } }, t), 'ERR_HLS_PACKED_CODEC');
+    assert.equal(h.validateHls({ ...good, hls_preset: { value: 'flac-48000' }, hls_form: { value: 'fmp4' } }, t), null);
+    assert.equal(h.validateHls({ ...good, hls_advanced: true, hls_codec: { value: 'opus' }, hls_bitrate: '96', hls_rate: '48000', hls_segment_seconds: '4', hls_window: '6' }, t), 'ERR_HLS_PACKED_CODEC');
+    h.applyHls({ ...good, hls_form: { value: 'fmp4' }, hls_dash: true, hls_preset: { value: 'flac-48000' } }, (k, v) => { kept[k] = v; });
+    u = h.uplinksFrom((k, d) => (k in kept ? kept[k] : d)).hls;
+    assert.deepEqual([u.form, u.dash, u.codec, u.bitrate, u.rate], ['fmp4', true, 'flac', 0, 48000]);
+    h.applyHls({ ...good, hls_form: { value: 'packed' }, hls_dash: true }, (k, v) => { kept[k] = v; });
+    u = h.uplinksFrom((k, d) => (k in kept ? kept[k] : d)).hls;
+    assert.deepEqual([u.form, u.dash], ['packed', false], 'DASH only with fragmented MP4');
     const content = [{ id: 'hls_enabled' }, { id: 'hls_port' }, { id: 'hls_window' }];
     h.hideWhenOff(content, 'hls', (k, d) => ({ hls_enabled: false, hls_serve: true, hls_advanced: true }[k] ?? d));
     assert.deepEqual(content.map((c) => c.hidden === true), [false, true, true]);

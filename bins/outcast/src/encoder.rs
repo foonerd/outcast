@@ -47,6 +47,9 @@ pub enum Container {
     /// Bare frames for a segmenter: ADTS for AAC, MP3 frames without an ID3 tag
     /// or a Xing frame.
     Frames,
+    /// Fragmented MP4 as CMAF wants it (evopeg 0.2.0 or later): the init segment
+    /// once, then a fragment every so many seconds, each on the pipe as it closes.
+    Fmp4 { fragment_seconds: u32 },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -113,7 +116,22 @@ pub fn arguments(segment: &Segment, recipe: &Recipe) -> Vec<String> {
         Container::Native | Container::Frames => muxer.into(),
         Container::MpegTs => "mpegts".into(),
         Container::Flv => "flv".into(),
+        Container::Fmp4 { .. } => "mp4".into(),
     });
+    if let Container::Fmp4 { fragment_seconds } = recipe.container {
+        // The moov before any sample (a pipe cannot seek back), fragments by
+        // duration and never by keyframe (every audio sample is one), each fragment
+        // out as it closes.
+        a.push("-movflags".into());
+        a.push("+cmaf".into());
+        a.push("-frag_duration".into());
+        a.push(format!(
+            "{}",
+            u64::from(fragment_seconds.max(1)) * 1_000_000
+        ));
+        a.push("-flush_packets".into());
+        a.push("1".into());
+    }
     match &recipe.output {
         Output::Pipe => a.push("pipe:1".into()),
         Output::File(path) => {
@@ -321,6 +339,31 @@ mod tests {
         );
         let s = a.join(" ");
         assert!(s.ends_with("-f adts pipe:1") && !s.contains("xing"), "{s}");
+    }
+
+    #[test]
+    fn fragmented_mp4_takes_cmaf_fragments_by_duration_flushed() {
+        let a = arguments(
+            &segment(),
+            &Recipe {
+                codec: Codec::Flac,
+                bitrate: 0,
+                rate: 48000,
+                title: String::new(),
+                output: Output::Pipe,
+                container: Container::Fmp4 {
+                    fragment_seconds: 4,
+                },
+            },
+        );
+        let s = a.join(" ");
+        assert!(
+            s.ends_with(
+                "-c:a flac -f mp4 -movflags +cmaf -frag_duration 4000000 -flush_packets 1 pipe:1"
+            ),
+            "{s}"
+        );
+        assert!(!s.contains("frag_keyframe"));
     }
 
     #[test]

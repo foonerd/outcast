@@ -2,6 +2,17 @@
 
 All notable changes to Outcast Uplink. The format follows Keep a Changelog; the versions follow Semantic Versioning.
 
+## [0.1.13] - 2026-11-07
+
+### Added
+
+- HLS in fragmented MP4 (CMAF), from evopeg 0.2.0: AAC, FLAC (lossless HLS), MP3 or Opus in fragments of the segment's length, the init segment once per timeline, the playlist at version 7 with its map, the title as an `emsg` timed-metadata box when it changes; the segment form is the operator's choice, packed audio staying the default.
+- DASH beside the playlist, from the same fragmented segments: a dynamic manifest with a period per timeline, the segments as a timeline under a template by number, served on the player and put on the origin.
+
+### Changed
+
+- evopeg 0.2.0 (the `mp4` muxer; FFmpeg 9.0.2).
+
 ## [0.1.12] - 2026-11-06
 
 ### Added

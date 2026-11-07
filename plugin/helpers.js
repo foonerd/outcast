@@ -266,9 +266,17 @@ function validateHls(data, t) {
         (origin === 's3' && !/^[a-z0-9][a-z0-9.-]{1,62}$/.test(String(data.hls_s3_bucket || '').trim()) ? t('ERR_HLS_S3_BUCKET') : null) ||
         (origin === 's3' && !(String(data.hls_s3_access_key || '').trim() && String(data.hls_s3_secret_key || '')) ? t('ERR_HLS_S3_KEYS') : null) ||
         validateEncoding(data, 'hls', t) ||
+        (sel(data.hls_form) !== 'fmp4' && !['aac', 'mp3'].includes(hlsCodec(data)) ? t('ERR_HLS_PACKED_CODEC') : null) ||
         (data.hls_advanced === true ? checkRange(data.hls_segment_seconds, 'HLS_SEGMENT', 1, 30, t) : null) ||
         (data.hls_advanced === true ? checkRange(data.hls_window, 'HLS_WINDOW', 3, 60, t) : null) ||
         null;
+}
+
+// The codec the HLS section ends up with: the preset's, or the operator's under Advanced.
+function hlsCodec(data) {
+    if (data.hls_advanced === true) return String(sel(data.hls_codec) || 'aac');
+    const p = PRESETS[sel(data.hls_preset)] || PRESETS[DEFAULT_PRESET.hls];
+    return p.codec;
 }
 
 function originKind(v) {
@@ -281,6 +289,9 @@ function applyHls(data, set) {
     set('hls_enabled', on);
     if (!on) return;
     set('hls_name', String(data.hls_name || '').trim() || 'stream');
+    const form = sel(data.hls_form) === 'fmp4' ? 'fmp4' : 'packed';
+    set('hls_form', form);
+    set('hls_dash', form === 'fmp4' && data.hls_dash === true);
     applyEncoding(data, 'hls', set);
     if (data.hls_advanced === true) {
         set('hls_segment_seconds', String(data.hls_segment_seconds).trim());
@@ -461,6 +472,8 @@ function uplinksFrom(get) {
             ...encodingFrom(get, 'hls'),
             segment_seconds: num(get('hls_segment_seconds', '4'), 4),
             window: num(get('hls_window', '6'), 6),
+            form: str('hls_form', 'packed') === 'fmp4' ? 'fmp4' : 'packed',
+            dash: get('hls_dash', false) === true,
             port: get('hls_serve', true) === false ? 0 : num(get('hls_port', '8010'), 8010),
             keep_alive: get('hls_keep_alive', true) !== false,
             origin: originKind(get('hls_origin', 'none')),

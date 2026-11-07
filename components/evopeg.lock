@@ -2,5 +2,5 @@
 # a pipe to a pipe, static, one archive per architecture, verified against the evo
 # release key before anything of it is packed.
 NAME=evopeg
-VERSION=0.1.0
+VERSION=0.2.0
 REPOSITORY=foonerd/evopeg

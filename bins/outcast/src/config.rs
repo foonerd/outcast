@@ -352,6 +352,19 @@ pub struct Uplinks {
     pub monitor: Monitor,
 }
 
+/// The form of an HLS segment.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Form {
+    /// Packed audio: ADTS AAC or MP3 frames with an ID3 tag at the head; what
+    /// radio CDNs serve and every HLS player takes.
+    #[default]
+    Packed,
+    /// Fragmented MP4 (CMAF): AAC, FLAC, MP3 or Opus; what Apple recommends, what
+    /// lossless HLS and DASH need; evopeg 0.2.0 or later.
+    Fmp4,
+}
+
 /// Where an HLS uplink's files go beyond the player.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -393,6 +406,11 @@ pub struct Hls {
     /// Segments the playlist lists.
     #[serde(default = "Hls::default_window")]
     pub window: u32,
+    #[serde(default)]
+    pub form: Form,
+    /// A DASH manifest beside the playlist, from the same fragmented segments.
+    #[serde(default)]
+    pub dash: bool,
     /// The port the player serves the playlist and the segments on; 0 for none.
     #[serde(default = "Hls::default_port")]
     pub port: u16,
@@ -470,6 +488,14 @@ impl Hls {
         if self.window < 3 {
             self.window = 3;
         }
+        // Packed audio is defined for AAC and MP3 alone; any other codec goes
+        // fragmented, which takes them all.
+        if self.form == Form::Packed && !matches!(self.codec, Codec::Aac | Codec::Mp3) {
+            self.form = Form::Fmp4;
+        }
+        if self.form != Form::Fmp4 {
+            self.dash = false;
+        }
         self.origin_url = self.origin_url.trim().to_string();
         self.s3_endpoint = self.s3_endpoint.trim().to_string();
         self.s3_bucket = self.s3_bucket.trim().to_string();
@@ -498,6 +524,8 @@ impl Default for Hls {
             channels: 0,
             segment_seconds: Self::default_segment_seconds(),
             window: Self::default_window(),
+            form: Form::Packed,
+            dash: false,
             port: Self::default_port(),
             keep_alive: true,
             origin: OriginKind::None,
@@ -971,6 +999,15 @@ mod tests {
         .unwrap();
         x.tidy();
         assert_eq!(x.hls.origin, OriginKind::None, "no bucket, no origin");
+        // FLAC cannot be packed audio: the form goes fragmented; DASH only with it.
+        let mut y: Uplinks =
+            serde_json::from_str(r#"{"hls":{"enabled":true,"codec":"flac","dash":true}}"#).unwrap();
+        y.tidy();
+        assert_eq!((y.hls.form, y.hls.dash), (Form::Fmp4, true));
+        let mut z: Uplinks =
+            serde_json::from_str(r#"{"hls":{"enabled":true,"codec":"aac","dash":true}}"#).unwrap();
+        z.tidy();
+        assert_eq!((z.hls.form, z.hls.dash), (Form::Packed, false));
         assert_eq!(Hls::default().name, "stream");
     }
 

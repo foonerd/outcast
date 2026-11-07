@@ -441,6 +441,8 @@ Outcast.prototype.getUIConfig = function () {
             setValue(hls, 'hls_serve', c.get('hls_serve', true) !== false);
             setValue(hls, 'hls_keep_alive', c.get('hls_keep_alive', true) !== false);
             setSelect(hls, 'hls_origin', c.get('hls_origin', 'none'));
+            setSelect(hls, 'hls_form', c.get('hls_form', 'packed'));
+            setValue(hls, 'hls_dash', c.get('hls_dash', false) === true);
             h.hideWhenOff(hls, 'hls', (k, d) => c.get(k, d));
 
             const mon = section('monitor_section');

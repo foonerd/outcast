@@ -302,17 +302,21 @@
       "onSave": { "type": "controller", "endpoint": "audio_interface/outcast", "method": "updateHls" },
       "saveButton": {
         "label": "TRANSLATE.OUTCAST.SAVE",
-        "data": ["hls_enabled", "hls_name", "hls_preset", "hls_advanced", "hls_codec", "hls_bitrate", "hls_rate", "hls_channels", "hls_segment_seconds", "hls_window", "hls_serve", "hls_port", "hls_keep_alive", "hls_origin", "hls_origin_url", "hls_origin_user", "hls_origin_password", "hls_ca_file", "hls_s3_endpoint", "hls_s3_bucket", "hls_s3_prefix", "hls_s3_region", "hls_s3_access_key", "hls_s3_secret_key", "hls_s3_path_style", "hls_s3_ca_file"]
+        "data": ["hls_enabled", "hls_name", "hls_form", "hls_dash", "hls_preset", "hls_advanced", "hls_codec", "hls_bitrate", "hls_rate", "hls_channels", "hls_segment_seconds", "hls_window", "hls_serve", "hls_port", "hls_keep_alive", "hls_origin", "hls_origin_url", "hls_origin_user", "hls_origin_password", "hls_ca_file", "hls_s3_endpoint", "hls_s3_bucket", "hls_s3_prefix", "hls_s3_region", "hls_s3_access_key", "hls_s3_secret_key", "hls_s3_path_style", "hls_s3_ca_file"]
       },
       "content": [
         { "id": "hls_enabled", "element": "switch", "label": "TRANSLATE.OUTCAST.HLS_ENABLE", "doc": "TRANSLATE.OUTCAST.HLS_ENABLE_DESC", "value": false },
         { "id": "hls_name", "element": "input", "label": "TRANSLATE.OUTCAST.HLS_NAME", "doc": "TRANSLATE.OUTCAST.HLS_NAME_DESC", "value": "stream", "visibleIf": { "field": "hls_enabled", "value": true } },
+        { "id": "hls_form", "element": "select", "label": "TRANSLATE.OUTCAST.HLS_FORM", "doc": "TRANSLATE.OUTCAST.HLS_FORM_DESC", "value": { "value": "packed", "label": "TRANSLATE.OUTCAST.HLS_FORM_PACKED" },
+          "options": [ { "value": "packed", "label": "TRANSLATE.OUTCAST.HLS_FORM_PACKED" }, { "value": "fmp4", "label": "TRANSLATE.OUTCAST.HLS_FORM_FMP4" } ],
+          "visibleIf": { "field": "hls_enabled", "value": true } },
+        { "id": "hls_dash", "element": "switch", "label": "TRANSLATE.OUTCAST.HLS_DASH", "doc": "TRANSLATE.OUTCAST.HLS_DASH_DESC", "value": false, "visibleIf": { "field": "hls_form", "value": "fmp4" } },
         { "id": "hls_preset", "element": "select", "label": "TRANSLATE.OUTCAST.PRESET", "doc": "TRANSLATE.OUTCAST.HLS_PRESET_DESC", "value": { "value": "aac-128-48000", "label": "AAC 128 kbit/s, 48 kHz" },
-          "options": [ { "value": "aac-96-48000", "label": "AAC 96 kbit/s, 48 kHz" }, { "value": "aac-128-48000", "label": "AAC 128 kbit/s, 48 kHz" }, { "value": "aac-192-48000", "label": "AAC 192 kbit/s, 48 kHz" }, { "value": "aac-128-44100", "label": "AAC 128 kbit/s, 44.1 kHz" }, { "value": "mp3-128-44100", "label": "MP3 128 kbit/s, 44.1 kHz" }, { "value": "mp3-192-44100", "label": "MP3 192 kbit/s, 44.1 kHz" } ],
+          "options": [ { "value": "aac-96-48000", "label": "AAC 96 kbit/s, 48 kHz" }, { "value": "aac-128-48000", "label": "AAC 128 kbit/s, 48 kHz" }, { "value": "aac-192-48000", "label": "AAC 192 kbit/s, 48 kHz" }, { "value": "aac-128-44100", "label": "AAC 128 kbit/s, 44.1 kHz" }, { "value": "mp3-128-44100", "label": "MP3 128 kbit/s, 44.1 kHz" }, { "value": "mp3-192-44100", "label": "MP3 192 kbit/s, 44.1 kHz" }, { "value": "flac-48000", "label": "FLAC, 48 kHz (fMP4)" }, { "value": "opus-96-48000", "label": "Opus 96 kbit/s, 48 kHz (fMP4, DASH)" } ],
           "visibleIf": { "field": "hls_enabled", "value": true } },
         { "id": "hls_advanced", "element": "switch", "label": "TRANSLATE.OUTCAST.ADVANCED", "doc": "TRANSLATE.OUTCAST.ADVANCED_DESC", "value": false, "visibleIf": { "field": "hls_enabled", "value": true } },
         { "id": "hls_codec", "element": "select", "label": "TRANSLATE.OUTCAST.CODEC", "doc": "TRANSLATE.OUTCAST.HLS_CODEC_DESC", "value": { "value": "aac", "label": "AAC" },
-          "options": [ { "value": "aac", "label": "AAC" }, { "value": "mp3", "label": "MP3" } ],
+          "options": [ { "value": "aac", "label": "AAC" }, { "value": "mp3", "label": "MP3" }, { "value": "flac", "label": "FLAC" }, { "value": "opus", "label": "Opus" } ],
           "visibleIf": { "field": "hls_advanced", "value": true } },
         { "id": "hls_bitrate", "element": "input", "label": "TRANSLATE.OUTCAST.BITRATE", "doc": "TRANSLATE.OUTCAST.BITRATE_DESC", "value": "128", "visibleIf": { "field": "hls_advanced", "value": true } },
         { "id": "hls_rate", "element": "input", "label": "TRANSLATE.OUTCAST.RATE", "doc": "TRANSLATE.OUTCAST.RATE_DESC", "value": "48000", "visibleIf": { "field": "hls_advanced", "value": true } },
