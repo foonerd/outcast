@@ -2,6 +2,12 @@
 
 All notable changes to Outcast Uplink. The format follows Keep a Changelog; the versions follow Semantic Versioning.
 
+## [0.1.16] - 2026-11-07
+
+### Added
+
+- The dashboard: a page of the core's own, served from its memory on a port of the player (8020 unless set, switched off on the page when it is not wanted), for watching the programme, the level with its meters, dead air and every uplink's state, counters and last error from anything on the network, a second at a time. Nothing is fetched from anywhere else; the page is one file built into the core. The status section carries the button that opens it at the player's address.
+
 ## [0.1.15] - 2026-11-07
 
 ### Fixed
