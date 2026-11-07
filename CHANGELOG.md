@@ -2,6 +2,17 @@
 
 All notable changes to Outcast Uplink. The format follows Keep a Changelog; the versions follow Semantic Versioning.
 
+## [0.1.17] - 2026-11-07
+
+### Added
+
+- A way out of the dashboard. The status section now has two buttons: "Open the dashboard here" shows the page inside Volumio's own page with its arrow back, so the player's own display and the app can leave it; "Open the dashboard in a new tab" is for a second screen or another device, its address written under the button. The page itself carries a Close button when it is the window: the window closes where the browser allows, else the page steps back, else it goes to the player's own page.
+- The dashboard's address, beside its port: empty uses the address found on the player's own network interface, which works where `.local` names do not resolve; a host name or an IP address of the operator's when the player is reached another way.
+
+### Changed
+
+- The dashboard's look: the same palette and parts as the Glass manager, for a studio wall: a near-black ground, graphite panels with titled headers, green, amber and red state badges, a Programme card with an on-air badge, a Level card with ticked meters, one row per uplink with name, state, address and counters, and "n of m up" in the uplinks' title.
+
 ## [0.1.16] - 2026-11-07
 
 ### Added

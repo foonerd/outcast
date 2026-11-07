@@ -1,6 +1,6 @@
 {
   "name": "outcast",
-  "version": "0.1.16",
+  "version": "0.1.17",
   "description": "Casts whatever the player plays out to any uplink: Icecast, SHOUTcast, RTMP, SRT, HLS, the LAN or a file. An evo framework plugin built on evotap.",
   "main": "index.js",
   "scripts": {
@@ -21,7 +21,7 @@
     "os": ["bookworm"],
     "architectures": ["armhf", "amd64"],
     "details": "Streams whatever the player plays, from any service, to Icecast, SHOUTcast, RTMP, SRT, HLS, the LAN or a file, with the screen's title. Built on evotap.",
-    "changelog": "0.1.16 The dashboard: a live page of the core's own on a port of the player, opened from the status section."
+    "changelog": "0.1.17 A way out of the dashboard: opened inside Volumio's page or in a tab, a Close button, the address the operator's; the Glass look."
   },
   "dependencies": {
     "kew": "^0.7.0",
