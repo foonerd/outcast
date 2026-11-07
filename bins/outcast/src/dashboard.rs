@@ -157,6 +157,10 @@ mod tests {
         assert!(body.contains("<title>Outcast Uplink</title>"));
         assert!(body.contains("/status.json"), "the page polls the status");
         assert!(
+            body.contains(r#"id="close""#) && body.contains("window.parent === window"),
+            "a way out when the page is the window itself"
+        );
+        assert!(
             !body.contains("<script src") && !body.contains("<link ") && !body.contains("@import"),
             "nothing fetched from anywhere else"
         );

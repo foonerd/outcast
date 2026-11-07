@@ -304,6 +304,21 @@ test('the dashboard has a switch and a port, and the address of the player is th
     delete ifs.eth0;
     assert.equal(h.lanAddress(ifs), '192.168.1.7');
     assert.equal(h.lanAddress({ lo: ifs.lo }), null);
+    // The operator's address: a name or an IP, nothing else; empty is the one found.
+    assert.equal(h.validateMonitor({ mon_enabled: false, mon_dashboard: true, mon_dashboard_port: '8020', mon_dashboard_host: '' }, t), null);
+    assert.equal(h.validateMonitor({ mon_enabled: false, mon_dashboard: true, mon_dashboard_port: '8020', mon_dashboard_host: 'studio-pi.lan' }, t), null);
+    assert.equal(h.validateMonitor({ mon_enabled: false, mon_dashboard: true, mon_dashboard_port: '8020', mon_dashboard_host: '10.0.0.7' }, t), null);
+    assert.equal(h.validateMonitor({ mon_enabled: false, mon_dashboard: true, mon_dashboard_port: '8020', mon_dashboard_host: 'http://10.0.0.7' }, t), 'ERR_DASHBOARD_HOST');
+    assert.equal(h.validateMonitor({ mon_enabled: false, mon_dashboard: true, mon_dashboard_port: '8020', mon_dashboard_host: '10.0.0.7:8020' }, t), 'ERR_DASHBOARD_HOST');
+    const host = {};
+    h.applyMonitor({ mon_enabled: false, mon_dashboard: true, mon_dashboard_port: '8020', mon_dashboard_host: ' radio.example.org ' }, (k, v) => { host[k] = v; });
+    assert.equal(host.mon_dashboard_host, 'radio.example.org');
+    // Two ways onto the page: a tab of its own, and Volumio's iframe page holding it.
+    assert.deepEqual(h.dashboardLinks('192.168.1.5', '8020'), {
+        url: 'http://192.168.1.5:8020/',
+        here: 'http://192.168.1.5/iframe-page/http:~2F~2F192.168.1.5:8020~2F'
+    });
+    assert.equal(h.dashboardLinks('fd00::7', 8020).url, 'http://[fd00::7]:8020/');
 });
 
 test('the dead-air watch takes a level and a time, and the file carries them', () => {

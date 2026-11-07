@@ -355,14 +355,15 @@
       "onSave": { "type": "controller", "endpoint": "audio_interface/outcast", "method": "updateMonitor" },
       "saveButton": {
         "label": "TRANSLATE.OUTCAST.SAVE",
-        "data": ["mon_enabled", "mon_level", "mon_seconds", "mon_dashboard", "mon_dashboard_port"]
+        "data": ["mon_enabled", "mon_level", "mon_seconds", "mon_dashboard", "mon_dashboard_port", "mon_dashboard_host"]
       },
       "content": [
         { "id": "mon_enabled", "element": "switch", "label": "TRANSLATE.OUTCAST.MON_ENABLE", "doc": "TRANSLATE.OUTCAST.MON_ENABLE_DESC", "value": true },
         { "id": "mon_level", "element": "input", "label": "TRANSLATE.OUTCAST.MON_LEVEL", "doc": "TRANSLATE.OUTCAST.MON_LEVEL_DESC", "value": "-60", "visibleIf": { "field": "mon_enabled", "value": true } },
         { "id": "mon_seconds", "element": "input", "label": "TRANSLATE.OUTCAST.MON_SECONDS", "doc": "TRANSLATE.OUTCAST.MON_SECONDS_DESC", "value": "30", "visibleIf": { "field": "mon_enabled", "value": true } },
         { "id": "mon_dashboard", "element": "switch", "label": "TRANSLATE.OUTCAST.MON_DASHBOARD", "doc": "TRANSLATE.OUTCAST.MON_DASHBOARD_DESC", "value": true },
-        { "id": "mon_dashboard_port", "element": "input", "label": "TRANSLATE.OUTCAST.MON_DASHBOARD_PORT", "doc": "TRANSLATE.OUTCAST.MON_DASHBOARD_PORT_DESC", "value": "8020", "visibleIf": { "field": "mon_dashboard", "value": true } }
+        { "id": "mon_dashboard_port", "element": "input", "label": "TRANSLATE.OUTCAST.MON_DASHBOARD_PORT", "doc": "TRANSLATE.OUTCAST.MON_DASHBOARD_PORT_DESC", "value": "8020", "visibleIf": { "field": "mon_dashboard", "value": true } },
+        { "id": "mon_dashboard_host", "element": "input", "label": "TRANSLATE.OUTCAST.MON_DASHBOARD_HOST", "doc": "TRANSLATE.OUTCAST.MON_DASHBOARD_HOST_DESC", "value": "", "attributes": [ { "placeholder": "" } ], "visibleIf": { "field": "mon_dashboard", "value": true } }
       ]
     },
     {
@@ -374,7 +375,8 @@
       "onSave": { "type": "controller", "endpoint": "audio_interface/outcast", "method": "showStatus" },
       "saveButton": { "label": "TRANSLATE.OUTCAST.STATUS_BUTTON", "data": [] },
       "content": [
-        { "id": "open_dashboard", "element": "button", "label": "TRANSLATE.OUTCAST.STATUS_DASHBOARD", "doc": "TRANSLATE.OUTCAST.STATUS_DASHBOARD_DESC", "onClick": { "type": "openUrl", "url": "" } }
+        { "id": "open_dashboard", "element": "button", "label": "TRANSLATE.OUTCAST.STATUS_DASHBOARD", "doc": "TRANSLATE.OUTCAST.STATUS_DASHBOARD_DESC", "onClick": { "type": "oauth", "plugin": "outcast", "performerUrl": "", "scopes": [] } },
+        { "id": "open_dashboard_tab", "element": "button", "label": "TRANSLATE.OUTCAST.STATUS_DASHBOARD_TAB", "doc": "TRANSLATE.OUTCAST.STATUS_DASHBOARD_TAB_DESC", "onClick": { "type": "openUrl", "url": "" } }
       ]
     }
   ]

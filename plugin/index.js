@@ -467,17 +467,32 @@ Outcast.prototype.getUIConfig = function () {
             const mon = section('monitor_section');
             setValue(mon, 'mon_dashboard', c.get('mon_dashboard', true) !== false);
             setValue(mon, 'mon_dashboard_port', String(c.get('mon_dashboard_port', '8020')));
-            // The dashboard's button opens the core's page at the player's address; without
-            // the dashboard the button is not there.
+            // The address browsers reach the player by: the operator's when set, else the
+            // one found on the player's own interfaces (an IP address, so a network whose
+            // .local names do not resolve still gets there); the one found is the field's
+            // placeholder.
+            const found = h.lanAddress(require('os').networkInterfaces());
+            const override = String(c.get('mon_dashboard_host', '')).trim();
+            setValue(mon, 'mon_dashboard_host', override);
+            const hostField = mon.find((x) => x.id === 'mon_dashboard_host');
+            if (hostField && hostField.attributes && hostField.attributes[0]) hostField.attributes[0].placeholder = found || '';
+            // The dashboard's buttons open the core's page at that address, here inside
+            // Volumio's own page or in a tab of its own; without the dashboard the buttons
+            // are not there.
             const stat = section('status_section');
-            const open = stat.find((x) => x.id === 'open_dashboard');
-            if (open) {
-                const address = h.lanAddress(require('os').networkInterfaces());
-                if (c.get('mon_dashboard', true) !== false && address) {
-                    open.onClick.url = 'http://' + address + ':' + String(c.get('mon_dashboard_port', '8020')) + '/';
-                } else {
-                    open.hidden = true;
+            const here = stat.find((x) => x.id === 'open_dashboard');
+            const tab = stat.find((x) => x.id === 'open_dashboard_tab');
+            const address = override || found;
+            if (c.get('mon_dashboard', true) !== false && address) {
+                const links = h.dashboardLinks(address, c.get('mon_dashboard_port', '8020'));
+                if (here) here.onClick.performerUrl = links.here;
+                if (tab) {
+                    tab.onClick.url = links.url;
+                    tab.doc = self.commandRouter.getI18nString('OUTCAST.STATUS_DASHBOARD_TAB_DESC') + ' ' + links.url;
                 }
+            } else {
+                if (here) here.hidden = true;
+                if (tab) tab.hidden = true;
             }
             setValue(mon, 'mon_enabled', c.get('mon_enabled', true) !== false);
             setValue(mon, 'mon_level', String(c.get('mon_level', '-60')));

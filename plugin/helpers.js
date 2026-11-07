@@ -338,8 +338,18 @@ function applyHls(data, set) {
     }
 }
 
+// The dashboard's address as the operator sets it: a host name or an IP address,
+// nothing else (no scheme, no port, no path); empty means the address found here.
+function checkDashboardHost(v, t) {
+    const s = String(v == null ? '' : v).trim();
+    if (s === '') return null;
+    const name = /^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*$/.test(s);
+    const v6 = /^\[?[0-9A-Fa-f:]+\]?$/.test(s) && s.includes(':');
+    return name || v6 ? null : t('ERR_DASHBOARD_HOST');
+}
+
 function validateMonitor(data, t) {
-    return (data.mon_dashboard === true ? checkPort(data.mon_dashboard_port, 'MON_DASHBOARD_PORT', t) : null) ||
+    return (data.mon_dashboard === true ? (checkPort(data.mon_dashboard_port, 'MON_DASHBOARD_PORT', t) || checkDashboardHost(data.mon_dashboard_host, t)) : null) ||
         (data.mon_enabled === false ? null : (checkSigned(data.mon_level, 'MON_LEVEL', t) || checkWhole(data.mon_seconds, 'MON_SECONDS', t))) ||
         null;
 }
@@ -348,7 +358,10 @@ function applyMonitor(data, set) {
     // The dashboard's pair is kept when the page sent it; a save without it leaves it be.
     if (data.mon_dashboard !== undefined) {
         set('mon_dashboard', data.mon_dashboard === true);
-        if (data.mon_dashboard === true) set('mon_dashboard_port', String(data.mon_dashboard_port).trim());
+        if (data.mon_dashboard === true) {
+            set('mon_dashboard_port', String(data.mon_dashboard_port).trim());
+            set('mon_dashboard_host', String(data.mon_dashboard_host == null ? '' : data.mon_dashboard_host).trim());
+        }
     }
     set('mon_enabled', data.mon_enabled !== false);
     if (data.mon_enabled === false) return;
@@ -370,6 +383,19 @@ function lanAddress(interfaces) {
     const by = (re) => all.find((a) => re.test(a.name));
     const pick = by(/^(eth|en|eno|ens|enp)/) || by(/^(wlan|wl)/) || all[0];
     return pick ? pick.address : null;
+}
+
+// The two ways onto the dashboard from the Volumio page. The UI opens an openUrl
+// button in a new tab, always, and on the player's own display or in the app that tab
+// has no way back; the one button type the UI navigates in place is the oauth one,
+// which sets the window's location to its performer URL (two query parameters the
+// page ignores). So "here" goes to Volumio's own iframe page holding the dashboard,
+// with the UI's arrow back; the page's address is the ui-router parameter, its
+// slashes as ~2F. The address is the operator's when set, else the one found here.
+function dashboardLinks(address, port) {
+    const host = /:/.test(address) && !/^\[/.test(address) ? '[' + address + ']' : address;
+    const url = 'http://' + host + ':' + String(port) + '/';
+    return { url, here: 'http://' + host + '/iframe-page/' + url.replace(/\//g, '~2F') };
 }
 
 function validateRecord(data, t) {
@@ -610,7 +636,7 @@ function summarize(status, audioPath, audioPathError, t, tapNote) {
 }
 
 module.exports = {
-    screenTitle, checkConfig, chainHasTap, chainLibraries, lanAddress, fill, sel, PRESETS, DEFAULT_PRESET, ICE_SLOTS,
+    screenTitle, checkConfig, chainHasTap, chainLibraries, lanAddress, dashboardLinks, fill, sel, PRESETS, DEFAULT_PRESET, ICE_SLOTS,
     validateIcecast, validateLan, validateRecord, validateMonitor, validateSrt, validateRtmp, validateTs, validateHls,
     applyIcecast, applyLan, applyRecord, applyMonitor, applySrt, applyRtmp, applyTs, applyHls, uplinksFrom, summarize, hideWhenOff
 };

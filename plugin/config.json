@@ -153,6 +153,7 @@
   "mon_enabled": { "type": "boolean", "value": true },
   "mon_dashboard": { "type": "boolean", "value": true },
   "mon_dashboard_port": { "type": "string", "value": "8020" },
+  "mon_dashboard_host": { "type": "string", "value": "" },
   "mon_level": { "type": "string", "value": "-60" },
   "mon_seconds": { "type": "string", "value": "30" }
 }
