@@ -135,6 +135,7 @@ Outcast.prototype.installAudioPath = function () {
         .then(() => {
             self.audioPath = 'ready';
             self.audioPathError = '';
+            self.tapNote = self.chainLibraryNote();
             self.watchChain();
             self.logger.info(LOG + 'the tap is in the audio chain');
         })
@@ -185,6 +186,24 @@ Outcast.prototype.writeContribution = function () {
     } catch (e) {
         return libQ.reject(keyed('ERR_CHAIN', e));
     }
+};
+
+// Whose library serves the tap: ALSA takes the last `pcm_type.evotap` in the chain, and
+// another plugin (Glass) names its own copy. The same bytes are the same library and
+// need no word; a different file is said in the status, and the core's ring reader has
+// the last word on the ring's version.
+Outcast.prototype.chainLibraryNote = function () {
+    let text = '';
+    try { text = fs.readFileSync(ALSA_FILE, 'utf8'); } catch (e) { return null; }
+    const libs = h.chainLibraries(text);
+    const last = libs[libs.length - 1];
+    if (!last || path.resolve(last) === path.resolve(LIBRARY)) return null;
+    const digest = (file) => {
+        try { return require('crypto').createHash('sha256').update(fs.readFileSync(file)).digest('hex'); } catch (e) { return null; }
+    };
+    const same = digest(last) !== null && digest(last) === digest(LIBRARY);
+    this.logger[same ? 'info' : 'warn'](LOG + 'the chain\'s tap library is ' + last + (same ? ' (the same library as ours)' : ' (not the same bytes as ours)'));
+    return same ? { key: 'STATUS_TAP_SHARED', vars: { path: last } } : { key: 'STATUS_TAP_FOREIGN', vars: { path: last } };
 };
 
 // The player writes its chain from every enabled plugin's contribution.
@@ -434,7 +453,7 @@ Outcast.prototype.getUIConfig = function () {
             setValue(hls, 'hls_enabled', c.get('hls_enabled', false) === true);
             setValue(hls, 'hls_name', String(c.get('hls_name', 'stream')));
             encoding(hls, 'hls');
-            ['hls_segment_seconds', 'hls_window', 'hls_port', 'hls_origin_url', 'hls_origin_user', 'hls_origin_password', 'hls_ca_file',
+            ['hls_segment_seconds', 'hls_window', 'hls_port', 'hls_max_connections', 'hls_origin_url', 'hls_origin_user', 'hls_origin_password', 'hls_ca_file',
                 'hls_s3_endpoint', 'hls_s3_bucket', 'hls_s3_prefix', 'hls_s3_region', 'hls_s3_access_key', 'hls_s3_secret_key', 'hls_s3_ca_file']
                 .forEach((k) => setValue(hls, k, String(c.get(k, ''))));
             setValue(hls, 'hls_s3_path_style', c.get('hls_s3_path_style', true) !== false);
@@ -521,7 +540,7 @@ Outcast.prototype.updateMonitor = function (data) {
 
 Outcast.prototype.showStatus = function () {
     const self = this;
-    const lines = h.summarize(self.readStatus(), self.audioPath, self.audioPathError, (key, vars) => self.i18n(key, vars));
+    const lines = h.summarize(self.readStatus(), self.audioPath, self.audioPathError, (key, vars) => self.i18n(key, vars), self.tapNote);
     self.commandRouter.pushToastMessage('info', self.i18n('STATUS_TITLE'), lines.join(' '));
     return libQ.resolve();
 };

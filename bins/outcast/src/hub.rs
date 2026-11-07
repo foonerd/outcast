@@ -34,7 +34,13 @@ struct Worker {
     pcm: SyncSender<Arc<Vec<u8>>>,
     ctl: Sender<Event>,
     handle: Option<JoinHandle<()>>,
+    /// Told when the worker's body returned, so a stop can wait with a bound.
+    done: Receiver<()>,
 }
+
+/// How long a worker may take to stop before the hub goes on without it: a
+/// worker that does not answer is a bug, and the bug must never hold the core.
+const STOP_PATIENCE: Duration = Duration::from_secs(10);
 
 /// How long a title is held before the uplinks hear it: the player pushes a
 /// state with the previous track's title for a moment when a queue changes,
@@ -53,6 +59,8 @@ pub struct Hub {
     converted: Vec<u8>,
     /// What the status watches the programme for, from the last load.
     monitor: Monitor,
+    /// Counted at every reload; the workers and the entries of one reload share it.
+    generation: u64,
 }
 
 impl Hub {
@@ -67,6 +75,7 @@ impl Hub {
             segment: None,
             converted: Vec::new(),
             monitor: Monitor::default(),
+            generation: 0,
         }
     }
 
@@ -82,6 +91,7 @@ impl Hub {
         let uplinks = Uplinks::load(&self.config)?;
         self.monitor = uplinks.monitor;
         self.stop_all();
+        self.generation += 1;
         // The entries are in the status before any worker runs, since a worker
         // says its state at once and would be written over.
         let mut listed = Vec::new();
@@ -219,6 +229,7 @@ impl Hub {
             kind: kind.to_string(),
             evopeg: self.evopeg.clone(),
             status: Arc::clone(&self.status),
+            generation: self.generation,
         }
     }
 
@@ -228,15 +239,20 @@ impl Hub {
     {
         let (ctl_tx, ctl_rx) = mpsc::channel();
         let (pcm_tx, pcm_rx) = mpsc::sync_channel(QUEUE);
+        let (done_tx, done_rx) = mpsc::channel::<()>();
         let handle = std::thread::Builder::new()
             .name(format!("uplink-{id}"))
-            .spawn(move || body(ctl_rx, pcm_rx))
+            .spawn(move || {
+                body(ctl_rx, pcm_rx);
+                let _ = done_tx.send(());
+            })
             .expect("uplink thread");
         self.workers.push(Worker {
             id: id.to_string(),
             pcm: pcm_tx,
             ctl: ctl_tx,
             handle: Some(handle),
+            done: done_rx,
         });
     }
 
@@ -244,9 +260,25 @@ impl Hub {
         for w in &self.workers {
             let _ = w.ctl.send(Event::Stop);
         }
+        let deadline = Instant::now() + STOP_PATIENCE;
         for mut w in self.workers.drain(..) {
-            if let Some(h) = w.handle.take() {
-                let _ = h.join();
+            let left = deadline.saturating_duration_since(Instant::now());
+            match w.done.recv_timeout(left) {
+                Ok(()) | Err(mpsc::RecvTimeoutError::Disconnected) => {
+                    if let Some(h) = w.handle.take() {
+                        let _ = h.join();
+                    }
+                }
+                Err(mpsc::RecvTimeoutError::Timeout) => {
+                    // Left behind, not waited for: its entry is gone with the reload
+                    // and its words no longer land (the generation), so the core goes on.
+                    eprintln!(
+                        "outcast: {}: did not stop within {} s; left behind",
+                        w.id,
+                        STOP_PATIENCE.as_secs()
+                    );
+                    drop(w.handle.take());
+                }
             }
         }
     }
@@ -364,6 +396,7 @@ impl Drop for Hub {
 impl Ctx {
     pub fn entry(&self, detail: &str) -> status::Uplink {
         status::Uplink {
+            generation: self.generation,
             id: self.id.clone(),
             kind: self.kind.clone(),
             state: "starting".into(),

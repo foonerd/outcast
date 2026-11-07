@@ -2,6 +2,17 @@
 
 All notable changes to Outcast Uplink. The format follows Keep a Changelog; the versions follow Semantic Versioning.
 
+## [0.1.14] - 2026-11-07
+
+### Added
+
+- The HLS server holds a set number of connections at once (64 unless set, 1 to 1000, beside the port on the page); the rest are refused at once with 503, so a flood never grows the player's threads without bound. The status says the connections open and the requests refused.
+- The status says whose library serves the tap when another plugin's copy does (ALSA takes the last `pcm_type.evotap` in the chain): the same library, or a different build with the core's ring reader deciding.
+### Fixed
+
+- The transport-stream uplink kept its encoder running after losing the receiver, so the encoder's pipe filled and the worker stood still in it, and a save on the page then waited on that worker for ever: the whole core froze. The encoder now goes with the connection and comes back with the next one, as in every other uplink.
+- A worker of a reload still ending could write its last words over the new worker's status entry; entries and workers now carry the reload's generation, and a worker that does not stop within ten seconds is left behind instead of holding the core.
+
 ## [0.1.13] - 2026-11-07
 
 ### Added

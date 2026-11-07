@@ -302,7 +302,7 @@
       "onSave": { "type": "controller", "endpoint": "audio_interface/outcast", "method": "updateHls" },
       "saveButton": {
         "label": "TRANSLATE.OUTCAST.SAVE",
-        "data": ["hls_enabled", "hls_name", "hls_form", "hls_dash", "hls_preset", "hls_advanced", "hls_codec", "hls_bitrate", "hls_rate", "hls_channels", "hls_segment_seconds", "hls_window", "hls_serve", "hls_port", "hls_keep_alive", "hls_origin", "hls_origin_url", "hls_origin_user", "hls_origin_password", "hls_ca_file", "hls_s3_endpoint", "hls_s3_bucket", "hls_s3_prefix", "hls_s3_region", "hls_s3_access_key", "hls_s3_secret_key", "hls_s3_path_style", "hls_s3_ca_file"]
+        "data": ["hls_enabled", "hls_name", "hls_form", "hls_dash", "hls_preset", "hls_advanced", "hls_codec", "hls_bitrate", "hls_rate", "hls_channels", "hls_segment_seconds", "hls_window", "hls_serve", "hls_port", "hls_max_connections", "hls_keep_alive", "hls_origin", "hls_origin_url", "hls_origin_user", "hls_origin_password", "hls_ca_file", "hls_s3_endpoint", "hls_s3_bucket", "hls_s3_prefix", "hls_s3_region", "hls_s3_access_key", "hls_s3_secret_key", "hls_s3_path_style", "hls_s3_ca_file"]
       },
       "content": [
         { "id": "hls_enabled", "element": "switch", "label": "TRANSLATE.OUTCAST.HLS_ENABLE", "doc": "TRANSLATE.OUTCAST.HLS_ENABLE_DESC", "value": false },
@@ -327,6 +327,7 @@
         { "id": "hls_window", "element": "input", "label": "TRANSLATE.OUTCAST.HLS_WINDOW", "doc": "TRANSLATE.OUTCAST.HLS_WINDOW_DESC", "value": "6", "visibleIf": { "field": "hls_advanced", "value": true } },
         { "id": "hls_serve", "element": "switch", "label": "TRANSLATE.OUTCAST.HLS_SERVE", "doc": "TRANSLATE.OUTCAST.HLS_SERVE_DESC", "value": true, "visibleIf": { "field": "hls_enabled", "value": true } },
         { "id": "hls_port", "element": "input", "label": "TRANSLATE.OUTCAST.HLS_PORT", "doc": "TRANSLATE.OUTCAST.HLS_PORT_DESC", "value": "8010", "visibleIf": { "field": "hls_serve", "value": true } },
+        { "id": "hls_max_connections", "element": "input", "label": "TRANSLATE.OUTCAST.HLS_MAX_CONNECTIONS", "doc": "TRANSLATE.OUTCAST.HLS_MAX_CONNECTIONS_DESC", "value": "64", "visibleIf": { "field": "hls_serve", "value": true } },
         { "id": "hls_keep_alive", "element": "switch", "label": "TRANSLATE.OUTCAST.KEEP_ALIVE", "doc": "TRANSLATE.OUTCAST.HLS_KEEP_ALIVE_DESC", "value": true, "visibleIf": { "field": "hls_enabled", "value": true } },
         { "id": "hls_origin", "element": "select", "label": "TRANSLATE.OUTCAST.HLS_ORIGIN", "doc": "TRANSLATE.OUTCAST.HLS_ORIGIN_DESC", "value": { "value": "none", "label": "TRANSLATE.OUTCAST.HLS_ORIGIN_NONE" },
           "options": [ { "value": "none", "label": "TRANSLATE.OUTCAST.HLS_ORIGIN_NONE" }, { "value": "http", "label": "TRANSLATE.OUTCAST.HLS_ORIGIN_HTTP" }, { "value": "s3", "label": "TRANSLATE.OUTCAST.HLS_ORIGIN_S3" } ],

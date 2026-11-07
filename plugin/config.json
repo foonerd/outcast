@@ -135,6 +135,7 @@
   "hls_window": { "type": "string", "value": "6" },
   "hls_serve": { "type": "boolean", "value": true },
   "hls_port": { "type": "string", "value": "8010" },
+  "hls_max_connections": { "type": "string", "value": "64" },
   "hls_keep_alive": { "type": "boolean", "value": true },
   "hls_origin": { "type": "string", "value": "none" },
   "hls_origin_url": { "type": "string", "value": "" },

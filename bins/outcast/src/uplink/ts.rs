@@ -236,7 +236,11 @@ pub fn run(cfg: Ts, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u8>>>)
                 *shape = None;
                 return;
             }
-            let (Some(rx), Some(s)) = (encoded.as_ref(), sender.as_mut()) else {
+            let Some(rx) = encoded.as_ref() else { return };
+            let Some(s) = sender.as_mut() else {
+                // No receiver: the encoder's output is let go, never left to fill the
+                // pipe, which would hold the encoder and this worker with it.
+                while rx.try_recv().is_ok() {}
                 return;
             };
             while let Ok(out) = rx.try_recv() {
@@ -246,6 +250,14 @@ pub fn run(cfg: Ts, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u8>>>)
                     ctx.update(|u| u.reconnects += 1);
                     *sender = None;
                     *next_try = Instant::now() + RETRY;
+                    // The encoder goes with the connection and starts anew with the
+                    // next one, as the other uplinks do: an encoder kept running with
+                    // nowhere to send would fill its pipe and block the feed.
+                    if let Some(enc) = encoder.take() {
+                        enc.kill();
+                    }
+                    *encoded = None;
+                    *shape = None;
                     return;
                 }
             }

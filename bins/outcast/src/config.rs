@@ -414,6 +414,9 @@ pub struct Hls {
     /// The port the player serves the playlist and the segments on; 0 for none.
     #[serde(default = "Hls::default_port")]
     pub port: u16,
+    /// Connections the player's server holds at once; the rest are refused with 503.
+    #[serde(default = "Hls::default_max_connections")]
+    pub max_connections: u32,
     #[serde(default = "default_true")]
     pub keep_alive: bool,
     #[serde(default)]
@@ -472,7 +475,13 @@ impl Hls {
     fn default_port() -> u16 {
         8010
     }
+    fn default_max_connections() -> u32 {
+        64
+    }
     pub fn tidy(&mut self) {
+        if self.max_connections == 0 {
+            self.max_connections = Self::default_max_connections();
+        }
         self.name = self
             .name
             .trim()
@@ -527,6 +536,7 @@ impl Default for Hls {
             form: Form::Packed,
             dash: false,
             port: Self::default_port(),
+            max_connections: Self::default_max_connections(),
             keep_alive: true,
             origin: OriginKind::None,
             origin_url: String::new(),
@@ -968,8 +978,13 @@ mod tests {
         u.tidy();
         assert_eq!(u.hls.name, "mystationlive");
         assert_eq!(
-            (u.hls.segment_seconds, u.hls.window, u.hls.port),
-            (4, 3, 8010)
+            (
+                u.hls.segment_seconds,
+                u.hls.window,
+                u.hls.port,
+                u.hls.max_connections
+            ),
+            (4, 3, 8010, 64)
         );
         assert_eq!(u.hls.origin_url, "https://o.example.com/radio");
         assert!(u.hls.enabled);

@@ -34,6 +34,20 @@ function chainHasTap(text) {
     return /^pcm\.Outcast\s*\{/m.test(String(text || ''));
 }
 
+// The evotap libraries the chain file names, in order: every `pcm_type.evotap { lib X }`
+// block's path. ALSA takes the last one for the type, so another plugin's copy may serve
+// this plugin's tap; the last is the one that counts.
+function chainLibraries(text) {
+    const out = [];
+    const re = /pcm_type\.evotap\s*\{([^}]*)\}/g;
+    let m;
+    while ((m = re.exec(String(text || ''))) !== null) {
+        const lib = /\blib\s+("?)([^\s"]+)\1/.exec(m[1]);
+        if (lib) out.push(lib[2]);
+    }
+    return out;
+}
+
 // A string of the plugin's dictionary with its {{variables}} filled.
 function fill(text, vars) {
     let s = String(text);
@@ -261,6 +275,7 @@ function validateHls(data, t) {
     const endpoint = String(data.hls_s3_endpoint || '').trim();
     return (!serve && origin === 'none' ? t('ERR_HLS_NOWHERE') : null) ||
         (serve ? checkPort(data.hls_port, 'HLS_PORT', t) : null) ||
+        (serve ? checkRange(data.hls_max_connections, 'HLS_MAX_CONNECTIONS', 1, 1000, t) : null) ||
         (origin === 'http' && !/^https?:\/\/[^\s/]+(\/\S*)?$/.test(url) ? t('ERR_HLS_ORIGIN_URL') : null) ||
         (origin === 's3' && !/^https?:\/\/[^\s/]+(\/\S*)?$/.test(endpoint) ? t('ERR_HLS_S3_ENDPOINT') : null) ||
         (origin === 's3' && !/^[a-z0-9][a-z0-9.-]{1,62}$/.test(String(data.hls_s3_bucket || '').trim()) ? t('ERR_HLS_S3_BUCKET') : null) ||
@@ -298,7 +313,10 @@ function applyHls(data, set) {
         set('hls_window', String(data.hls_window).trim());
     }
     set('hls_serve', data.hls_serve !== false);
-    if (data.hls_serve !== false) set('hls_port', String(data.hls_port).trim());
+    if (data.hls_serve !== false) {
+        set('hls_port', String(data.hls_port).trim());
+        set('hls_max_connections', String(data.hls_max_connections).trim());
+    }
     set('hls_keep_alive', data.hls_keep_alive !== false);
     const origin = originKind(data.hls_origin);
     set('hls_origin', origin);
@@ -475,6 +493,7 @@ function uplinksFrom(get) {
             form: str('hls_form', 'packed') === 'fmp4' ? 'fmp4' : 'packed',
             dash: get('hls_dash', false) === true,
             port: get('hls_serve', true) === false ? 0 : num(get('hls_port', '8010'), 8010),
+            max_connections: num(get('hls_max_connections', '64'), 64),
             keep_alive: get('hls_keep_alive', true) !== false,
             origin: originKind(get('hls_origin', 'none')),
             origin_url: str('hls_origin_url', ''),
@@ -502,7 +521,7 @@ function uplinksFrom(get) {
 // nested switch on; those are marked hidden for the page as it is built.
 function hideWhenOff(content, prefix, get) {
     if (get(prefix + '_enabled', false) === true) return;
-    const nested = { advanced: ['codec', 'bitrate', 'rate', 'channels', 'ca_file', 'segment_seconds', 'window'], more: ['description', 'genre', 'url', 'public'], serve: ['port'] };
+    const nested = { advanced: ['codec', 'bitrate', 'rate', 'channels', 'ca_file', 'segment_seconds', 'window'], more: ['description', 'genre', 'url', 'public'], serve: ['port', 'max_connections'] };
     Object.keys(nested).forEach((toggle) => {
         if (get(prefix + '_' + toggle, false) !== true) return;
         nested[toggle].forEach((k) => {
@@ -515,7 +534,7 @@ function hideWhenOff(content, prefix, get) {
 // -------------------------------------------------------------------- the status
 // The status as lines for one toast: the core, the stream, the tap, each uplink.
 
-function summarize(status, audioPath, audioPathError, t) {
+function summarize(status, audioPath, audioPathError, t, tapNote) {
     const lines = [];
     if (!status) {
         lines.push(t('STATUS_CORE_DOWN'));
@@ -538,6 +557,7 @@ function summarize(status, audioPath, audioPathError, t) {
     if (audioPath === 'ready') lines.push(t('STATUS_TAP_READY'));
     else if (audioPath === 'lost') lines.push(t('STATUS_TAP_LOST'));
     else lines.push(t('STATUS_TAP_FAILED', { error: audioPathError || '' }));
+    if (audioPath === 'ready' && tapNote && tapNote.key) lines.push(t(tapNote.key, tapNote.vars || {}));
     const names = { icecast: 'UPLINK_ICECAST', lan: 'UPLINK_LAN', record: 'UPLINK_RECORD', srt: 'UPLINK_SRT', rtmp: 'UPLINK_RTMP', ts: 'UPLINK_TS', hls: 'UPLINK_HLS' };
     if (!status || !Array.isArray(status.uplinks) || status.uplinks.length === 0) {
         lines.push(t('STATUS_NO_UPLINKS'));
@@ -549,6 +569,7 @@ function summarize(status, audioPath, audioPathError, t) {
             if (u.kind === 'lan') detail += ', ' + u.listeners + ' listening';
             if (u.kind === 'srt' && u.state === 'connected') detail += ', ' + t('STATUS_SRT_LINK', { rtt: u.rtt_ms, lost: u.lost_packets });
             if (u.kind === 'hls' && u.segments) detail += ', ' + t('STATUS_HLS_SEGMENTS', { segments: u.segments, pending: u.pending || 0 });
+            if (u.kind === 'hls' && u.dropped) detail += ', ' + t('STATUS_HLS_REFUSED', { refused: u.dropped });
             if (u.kind === 'hls' && u.last_error && u.state === 'streaming') detail += ', ' + u.last_error;
             if (u.silence) detail += ', silence';
             if (u.kind === 'record' && u.files) detail += ', ' + u.files + ' files';
@@ -564,7 +585,7 @@ function summarize(status, audioPath, audioPathError, t) {
 }
 
 module.exports = {
-    screenTitle, checkConfig, chainHasTap, fill, sel, PRESETS, DEFAULT_PRESET, ICE_SLOTS,
+    screenTitle, checkConfig, chainHasTap, chainLibraries, fill, sel, PRESETS, DEFAULT_PRESET, ICE_SLOTS,
     validateIcecast, validateLan, validateRecord, validateMonitor, validateSrt, validateRtmp, validateTs, validateHls,
     applyIcecast, applyLan, applyRecord, applyMonitor, applySrt, applyRtmp, applyTs, applyHls, uplinksFrom, summarize, hideWhenOff
 };

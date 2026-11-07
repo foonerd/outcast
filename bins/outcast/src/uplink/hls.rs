@@ -12,7 +12,7 @@
 use std::collections::VecDeque;
 use std::io::{Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
@@ -972,18 +972,40 @@ pub fn run(cfg: Hls, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u8>>>
     } else {
         None
     };
+    // The server holds so many connections at once; beyond that a request is
+    // refused with 503 at once, so a flood can never grow threads without bound or
+    // starve the player. The open count and the refused count go to the status.
+    let open = Arc::new(AtomicUsize::new(0));
+    let refused = Arc::new(AtomicU64::new(0));
     let acceptor: Option<JoinHandle<()>> = listener.as_ref().map(|l| {
         let store = Arc::clone(&store);
         let acceptor = l.try_clone().expect("listener clone");
+        let open = Arc::clone(&open);
+        let refused = Arc::clone(&refused);
+        let cap = cfg.max_connections.max(1) as usize;
         std::thread::Builder::new()
             .name("hls-accept".into())
             .spawn(move || {
                 for stream in acceptor.incoming() {
-                    let Ok(stream) = stream else { break };
+                    let Ok(mut stream) = stream else { break };
+                    if open.load(Ordering::Relaxed) >= cap {
+                        refused.fetch_add(1, Ordering::Relaxed);
+                        let _ = stream.set_write_timeout(Some(Duration::from_secs(2)));
+                        let _ = stream.write_all(
+                            b"HTTP/1.0 503 Service Unavailable\r\nServer: outcast\r\nRetry-After: 2\r\nConnection: close\r\nContent-Length: 0\r\n\r\n",
+                        );
+                        let _ = stream.shutdown(Shutdown::Both);
+                        continue;
+                    }
+                    open.fetch_add(1, Ordering::Relaxed);
                     let store = Arc::clone(&store);
+                    let open = Arc::clone(&open);
                     let _ = std::thread::Builder::new()
                         .name("hls-serve".into())
-                        .spawn(move || serve(stream, store));
+                        .spawn(move || {
+                            serve(stream, store);
+                            open.fetch_sub(1, Ordering::Relaxed);
+                        });
                 }
             })
             .expect("hls accept thread")
@@ -1063,10 +1085,16 @@ pub fn run(cfg: Hls, ctx: Ctx, ctl: Receiver<Event>, pcm: Receiver<Arc<Vec<u8>>>
         } else {
             0
         };
+        let (now_open, now_refused) = (
+            open.load(Ordering::Relaxed) as u32,
+            refused.load(Ordering::Relaxed),
+        );
         ctx.update(|u| {
             u.segments = cut;
             u.bytes = b;
             u.pending = pending;
+            u.listeners = now_open;
+            u.dropped = now_refused;
         });
         if let Some(n) = nudge.as_ref() {
             match n.try_send(()) {

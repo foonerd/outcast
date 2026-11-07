@@ -30,13 +30,19 @@ pub struct Ctx {
     pub kind: String,
     pub evopeg: PathBuf,
     pub status: Arc<Mutex<Status>>,
+    /// The reload this worker belongs to; its words land only on its own entry.
+    pub generation: u64,
 }
 
 impl Ctx {
     /// The uplink's own status entry changed in place.
     pub fn update(&self, f: impl FnOnce(&mut status::Uplink)) {
         let mut s = self.status.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(u) = s.uplinks.iter_mut().find(|u| u.id == self.id) {
+        if let Some(u) = s
+            .uplinks
+            .iter_mut()
+            .find(|u| u.id == self.id && u.generation == self.generation)
+        {
             f(u);
             s.touch();
         }

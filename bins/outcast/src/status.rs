@@ -73,6 +73,10 @@ pub struct Level {
 /// One uplink's state, as the page shows it.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
 pub struct Uplink {
+    /// The reload that made the entry: a worker of an earlier one, still ending,
+    /// may not write over it.
+    #[serde(skip)]
+    pub generation: u64,
     pub id: String,
     pub kind: String,
     /// `starting`, `idle`, `connecting`, `waiting`, `connected`, `listening`,

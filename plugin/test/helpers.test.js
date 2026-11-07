@@ -28,6 +28,10 @@ test('the preflight configuration loads the library into a PCM writing into noth
 test('the chain carries the tap when it defines pcm.Outcast', () => {
     assert.equal(h.chainHasTap('pcm.volumio {\n}\npcm.Outcast {\n  type evotap\n}\n'), true);
     assert.equal(h.chainHasTap('pcm.volumio {\n}\npcm.OutcastCheck {\n}\n'), false);
+    // The libraries the chain names, in order; the last serves.
+    const chain = 'pcm_type.evotap {\n  lib /data/plugins/audio_interface/outcast/lib/libevotap.so\n}\npcm.Outcast {\n  type evotap\n}\npcm_type.evotap { lib "/data/plugins/user_interface/glass/lib/armv7/libevotap.so" }\n';
+    assert.deepEqual(h.chainLibraries(chain), ['/data/plugins/audio_interface/outcast/lib/libevotap.so', '/data/plugins/user_interface/glass/lib/armv7/libevotap.so']);
+    assert.deepEqual(h.chainLibraries('pcm.volumio {}'), []);
     assert.equal(h.chainHasTap('# pcm.Outcast {\n'), false);
     assert.equal(h.chainHasTap(''), false);
     assert.equal(h.chainHasTap(null), false);
@@ -236,18 +240,19 @@ test('the transport-stream uplink goes over TCP unless told UDP', () => {
 });
 
 test('the HLS uplink serves on a port, goes to an origin, or both, never nowhere', () => {
-    const good = { hls_enabled: true, hls_name: 'live', hls_serve: true, hls_port: '8010', hls_origin: { value: 'none' } };
+    const good = { hls_enabled: true, hls_name: 'live', hls_serve: true, hls_port: '8010', hls_max_connections: '64', hls_origin: { value: 'none' } };
     assert.equal(h.validateHls(good, t), null);
     assert.equal(h.validateHls({ hls_enabled: false }, t), null);
     assert.equal(h.validateHls({ ...good, hls_serve: false }, t), 'ERR_HLS_NOWHERE');
     assert.equal(h.validateHls({ ...good, hls_port: 'x' }, t), 'ERR_PORT {"field":"HLS_PORT"}');
+    assert.equal(h.validateHls({ ...good, hls_max_connections: '0' }, t), 'ERR_RANGE {"field":"HLS_MAX_CONNECTIONS","min":1,"max":1000}');
     assert.equal(h.validateHls({ ...good, hls_origin: { value: 'http' }, hls_origin_url: 'ftp://x/y' }, t), 'ERR_HLS_ORIGIN_URL');
     assert.equal(h.validateHls({ ...good, hls_serve: false, hls_origin: { value: 'http' }, hls_origin_url: 'https://o.example.com/radio/' }, t), null);
     assert.equal(h.validateHls({ ...good, hls_advanced: true, hls_codec: { value: 'aac' }, hls_bitrate: '128', hls_rate: '48000', hls_segment_seconds: '0', hls_window: '6' }, t), 'ERR_RANGE {"field":"HLS_SEGMENT","min":1,"max":30}');
     const kept = {};
     h.applyHls({ ...good, hls_name: ' my station ', hls_origin: { value: 'http' }, hls_origin_url: ' http://o.example.com/radio ', hls_origin_user: 'ingest', hls_origin_password: 'pw' }, (k, v) => { kept[k] = v; });
     let u = h.uplinksFrom((k, d) => (k in kept ? kept[k] : d)).hls;
-    assert.deepEqual(u, { enabled: true, name: 'my station', codec: 'aac', bitrate: 128, rate: 48000, channels: 2, segment_seconds: 4, window: 6, form: 'packed', dash: false, port: 8010, keep_alive: true, origin: 'http', origin_url: 'http://o.example.com/radio', origin_user: 'ingest', origin_password: 'pw', ca_file: '',
+    assert.deepEqual(u, { enabled: true, name: 'my station', codec: 'aac', bitrate: 128, rate: 48000, channels: 2, segment_seconds: 4, window: 6, form: 'packed', dash: false, port: 8010, max_connections: 64, keep_alive: true, origin: 'http', origin_url: 'http://o.example.com/radio', origin_user: 'ingest', origin_password: 'pw', ca_file: '',
         s3_endpoint: '', s3_bucket: '', s3_prefix: '', s3_region: 'us-east-1', s3_access_key: '', s3_secret_key: '', s3_path_style: true });
     // A bucket: the endpoint, the bucket name, the keys are needed; the prefix is bare of slashes.
     const s3 = { ...good, hls_origin: { value: 's3' }, hls_s3_endpoint: 'https://s3.eu-west-1.amazonaws.com', hls_s3_bucket: 'my-radio', hls_s3_access_key: 'AKIA', hls_s3_secret_key: 'sk' };

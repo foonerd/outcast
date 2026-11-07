@@ -1,6 +1,6 @@
 {
   "name": "outcast",
-  "version": "0.1.13",
+  "version": "0.1.14",
   "description": "Casts whatever the player plays out to any uplink: Icecast, SHOUTcast, RTMP, SRT, HLS, the LAN or a file. An evo framework plugin built on evotap.",
   "main": "index.js",
   "scripts": {
@@ -21,7 +21,7 @@
     "os": ["bookworm"],
     "architectures": ["armhf", "amd64"],
     "details": "Streams whatever the player plays, from any service, to Icecast, SHOUTcast, RTMP, SRT, HLS, the LAN or a file, with the screen's title. Built on evotap.",
-    "changelog": "0.1.13 HLS in fragmented MP4 (AAC, FLAC, MP3, Opus) and DASH beside it, from evopeg 0.2.0."
+    "changelog": "0.1.14 The HLS server's connection limit; the status names whose library serves the tap."
   },
   "dependencies": {
     "kew": "^0.7.0",
