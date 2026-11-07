@@ -220,7 +220,7 @@ test('the RTMP uplink takes an rtmp address with an application and a stream key
     assert.equal(h.uplinksFrom((k, d) => (k in kept ? kept[k] : d)).rtmp.ca_file, '');
     h.applyRtmp({ ...good, rtmp_advanced: true, rtmp_codec: { value: 'aac' }, rtmp_bitrate: '128', rtmp_rate: '48000', rtmp_channels: { value: '2' }, rtmp_ca_file: ' /data/ca.pem ' }, (k, v) => { kept[k] = v; });
     assert.equal(h.uplinksFrom((k, d) => (k in kept ? kept[k] : d)).rtmp.ca_file, '/data/ca.pem');
-    const content = [{ id: 'rtmp_enabled' }, { id: 'rtmp_codec' }, { id: 'rtmp_ca_file' }];
+    const content = [{ id: 'rtmp_enabled' }, { id: 'rtmp_codec', visibleIf: { field: 'rtmp_advanced', value: true } }, { id: 'rtmp_ca_file', visibleIf: { field: 'rtmp_advanced', value: true } }];
     h.hideWhenOff(content, 'rtmp', (k, d) => ({ rtmp_enabled: false, rtmp_advanced: true }[k] ?? d));
     assert.deepEqual(content.map((c) => c.hidden === true), [false, true, true]);
 });
@@ -281,7 +281,7 @@ test('the HLS uplink serves on a port, goes to an origin, or both, never nowhere
     h.applyHls({ ...good, hls_form: { value: 'packed' }, hls_dash: true }, (k, v) => { kept[k] = v; });
     u = h.uplinksFrom((k, d) => (k in kept ? kept[k] : d)).hls;
     assert.deepEqual([u.form, u.dash], ['packed', false], 'DASH only with fragmented MP4');
-    const content = [{ id: 'hls_enabled' }, { id: 'hls_port' }, { id: 'hls_window' }];
+    const content = [{ id: 'hls_enabled' }, { id: 'hls_port', visibleIf: { field: 'hls_serve', value: true } }, { id: 'hls_window', visibleIf: { field: 'hls_advanced', value: true } }];
     h.hideWhenOff(content, 'hls', (k, d) => ({ hls_enabled: false, hls_serve: true, hls_advanced: true }[k] ?? d));
     assert.deepEqual(content.map((c) => c.hidden === true), [false, true, true]);
 });
@@ -303,12 +303,24 @@ test('the dead-air watch takes a level and a time, and the file carries them', (
     assert.equal(h.uplinksFrom((k, d) => (k in off ? off[k] : d)).monitor.dead_air_seconds, 0);
 });
 
-test('a section switched off shows its switch alone, whatever its nested switches say', () => {
-    const content = ['enabled', 'advanced', 'codec', 'bitrate', 'more', 'genre', 'name'].map((k) => ({ id: 'ice_' + k }));
+test('a section switched off shows its switch alone, whatever its nested controls say', () => {
+    const field = (id, on) => ({ id, visibleIf: on ? { field: on, value: true } : undefined });
+    const content = [
+        field('ice_enabled'), field('ice_advanced', 'ice_enabled'), field('ice_codec', 'ice_advanced'), field('ice_bitrate', 'ice_advanced'),
+        field('ice_more', 'ice_enabled'), field('ice_genre', 'ice_more'), field('ice_name', 'ice_enabled')
+    ];
     const cfg = { ice_enabled: false, ice_advanced: true, ice_more: true };
     h.hideWhenOff(content, 'ice', (k, d) => (k in cfg ? cfg[k] : d));
     assert.deepEqual(content.filter((c) => c.hidden).map((c) => c.id), ['ice_codec', 'ice_bitrate', 'ice_genre']);
-    const on = ['enabled', 'advanced', 'codec'].map((k) => ({ id: 'lan_' + k }));
+    // A select's dependents the same: the origin's fields, the form's switch.
+    const hls = [
+        field('hls_enabled'), { id: 'hls_origin', visibleIf: { field: 'hls_enabled', value: true } },
+        { id: 'hls_s3_bucket', visibleIf: { field: 'hls_origin', value: 's3' } }, { id: 'hls_dash', visibleIf: { field: 'hls_form', value: 'fmp4' } },
+        { id: 'hls_port', visibleIf: { field: 'hls_serve', value: true } }
+    ];
+    h.hideWhenOff(hls, 'hls', (k, d) => ({ hls_enabled: false }[k] ?? d));
+    assert.deepEqual(hls.filter((c) => c.hidden).map((c) => c.id), ['hls_s3_bucket', 'hls_dash', 'hls_port']);
+    const on = ['enabled', 'advanced', 'codec'].map((k) => ({ id: 'lan_' + k, visibleIf: { field: k === 'codec' ? 'lan_advanced' : 'lan_enabled', value: true } }));
     h.hideWhenOff(on, 'lan', (k, d) => ({ lan_enabled: true, lan_advanced: true }[k] ?? d));
     assert.equal(on.some((c) => c.hidden), false);
 });

@@ -2,6 +2,12 @@
 
 All notable changes to Outcast Uplink. The format follows Keep a Changelog; the versions follow Semantic Versioning.
 
+## [0.1.15] - 2026-11-07
+
+### Fixed
+
+- A section switched off showed the fields behind its nested controls (the HLS origin's address and keys, the segment form's DASH switch, the port behind "serve on the player") as if they belonged nowhere; now a section off shows its switch alone, whatever its nested selects and switches hold.
+
 ## [0.1.14] - 2026-11-07
 
 ### Added

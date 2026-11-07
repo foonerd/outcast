@@ -516,18 +516,19 @@ function uplinksFrom(get) {
 }
 
 // A section switched off shows its switch and nothing else. The page shows a field
-// when one other field has one value, so a field behind the section's own nested
-// switch (Advanced, More settings) would still show while the section is off and the
-// nested switch on; those are marked hidden for the page as it is built.
+// when one other field has one value, and judges that value even when the other field
+// is itself hidden, so a field behind a nested switch or select (Advanced, More
+// settings, Serve on the player, the origin, the segment form) would still show while
+// the section is off and the nested control stands where it stood. Every field whose
+// condition is not the section's own switch is therefore marked hidden for the page
+// as it is built; the first-level fields keep their live condition on the switch.
 function hideWhenOff(content, prefix, get) {
     if (get(prefix + '_enabled', false) === true) return;
-    const nested = { advanced: ['codec', 'bitrate', 'rate', 'channels', 'ca_file', 'segment_seconds', 'window'], more: ['description', 'genre', 'url', 'public'], serve: ['port', 'max_connections'] };
-    Object.keys(nested).forEach((toggle) => {
-        if (get(prefix + '_' + toggle, false) !== true) return;
-        nested[toggle].forEach((k) => {
-            const item = content.find((c) => c.id === prefix + '_' + k);
-            if (item) item.hidden = true;
-        });
+    const own = prefix + '_enabled';
+    content.forEach((item) => {
+        if (item.id === own) return;
+        const on = item.visibleIf && item.visibleIf.field;
+        if (on && on !== own) item.hidden = true;
     });
 }
 
