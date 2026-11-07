@@ -61,6 +61,8 @@ pub struct Hub {
     monitor: Monitor,
     /// Counted at every reload; the workers and the entries of one reload share it.
     generation: u64,
+    /// The core's own page, while the settings want it.
+    dashboard: Option<crate::dashboard::Server>,
 }
 
 impl Hub {
@@ -76,6 +78,7 @@ impl Hub {
             converted: Vec::new(),
             monitor: Monitor::default(),
             generation: 0,
+            dashboard: None,
         }
     }
 
@@ -90,6 +93,7 @@ impl Hub {
     pub fn reload(&mut self) -> Result<(), String> {
         let uplinks = Uplinks::load(&self.config)?;
         self.monitor = uplinks.monitor;
+        self.dashboard(uplinks.dashboard);
         self.stop_all();
         self.generation += 1;
         // The entries are in the status before any worker runs, since a worker
@@ -221,6 +225,35 @@ impl Hub {
         }
         eprintln!("outcast: uplinks: {}", self.names());
         Ok(())
+    }
+
+    /// The dashboard as the settings want it: started, moved to another port, or
+    /// stopped; left alone when nothing changed.
+    fn dashboard(&mut self, wanted: crate::config::Dashboard) {
+        let have = self.dashboard.as_ref().map(|s| s.port);
+        let want = wanted.enabled.then_some(wanted.port);
+        if have == want {
+            return;
+        }
+        if let Some(s) = self.dashboard.take() {
+            s.stop();
+        }
+        if let Some(port) = want {
+            match crate::dashboard::Server::start(port, Arc::clone(&self.status)) {
+                Ok(s) => {
+                    eprintln!("outcast: dashboard on port {port}");
+                    self.dashboard = Some(s);
+                }
+                Err(e) => {
+                    // The page's status says why there is no dashboard: the port taken,
+                    // most often; the uplinks go on without it.
+                    eprintln!("outcast: dashboard: {e}");
+                    let mut s = self.status.lock().unwrap_or_else(|e| e.into_inner());
+                    s.last_error = format!("dashboard: {e}");
+                    s.touch();
+                }
+            }
+        }
     }
 
     fn ctx(&self, id: &str, kind: &str) -> Ctx {

@@ -15,6 +15,7 @@
 
 mod config;
 mod control;
+mod dashboard;
 mod encoder;
 mod follow;
 mod hub;

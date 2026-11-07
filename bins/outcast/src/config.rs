@@ -350,6 +350,33 @@ pub struct Uplinks {
     pub hls: Hls,
     #[serde(default)]
     pub monitor: Monitor,
+    #[serde(default)]
+    pub dashboard: Dashboard,
+}
+
+/// The dashboard: the core's own page on a port of the player, for watching
+/// the uplinks from anything on the network.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Dashboard {
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default = "Dashboard::default_port")]
+    pub port: u16,
+}
+
+impl Dashboard {
+    fn default_port() -> u16 {
+        8020
+    }
+}
+
+impl Default for Dashboard {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            port: Self::default_port(),
+        }
+    }
 }
 
 /// The form of an HLS segment.

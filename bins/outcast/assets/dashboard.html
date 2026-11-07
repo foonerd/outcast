@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Outcast Uplink</title>
+<style>
+  :root {
+    --bg: #0b1220; --panel: #121a2b; --panel-2: #182236; --line: rgba(255,255,255,0.08);
+    --text: #e8eef9; --muted: #93a3bf; --green: #34d399; --amber: #fbbf24; --red: #f87171; --grey: #6b7a93; --blue: #60a5fa;
+    color-scheme: dark;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg: #f4f6fb; --panel: #ffffff; --panel-2: #eef2f9; --line: rgba(0,0,0,0.08); --text: #0f172a; --muted: #5b6b85; color-scheme: light; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; padding: 20px; }
+  header { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 18px; }
+  h1 { font-size: 20px; margin: 0; letter-spacing: 0.2px; }
+  .sub { color: var(--muted); font-size: 13px; }
+  .grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; }
+  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 10px; }
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; font-size: 14px; }
+  .kv dt { color: var(--muted); } .kv dd { margin: 0; overflow-wrap: anywhere; }
+  .pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; letter-spacing: 0.02em; background: var(--panel-2); color: var(--muted); }
+  .pill.ok { background: rgba(52,211,153,0.16); color: var(--green); }
+  .pill.wait { background: rgba(251,191,36,0.16); color: var(--amber); }
+  .pill.bad { background: rgba(248,113,113,0.16); color: var(--red); }
+  .meter { display: grid; grid-template-columns: 2.4em 1fr 5.5em; gap: 8px; align-items: center; font-size: 13px; margin: 4px 0; }
+  .bar { height: 10px; background: var(--panel-2); border-radius: 999px; overflow: hidden; position: relative; }
+  .bar .rms { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(90deg, var(--green), #a3e635 70%, var(--amber) 90%, var(--red)); border-radius: 999px; }
+  .bar .peak { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--text); opacity: 0.8; }
+  .num { font-variant-numeric: tabular-nums; }
+  .uplink { border-top: 1px solid var(--line); padding: 10px 0; }
+  .uplink:first-of-type { border-top: 0; padding-top: 0; }
+  .uplink .head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .uplink .name { font-weight: 650; }
+  .uplink .detail { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+  .uplink .err { color: var(--red); font-size: 13px; margin-top: 3px; }
+  .uplink .counters { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; color: var(--muted); margin-top: 4px; }
+  .uplink .counters b { color: var(--text); font-weight: 600; }
+  a { color: var(--blue); text-decoration: none; } a:hover { text-decoration: underline; }
+  .dead { color: var(--red); font-weight: 650; }
+  .stale { color: var(--amber); }
+  footer { margin-top: 18px; color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Outcast Uplink</h1>
+  <span class="sub" id="core">connecting…</span>
+</header>
+<div class="grid">
+  <section class="card">
+    <h2>Programme</h2>
+    <dl class="kv">
+      <dt>Playing</dt><dd id="playing">—</dd>
+      <dt>Title</dt><dd id="title">—</dd>
+      <dt>Stream</dt><dd id="stream">—</dd>
+      <dt>Dead air</dt><dd id="deadair">—</dd>
+    </dl>
+    <div id="meters" style="margin-top:10px"></div>
+  </section>
+  <section class="card" style="grid-column: 1 / -1">
+    <h2>Uplinks</h2>
+    <div id="uplinks"><span class="sub">none</span></div>
+  </section>
+</div>
+<footer id="foot"></footer>
+<script>
+(function () {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const mb = (b) => (b / 1048576).toFixed(b > 104857600 ? 0 : 1) + ' MB';
+  const ago = (epoch, now) => {
+    let s = Math.max(0, now - epoch);
+    if (s < 60) return s + ' s';
+    if (s < 3600) return Math.floor(s / 60) + ' min';
+    if (s < 86400) return Math.floor(s / 3600) + ' h ' + Math.floor((s % 3600) / 60) + ' min';
+    return Math.floor(s / 86400) + ' d ' + Math.floor((s % 86400) / 3600) + ' h';
+  };
+  const kinds = { icecast: 'Icecast', lan: 'Network stream', record: 'Recording', srt: 'SRT', rtmp: 'RTMP', ts: 'Transport stream', hls: 'HLS' };
+  const pill = (state) => {
+    const cls = /^(connected|streaming|recording|listening)$/.test(state) ? 'ok' : /^(waiting|connecting|starting)$/.test(state) ? 'wait' : state === 'error' ? 'bad' : '';
+    return '<span class="pill ' + cls + '">' + esc(state) + '</span>';
+  };
+  const host = location.hostname;
+  const link = (u) => {
+    const m = /^port (\d+)/.exec(u.detail || '');
+    if (u.kind === 'lan' && m) return ' · <a href="http://' + host + ':' + m[1] + '/" target="_blank" rel="noopener">listen</a>';
+    if (u.kind === 'hls' && m) return ' · <a href="http://' + host + ':' + m[1] + '/" target="_blank" rel="noopener">playlist</a>';
+    return '';
+  };
+  const meter = (label, rms, peak) => {
+    const pct = (db) => Math.max(0, Math.min(100, (db + 60) / 60 * 100));
+    return '<div class="meter"><span>' + label + '</span><div class="bar"><div class="rms" style="width:' + pct(rms).toFixed(1) + '%"></div><div class="peak" style="left:' + pct(peak).toFixed(1) + '%"></div></div><span class="num">' + rms.toFixed(1) + ' / ' + peak.toFixed(1) + '</span></div>';
+  };
+  let failures = 0;
+  function render(s) {
+    const now = Math.floor(Date.now() / 1000);
+    $('core').textContent = 'core ' + s.version + ' · tag ' + s.tag + ' · up ' + ago(s.started, now) + (s.last_error ? ' · ' + s.last_error : '');
+    if (s.ring) {
+      $('playing').textContent = s.ring.rate + ' Hz, ' + s.ring.channels + ' ch, ' + s.ring.format + (s.ring.one_bit ? ' (DSD)' : '');
+      $('stream').textContent = s.segments + ' segments, ' + mb(s.bytes) + (s.lost ? ', ' + s.lost + ' bytes lost' : '') + (s.ring.healed ? ', healed ' + s.ring.healed : '');
+    } else {
+      $('playing').textContent = 'nothing: the player is silent';
+      $('stream').textContent = s.segments + ' segments so far, ' + mb(s.bytes);
+    }
+    $('title').textContent = s.title || '—';
+    $('deadair').innerHTML = s.dead_air ? '<span class="dead">yes, ' + s.quiet_seconds + ' s</span>' : (s.quiet_seconds ? 'no (quiet ' + s.quiet_seconds + ' s)' : 'no');
+    const m = $('meters');
+    if (s.level && s.level.rms_db && s.level.rms_db.length) {
+      m.innerHTML = s.level.rms_db.map((rms, i) => meter(i === 0 ? 'L' : i === 1 ? 'R' : String(i + 1), rms, s.level.peak_db[i] == null ? rms : s.level.peak_db[i])).join('') + '<div class="sub">RMS / peak, dBFS</div>';
+    } else {
+      m.innerHTML = '<span class="sub">no level: the tap is not measuring</span>';
+    }
+    const u = $('uplinks');
+    if (!s.uplinks || !s.uplinks.length) { u.innerHTML = '<span class="sub">none set up</span>'; return; }
+    u.innerHTML = s.uplinks.map((x) => {
+      const slot = /^icecast(\d+)$/.exec(x.id);
+      const name = (kinds[x.kind] || x.id) + (slot ? ' ' + slot[1] : '');
+      const c = [];
+      c.push('<b>' + mb(x.bytes || 0) + '</b>');
+      c.push('since <b>' + ago(x.since, now) + '</b>');
+      if (x.reconnects) c.push('reconnects <b>' + x.reconnects + '</b>');
+      if (x.kind === 'hls') { if (x.segments) c.push('segments <b>' + x.segments + '</b>'); if (x.pending) c.push('waiting for the origin <b>' + x.pending + '</b>'); if (x.listeners) c.push('connections <b>' + x.listeners + '</b>'); if (x.dropped) c.push('refused <b>' + x.dropped + '</b>'); }
+      else if (x.dropped) c.push('dropped <b>' + x.dropped + '</b>');
+      if (x.kind === 'lan') c.push('listening <b>' + (x.listeners || 0) + '</b>');
+      if (x.kind === 'record' && x.files) c.push('files <b>' + x.files + '</b>');
+      if (x.kind === 'srt' && x.state === 'connected') c.push('round trip <b>' + x.rtt_ms + ' ms</b>, lost <b>' + x.lost_packets + '</b>');
+      if (x.silence) c.push('<span class="stale">silence</span>');
+      return '<div class="uplink"><div class="head"><span class="name">' + esc(name) + '</span>' + pill(x.state) + '<span class="detail">' + esc(x.detail) + link(x) + '</span></div>'
+        + (x.title ? '<div class="detail">' + esc(x.title) + '</div>' : '')
+        + '<div class="counters">' + c.join(' · ') + '</div>'
+        + (x.last_error && (x.state === 'error' || x.state === 'waiting' || x.state === 'connecting') ? '<div class="err">' + esc(x.last_error) + '</div>' : '')
+        + '</div>';
+    }).join('');
+  }
+  function tick() {
+    fetch('/status.json', { cache: 'no-store' }).then((r) => r.json()).then((s) => {
+      failures = 0; render(s);
+      $('foot').textContent = 'updated ' + new Date().toLocaleTimeString();
+    }).catch(() => {
+      failures += 1;
+      if (failures > 2) $('core').innerHTML = '<span class="stale">the core does not answer</span>';
+    });
+  }
+  tick(); setInterval(tick, 1000);
+})();
+</script>
+</body>
+</html>

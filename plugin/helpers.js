@@ -339,17 +339,37 @@ function applyHls(data, set) {
 }
 
 function validateMonitor(data, t) {
-    if (data.mon_enabled === false) return null;
-    return checkSigned(data.mon_level, 'MON_LEVEL', t) ||
-        checkWhole(data.mon_seconds, 'MON_SECONDS', t) ||
+    return (data.mon_dashboard === true ? checkPort(data.mon_dashboard_port, 'MON_DASHBOARD_PORT', t) : null) ||
+        (data.mon_enabled === false ? null : (checkSigned(data.mon_level, 'MON_LEVEL', t) || checkWhole(data.mon_seconds, 'MON_SECONDS', t))) ||
         null;
 }
 
 function applyMonitor(data, set) {
+    // The dashboard's pair is kept when the page sent it; a save without it leaves it be.
+    if (data.mon_dashboard !== undefined) {
+        set('mon_dashboard', data.mon_dashboard === true);
+        if (data.mon_dashboard === true) set('mon_dashboard_port', String(data.mon_dashboard_port).trim());
+    }
     set('mon_enabled', data.mon_enabled !== false);
     if (data.mon_enabled === false) return;
     set('mon_level', String(data.mon_level).trim());
     set('mon_seconds', String(data.mon_seconds).trim());
+}
+
+// The player's address on the network, for the dashboard's link: the first address
+// of a wired interface, else of a wireless one, else any that is not the loopback.
+function lanAddress(interfaces) {
+    const all = [];
+    Object.keys(interfaces || {}).forEach((name) => {
+        (interfaces[name] || []).forEach((a) => {
+            if (!a || a.internal) return;
+            const v4 = a.family === 'IPv4' || a.family === 4;
+            if (v4 && a.address) all.push({ name, address: a.address });
+        });
+    });
+    const by = (re) => all.find((a) => re.test(a.name));
+    const pick = by(/^(eth|en|eno|ens|enp)/) || by(/^(wlan|wl)/) || all[0];
+    return pick ? pick.address : null;
 }
 
 function validateRecord(data, t) {
@@ -511,6 +531,10 @@ function uplinksFrom(get) {
         monitor: {
             dead_air_level: Number.isFinite(parseFloat(get('mon_level', '-60'))) ? parseFloat(get('mon_level', '-60')) : -60,
             dead_air_seconds: get('mon_enabled', true) === false ? 0 : num(get('mon_seconds', '30'), 30)
+        },
+        dashboard: {
+            enabled: get('mon_dashboard', true) !== false,
+            port: num(get('mon_dashboard_port', '8020'), 8020)
         }
     };
 }
@@ -586,7 +610,7 @@ function summarize(status, audioPath, audioPathError, t, tapNote) {
 }
 
 module.exports = {
-    screenTitle, checkConfig, chainHasTap, chainLibraries, fill, sel, PRESETS, DEFAULT_PRESET, ICE_SLOTS,
+    screenTitle, checkConfig, chainHasTap, chainLibraries, lanAddress, fill, sel, PRESETS, DEFAULT_PRESET, ICE_SLOTS,
     validateIcecast, validateLan, validateRecord, validateMonitor, validateSrt, validateRtmp, validateTs, validateHls,
     applyIcecast, applyLan, applyRecord, applyMonitor, applySrt, applyRtmp, applyTs, applyHls, uplinksFrom, summarize, hideWhenOff
 };

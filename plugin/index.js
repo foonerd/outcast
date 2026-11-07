@@ -465,6 +465,20 @@ Outcast.prototype.getUIConfig = function () {
             h.hideWhenOff(hls, 'hls', (k, d) => c.get(k, d));
 
             const mon = section('monitor_section');
+            setValue(mon, 'mon_dashboard', c.get('mon_dashboard', true) !== false);
+            setValue(mon, 'mon_dashboard_port', String(c.get('mon_dashboard_port', '8020')));
+            // The dashboard's button opens the core's page at the player's address; without
+            // the dashboard the button is not there.
+            const stat = section('status_section');
+            const open = stat.find((x) => x.id === 'open_dashboard');
+            if (open) {
+                const address = h.lanAddress(require('os').networkInterfaces());
+                if (c.get('mon_dashboard', true) !== false && address) {
+                    open.onClick.url = 'http://' + address + ':' + String(c.get('mon_dashboard_port', '8020')) + '/';
+                } else {
+                    open.hidden = true;
+                }
+            }
             setValue(mon, 'mon_enabled', c.get('mon_enabled', true) !== false);
             setValue(mon, 'mon_level', String(c.get('mon_level', '-60')));
             setValue(mon, 'mon_seconds', String(c.get('mon_seconds', '30')));

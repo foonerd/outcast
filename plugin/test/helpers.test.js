@@ -286,6 +286,26 @@ test('the HLS uplink serves on a port, goes to an origin, or both, never nowhere
     assert.deepEqual(content.map((c) => c.hidden === true), [false, true, true]);
 });
 
+test('the dashboard has a switch and a port, and the address of the player is the wired one first', () => {
+    assert.equal(h.validateMonitor({ mon_enabled: true, mon_level: '-60', mon_seconds: '30', mon_dashboard: true, mon_dashboard_port: 'x' }, t), 'ERR_PORT {"field":"MON_DASHBOARD_PORT"}');
+    assert.equal(h.validateMonitor({ mon_enabled: false, mon_dashboard: false }, t), null);
+    const kept = {};
+    h.applyMonitor({ mon_enabled: true, mon_level: '-50', mon_seconds: '20', mon_dashboard: true, mon_dashboard_port: ' 8021 ' }, (k, v) => { kept[k] = v; });
+    assert.deepEqual(h.uplinksFrom((k, d) => (k in kept ? kept[k] : d)).dashboard, { enabled: true, port: 8021 });
+    h.applyMonitor({ mon_enabled: true, mon_level: '-50', mon_seconds: '20', mon_dashboard: false }, (k, v) => { kept[k] = v; });
+    assert.deepEqual(h.uplinksFrom((k, d) => (k in kept ? kept[k] : d)).dashboard, { enabled: false, port: 8021 });
+    assert.deepEqual(h.uplinksFrom((k, d) => d).dashboard, { enabled: true, port: 8020 });
+    const ifs = {
+        lo: [{ address: '127.0.0.1', family: 'IPv4', internal: true }],
+        wlan0: [{ address: '192.168.1.7', family: 'IPv4', internal: false }],
+        eth0: [{ address: 'fe80::1', family: 'IPv6', internal: false }, { address: '192.168.1.5', family: 'IPv4', internal: false }]
+    };
+    assert.equal(h.lanAddress(ifs), '192.168.1.5');
+    delete ifs.eth0;
+    assert.equal(h.lanAddress(ifs), '192.168.1.7');
+    assert.equal(h.lanAddress({ lo: ifs.lo }), null);
+});
+
 test('the dead-air watch takes a level and a time, and the file carries them', () => {
     assert.equal(h.validateMonitor({ mon_level: '-60', mon_seconds: '30' }, t), null);
     assert.equal(h.validateMonitor({ mon_level: '-45.5', mon_seconds: '0' }, t), null);
