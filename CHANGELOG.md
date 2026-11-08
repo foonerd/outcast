@@ -2,6 +2,12 @@
 
 All notable changes to Outcast Uplink. The format follows Keep a Changelog; the versions follow Semantic Versioning.
 
+## [0.1.24] - 2026-11-08
+
+### Added
+
+- An About page beside the dashboard, at `/about` on its port and linked from the dashboard's and the programme page's headers: what Outcast Uplink is, with its version, repository, wiki and releases; the evo framework it is part of and grew out of, with a code to scan; what it is built of, evotap, evopeg and the decoder, with their licences; and how to support it.
+
 ## [0.1.23] - 2026-11-08
 
 ### Added

@@ -1,6 +1,6 @@
 {
   "name": "outcast",
-  "version": "0.1.23",
+  "version": "0.1.24",
   "description": "Casts whatever the player plays out to any uplink: Icecast, SHOUTcast, RTMP, SRT, HLS, the LAN or a file. An evo framework plugin built on evotap.",
   "main": "index.js",
   "scripts": {
@@ -21,7 +21,7 @@
     "os": ["bookworm"],
     "architectures": ["armhf", "amd64"],
     "details": "Streams whatever the player plays, from any service, to Icecast, SHOUTcast, RTMP, SRT, HLS, the LAN or a file, with the screen's title. Built on evotap.",
-    "changelog": "0.1.23 Insert files from a browser: uploaded from a phone or a desk on the programme page, converted on the player to the WAV the mixer plays, listed, used and deleted there."
+    "changelog": "0.1.24 An About page beside the dashboard: what this is, the evo framework it comes from with a code to scan, what it is built of, and how to support it."
   },
   "dependencies": {
     "kew": "^0.7.0",
