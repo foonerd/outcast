@@ -484,11 +484,16 @@ Outcast.prototype.djAct = function (block) {
     self.tellDj('DJ mode: ' + block.name + ' started');
 };
 
-// The core told once per change, so the status and the dashboard carry DJ mode.
+// The core told once per change, so the status and the dashboard carry DJ mode; told
+// again whenever the core's status lacks it, since the core may have been starting
+// when the last word went (at the plugin's start the core is restarted), or restarted
+// since.
 Outcast.prototype.tellDj = function (event) {
     const r = this.djReport();
     const key = JSON.stringify([r.enabled, r.block, r.next, r.yielded, r.acted_at]);
-    if (!event && key === this.lastDjKey) return;
+    const status = this.readStatus();
+    const known = status && status.dj && typeof status.dj === 'object';
+    if (!event && key === this.lastDjKey && known) return;
     this.lastDjKey = key;
     this.tellCore(event ? { op: 'dj', dj: r, event } : { op: 'dj', dj: r });
 };
