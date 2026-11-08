@@ -2,6 +2,16 @@
 
 All notable changes to Outcast Uplink. The format follows Keep a Changelog; the versions follow Semantic Versioning.
 
+## [0.1.18] - 2026-11-08
+
+### Added
+
+- The player on the dashboard: a Player card with the whole machine's CPU and load averages, Outcast's own share with its encoders', memory used and Outcast's own, the processor's temperature where the player has a sensor (amber from 70 °C, red from 80), and what goes out: the uplinks' total and the player's interface. Each uplink's row says what its encoder costs. Read once a second from what the kernel keeps, no process run; in the status as `system`, and one line of it under the status button.
+
+### Fixed
+
+- The recording folder could not be anywhere but under `/data/INTERNAL/outcast`: the core's unit kept the rest of the file system read-only, so a mounted share, which the page offered, ended in an error. The unit now leaves `/data`, `/mnt` and `/media` writable (`/usr`, `/boot` and `/etc` stay read-only).
+
 ## [0.1.17] - 2026-11-07
 
 ### Added
