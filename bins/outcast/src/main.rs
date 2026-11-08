@@ -15,6 +15,7 @@
 
 mod config;
 mod control;
+mod convert;
 mod dashboard;
 mod encoder;
 mod follow;
@@ -25,7 +26,7 @@ mod status;
 mod system;
 mod uplink;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -40,11 +41,13 @@ struct Args {
     shm: PathBuf,
     evopeg: Option<PathBuf>,
     uplinks: PathBuf,
+    /// The folder of the inserts' WAV files, where the page uploads them.
+    jingles: PathBuf,
 }
 
 fn usage() -> ! {
     eprintln!(
-        "outcast [--tag TAG] [--run DIR] [--shm DIR] [--evopeg FILE] [--uplinks FILE] [--version]"
+        "outcast [--tag TAG] [--run DIR] [--shm DIR] [--evopeg FILE] [--uplinks FILE] [--jingles DIR] [--version]\n       outcast convert IN OUT.wav"
     );
     std::process::exit(64);
 }
@@ -56,6 +59,7 @@ fn args() -> Args {
         shm: PathBuf::from(tap::ring::DIR),
         evopeg: None,
         uplinks: PathBuf::from("/data/configuration/audio_interface/outcast/uplinks.json"),
+        jingles: PathBuf::from("/data/INTERNAL/outcast/jingles"),
     };
     let mut it = std::env::args().skip(1);
     while let Some(a) = it.next() {
@@ -72,6 +76,7 @@ fn args() -> Args {
                 out.evopeg = Some(it.next().map(PathBuf::from).unwrap_or_else(|| usage()))
             }
             "--uplinks" => out.uplinks = it.next().map(PathBuf::from).unwrap_or_else(|| usage()),
+            "--jingles" => out.jingles = it.next().map(PathBuf::from).unwrap_or_else(|| usage()),
             "--version" => {
                 println!("outcast {}", env!("CARGO_PKG_VERSION"));
                 std::process::exit(0);
@@ -93,6 +98,28 @@ fn evopeg_path(given: Option<PathBuf>) -> PathBuf {
 }
 
 fn main() {
+    // A file converted to the WAV the mixer plays, and nothing else: for an upload, and by hand.
+    let argv: Vec<String> = std::env::args().collect();
+    if argv.get(1).map(String::as_str) == Some("convert") {
+        let (Some(input), Some(output)) = (argv.get(2), argv.get(3)) else {
+            usage()
+        };
+        match convert::to_wav(Path::new(input), Path::new(output)) {
+            Ok(info) => {
+                println!(
+                    "{{\"rate\":{},\"channels\":{},\"seconds\":{:.1}}}",
+                    info.rate,
+                    info.channels,
+                    info.seconds()
+                );
+                return;
+            }
+            Err(e) => {
+                eprintln!("outcast convert: {e}");
+                std::process::exit(1);
+            }
+        }
+    }
     let a = args();
     if let Err(e) = std::fs::create_dir_all(&a.run) {
         eprintln!("outcast: cannot make {}: {e}", a.run.display());
@@ -153,7 +180,7 @@ fn main() {
 
     // The uplinks from their file, then the ring, followed on this thread
     // for as long as the daemon runs.
-    let mut hub = Hub::new(Arc::clone(&status), &evopeg, &a.uplinks);
+    let mut hub = Hub::new(Arc::clone(&status), &evopeg, &a.uplinks, &a.jingles);
     if let Err(e) = hub.reload() {
         eprintln!("outcast: uplinks: {e}");
         let mut s = status.lock().unwrap_or_else(|e| e.into_inner());

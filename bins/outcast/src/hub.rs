@@ -72,14 +72,17 @@ pub struct Hub {
     dashboard: Option<crate::dashboard::Server>,
     /// Inserts into the stream, mixed over the programme before the fan-out.
     mixer: crate::mixer::Mixer,
+    /// The inserts' folder, for the page's uploads.
+    jingles: PathBuf,
 }
 
 impl Hub {
-    pub fn new(status: Arc<Mutex<Status>>, evopeg: &Path, config: &Path) -> Self {
+    pub fn new(status: Arc<Mutex<Status>>, evopeg: &Path, config: &Path, jingles: &Path) -> Self {
         Self {
             status,
             evopeg: evopeg.to_path_buf(),
             config: config.to_path_buf(),
+            jingles: jingles.to_path_buf(),
             workers: Vec::new(),
             title: String::new(),
             pending_title: None,
@@ -255,7 +258,11 @@ impl Hub {
             s.stop();
         }
         if let Some(port) = want {
-            match crate::dashboard::Server::start(port, Arc::clone(&self.status)) {
+            match crate::dashboard::Server::start(
+                port,
+                Arc::clone(&self.status),
+                self.jingles.clone(),
+            ) {
                 Ok(s) => {
                     eprintln!("outcast: dashboard on port {port}");
                     self.dashboard = Some(s);

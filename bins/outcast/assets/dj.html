@@ -54,6 +54,14 @@
   .switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
   table.kv { width: 100%; border-collapse: collapse; } table.kv td { padding: 6px 8px; border-bottom: 1px solid #333; } table.kv tr:last-child td { border-bottom: 0; } table.kv td:first-child { color: var(--muted); width: 32%; }
   .empty { color: var(--muted); padding: 16px 8px; }
+  .pbar { height: 8px; background: #111; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+  .pbar div { height: 100%; background: var(--accent); transition: width .2s; }
+  .files { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 8px; }
+  .files .f { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: grid; grid-template-columns: 1fr auto; gap: 4px 8px; align-items: center; }
+  .files .f .n { grid-column: 1; grid-row: 1; font-weight: 600; overflow-wrap: anywhere; }
+  .files .f .m { grid-column: 1; grid-row: 2; color: var(--muted); font-size: 12px; }
+  .files .f .a { grid-column: 2; grid-row: 1 / 3; display: flex; gap: 6px; }
+  .card.dragover { outline: 2px dashed var(--accent); outline-offset: -4px; }
 </style>
 </head>
 <body>
@@ -99,7 +107,14 @@
   <section class="card">
     <div class="title">Inserts <span class="help">jingles, IDs and announcements into the stream, over the programme; the room hears none of it</span></div>
     <div class="body">
-      <table class="blocks">
+      <div class="row" style="margin-bottom:8px">
+        <input type="file" id="upfile" accept="audio/*,.wav,.m4a,.mp3,.flac,.ogg,.oga,.aac,.mp4" class="hidden">
+        <button class="small primary" id="upload">Upload a file</button>
+        <span class="help">from this device: WAV, M4A, MP3, FLAC or Ogg, 256 MB at most, converted on the player as it lands; or drop a file on this card</span>
+      </div>
+      <div id="upprog" class="hidden" style="margin-bottom:8px"><div class="pbar"><div id="upbar" style="width:0%"></div></div><div class="help" id="uptext"></div></div>
+      <div id="files" class="files"></div>
+      <table class="blocks" style="margin-top:12px">
         <thead><tr><th style="width:12em">Name</th><th style="width:13em">File</th><th>When</th><th style="width:14em">Under it</th><th class="c" style="width:6em">On the clock</th><th style="width:10.5em"></th></tr></thead>
         <tbody id="irows"></tbody>
       </table>
@@ -193,6 +208,46 @@
     if (el.dataset.f === 'iremove') { dj.inserts.splice(i, 1); dirty = true; render(); }
     if (el.dataset.f === 'iplay') { const it = dj.inserts[i]; if (it && it.id) call('djPlayInsert', { id: it.id }); else toast('Save first, then play.', true); }
   });
+  // ---- the files: listed from the core, uploaded to it, deleted on it
+  const mss = (s) => s >= 3600 ? Math.floor(s / 3600) + ':' + String(Math.floor((s % 3600) / 60)).padStart(2, '0') + ':' + String(Math.floor(s % 60)).padStart(2, '0') : Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
+  const mb = (b) => b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' kB';
+  function loadFiles() {
+    fetch('/jingles', { cache: 'no-store' }).then((r) => r.json()).then((list) => {
+      files = list.map((f) => f.name);
+      const box = $('files');
+      box.innerHTML = list.length ? list.map((f) => '<div class="f"><span class="n">' + esc(f.name) + '</span><span class="a"><button class="small" data-use="' + esc(f.name) + '" title="A new insert with this file">Use</button><button class="small danger" data-del="' + esc(f.name) + '" title="Delete this file from the player">×</button></span><span class="m">' + mss(f.seconds) + ' · ' + mb(f.bytes) + '</span></div>').join('')
+        : '<div class="help">No files on the player yet.</div>';
+      renderInserts();
+    }).catch(() => { $('files').innerHTML = '<div class="help">the core does not answer for the files</div>'; });
+  }
+  $('files').addEventListener('click', (e) => {
+    const use = e.target.closest('button[data-use]'); const del = e.target.closest('button[data-del]');
+    if (use) { dj.inserts = dj.inserts || []; dj.inserts.push({ id: 'i' + Date.now(), name: use.dataset.use.replace(/\.wav$/i, ''), file: use.dataset.use, when: 'hour', minute: 0, every: 3, duck_db: -12, hard: false }); dirty = true; render(); toast('Added below; set when it plays, then Save.'); }
+    if (del) {
+      fetch('/jingles/' + encodeURIComponent(del.dataset.del), { method: 'DELETE' }).then((r) => { if (r.status === 204) { toast('Deleted.'); loadFiles(); call('djGet', {}); } else toast('Not deleted: ' + r.status, true); }).catch(() => toast('The core does not answer.', true));
+    }
+  });
+  function uploadFile(file) {
+    if (!file) return;
+    if (file.size > 256 * 1048576) { toast('256 MB at most.', true); return; }
+    const xhr = new XMLHttpRequest();
+    $('upprog').classList.remove('hidden'); $('upbar').style.width = '0%'; $('uptext').textContent = 'uploading ' + file.name + ', ' + mb(file.size);
+    xhr.upload.onprogress = (ev) => { if (ev.lengthComputable) { const p = Math.round(100 * ev.loaded / ev.total); $('upbar').style.width = p + '%'; $('uptext').textContent = (p < 100 ? 'uploading ' + file.name + ', ' + p + ' %' : 'converting ' + file.name + ' on the player…'); } };
+    xhr.onload = () => {
+      $('upprog').classList.add('hidden');
+      if (xhr.status === 200) { let r = {}; try { r = JSON.parse(xhr.responseText); } catch (e) { } toast('On the player: ' + (r.name || file.name) + (r.seconds ? ', ' + mss(r.seconds) : '')); loadFiles(); call('djGet', {}); }
+      else toast('Not taken: ' + (xhr.responseText || xhr.status), true);
+    };
+    xhr.onerror = () => { $('upprog').classList.add('hidden'); toast('The upload failed: the core does not answer.', true); };
+    xhr.open('POST', '/jingles/' + encodeURIComponent(file.name));
+    xhr.send(file);
+  }
+  $('upload').onclick = () => $('upfile').click();
+  $('upfile').onchange = () => { uploadFile($('upfile').files[0]); $('upfile').value = ''; };
+  const dropCard = $('files').closest('.card');
+  ['dragenter', 'dragover'].forEach((ev) => dropCard.addEventListener(ev, (e) => { e.preventDefault(); dropCard.classList.add('dragover'); }));
+  ['dragleave', 'drop'].forEach((ev) => dropCard.addEventListener(ev, (e) => { e.preventDefault(); dropCard.classList.remove('dragover'); }));
+  dropCard.addEventListener('drop', (e) => { const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; if (f) uploadFile(f); });
   $('iadd').onclick = () => {
     dj.inserts = dj.inserts || [];
     dj.inserts.push({ id: 'i' + Date.now(), name: '', file: files[0] || '', when: 'hour', minute: 0, every: 3, duck_db: -12, hard: false });
@@ -252,7 +307,7 @@
   function connect() {
     if (typeof io === 'undefined') { $('sub').textContent = 'the player\'s socket library did not load'; return; }
     socket = io.connect(player, { reconnection: true });
-    socket.on('connect', () => { $('sub').textContent = 'the programme as blocks over the day'; socket.emit('listPlaylist', {}); call('djGet', {}); });
+    socket.on('connect', () => { $('sub').textContent = 'the programme as blocks over the day'; socket.emit('listPlaylist', {}); call('djGet', {}); loadFiles(); });
     socket.on('disconnect', () => { $('sub').textContent = 'the player does not answer'; });
     socket.on('pushListPlaylist', (list) => { playlists = Array.isArray(list) ? list.map(String) : []; render(); });
     socket.on('pushDj', (d) => {
