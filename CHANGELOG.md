@@ -2,6 +2,13 @@
 
 All notable changes to Outcast Uplink. The format follows Keep a Changelog; the versions follow Semantic Versioning.
 
+## [0.1.23] - 2026-11-08
+
+### Added
+
+- Insert files from a browser: the programme page uploads a jingle or a recording from the device it is open on, a phone included, and the core converts it to the WAV the mixer plays as it lands (AAC in M4A, MP3, FLAC, Ogg Vorbis or WAV, 256 MB at most); the files are listed with their length, used as inserts with a click, and deleted from the page. A recording made on the road reaches the stream with nothing but the player's address.
+- `outcast convert IN OUT.wav` on the command line, the same conversion by hand.
+
 ## [0.1.22] - 2026-11-08
 
 ### Fixed
