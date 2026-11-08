@@ -2,6 +2,12 @@
 
 All notable changes to Outcast Uplink. The format follows Keep a Changelog; the versions follow Semantic Versioning.
 
+## [0.1.27] - 2026-11-08
+
+### Changed
+
+- The three pages aligned as Glass's manager is: the header carries the name over a line with the player's tag and the core's version, and the tab bar and the content share one centred column, so the tabs stand still from page to page.
+
 ## [0.1.26] - 2026-11-08
 
 ### Changed
