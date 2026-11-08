@@ -2,6 +2,16 @@
 
 All notable changes to Outcast Uplink. The format follows Keep a Changelog; the versions follow Semantic Versioning.
 
+## [0.1.20] - 2026-11-08
+
+### Added
+
+- DJ mode, the first stage: the programme as blocks over the day. Each block names a start time and a source the player has, its own queue, a playlist on random or in order, or a web radio, and whether it starts at the end of the track playing or on the clock; the blocks repeat daily, the last running over midnight into the first. At a block's start the player is told what to play; a queue changed by hand makes DJ mode stand back until the next block, and a take-over hands it back. The programme page, beside the dashboard at `/dj` on its port, is where the blocks are set and where what is on now and next is shown; the Volumio page has the switch and the buttons that open it. The dashboard's Programme card says the block in force, the next, and when DJ mode stands back; a block's start is an event in the Since card. Jingles and inserts come in a later stage.
+
+### Changed
+
+- The release build fetches the components with more patience, and through GitHub's API when the download addresses fail, as they did for an hour on 8 November.
+
 ## [0.1.19] - 2026-11-08
 
 ### Added

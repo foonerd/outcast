@@ -1,6 +1,6 @@
 {
   "name": "outcast",
-  "version": "0.1.19",
+  "version": "0.1.20",
   "description": "Casts whatever the player plays out to any uplink: Icecast, SHOUTcast, RTMP, SRT, HLS, the LAN or a file. An evo framework plugin built on evotap.",
   "main": "index.js",
   "scripts": {
@@ -21,7 +21,7 @@
     "os": ["bookworm"],
     "architectures": ["armhf", "amd64"],
     "details": "Streams whatever the player plays, from any service, to Icecast, SHOUTcast, RTMP, SRT, HLS, the LAN or a file, with the screen's title. Built on evotap.",
-    "changelog": "0.1.19 The dashboard grown: a Since card with its Clear, the Level as a meter bridge with a minute of history, the titles played, a clock."
+    "changelog": "0.1.20 DJ mode, the first stage: the programme as blocks over the day, set on a page beside the dashboard; the release build fetches the components through the API when GitHub's download addresses fail."
   },
   "dependencies": {
     "kew": "^0.7.0",
