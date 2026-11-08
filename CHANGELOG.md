@@ -2,6 +2,12 @@
 
 All notable changes to Outcast Uplink. The format follows Keep a Changelog; the versions follow Semantic Versioning.
 
+## [0.1.25] - 2026-11-08
+
+### Changed
+
+- The About page's credits in the format Glass uses: each piece and each way to support the work as a row with its name, a line or two, its link and the link's code to scan, built into the page.
+
 ## [0.1.24] - 2026-11-08
 
 ### Added
