@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Outcast Uplink · About</title>
+<style>
+  :root {
+    --bg: #1c1c1c; --panel: #262626; --panel2: #303030; --line: #404040;
+    --text: #e6e6e6; --muted: #9a9a9a; --accent: #54b948; --accent2: #3f8f37;
+    --warn: #e6a23c; --danger: #d64545; --info: #4a90e2;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background: var(--bg); color: var(--text); font-size: 15px; line-height: 1.45; }
+  a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
+  button { font: inherit; cursor: pointer; border: 1px solid var(--line); background: var(--panel2); color: var(--text); padding: 8px 14px; border-radius: 6px; }
+  button:hover { background: #3a3a3a; border-color: #555; }
+  button.small { padding: 5px 10px; font-size: 13px; }
+  .hidden { display: none !important; }
+  .header { position: sticky; top: 0; z-index: 20; background: #232323; border-bottom: 1px solid var(--line); padding: 12px 20px; display: flex; align-items: center; gap: 16px; box-shadow: 0 2px 8px rgba(0,0,0,.35); }
+  .header h1 { font-size: 19px; font-weight: 600; color: #fff; white-space: nowrap; }
+  .header .sub { color: var(--muted); font-size: 13px; }
+  .header .grow { flex: 1; min-width: 0; }
+  .header a.nav { font-size: 13px; }
+  .container { max-width: 900px; margin: 0 auto; padding: 16px 20px 60px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin-bottom: 14px; }
+  .card .title { background: var(--panel2); color: #fff; font-weight: 600; padding: 9px 14px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 10px; }
+  .card .title .help { font-weight: 400; }
+  .card .body { padding: 14px 16px 16px; }
+  .help { color: var(--muted); font-size: 13px; }
+  p { margin: 0 0 10px; } p:last-child { margin-bottom: 0; }
+  .evo { display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: center; }
+  .evo .qr { width: 112px; height: 112px; background: #fff; padding: 8px; border-radius: 8px; display: block; }
+  .evo .qr path { fill: #111; }
+  table.kv { width: 100%; border-collapse: collapse; }
+  table.kv td { padding: 7px 8px; border-bottom: 1px solid #333; vertical-align: top; }
+  table.kv tr:last-child td { border-bottom: 0; }
+  table.kv td:first-child { color: var(--muted); width: 30%; }
+  .links a { margin-right: 14px; }
+  @media (max-width: 560px) { .evo { grid-template-columns: 1fr; } .evo .qr { justify-self: start; } }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>About</h1>
+  <span class="sub grow" id="core">Outcast Uplink</span>
+  <a class="nav" href="/">Dashboard</a>
+  <a class="nav" href="/dj">DJ mode</a>
+  <button class="small hidden" id="close">Close</button>
+</div>
+<div class="container">
+  <section class="card">
+    <div class="title">Outcast Uplink <span class="help" id="version"></span></div>
+    <div class="body">
+      <p>Casts whatever a Volumio player plays out to any uplink: Icecast and SHOUTcast servers, RTMP and SRT ingests, transport streams, HLS and DASH, a stream on the network, a recording. Every service the player has is carried, the title the player shows goes with it, and the player never waits on an uplink. DJ mode makes the programme and puts jingles and inserts into the stream.</p>
+      <p class="links"><a href="https://github.com/foonerd/outcast" target="_blank" rel="noopener">Repository</a><a href="https://github.com/foonerd/outcast/wiki" target="_blank" rel="noopener">Wiki</a><a href="https://github.com/foonerd/outcast/releases" target="_blank" rel="noopener">Releases</a><a href="https://github.com/foonerd/outcast/blob/main/CHANGELOG.md" target="_blank" rel="noopener">Changelog</a></p>
+    </div>
+  </section>
+  <section class="card">
+    <div class="title">The evo framework <span class="help">where this comes from</span></div>
+    <div class="body evo">
+      <div>
+        <p>Outcast Uplink is part of the <a href="https://evoframework.org" target="_blank" rel="noopener">evo framework</a>, and grew out of the work on evo-device-audio: how a player's sound can be taken from its own audio chain without touching it, measured, and carried on. Every name beginning with evo, evotap, evopeg and the rest, is a piece of that framework, direct or derived.</p>
+        <p class="help">Scan the code, or go to evoframework.org.</p>
+      </div>
+      <svg class="qr" viewBox="0 0 25 25" shape-rendering="crispEdges" role="img" aria-label="evoframework.org"><path d="M0 0h7v1h-7zM9 0h1v1h-1zM13 0h1v1h-1zM16 0h1v1h-1zM18 0h7v1h-7zM0 1h1v1h-1zM6 1h1v1h-1zM12 1h5v1h-5zM18 1h1v1h-1zM24 1h1v1h-1zM0 2h1v1h-1zM2 2h3v1h-3zM6 2h1v1h-1zM8 2h1v1h-1zM10 2h2v1h-2zM14 2h1v1h-1zM16 2h1v1h-1zM18 2h1v1h-1zM20 2h3v1h-3zM24 2h1v1h-1zM0 3h1v1h-1zM2 3h3v1h-3zM6 3h1v1h-1zM8 3h2v1h-2zM12 3h5v1h-5zM18 3h1v1h-1zM20 3h3v1h-3zM24 3h1v1h-1zM0 4h1v1h-1zM2 4h3v1h-3zM6 4h1v1h-1zM8 4h5v1h-5zM14 4h1v1h-1zM16 4h1v1h-1zM18 4h1v1h-1zM20 4h3v1h-3zM24 4h1v1h-1zM0 5h1v1h-1zM6 5h1v1h-1zM8 5h1v1h-1zM12 5h2v1h-2zM15 5h2v1h-2zM18 5h1v1h-1zM24 5h1v1h-1zM0 6h7v1h-7zM8 6h1v1h-1zM10 6h1v1h-1zM12 6h1v1h-1zM14 6h1v1h-1zM16 6h1v1h-1zM18 6h7v1h-7zM8 7h3v1h-3zM15 7h2v1h-2zM0 8h1v1h-1zM2 8h5v1h-5zM13 8h3v1h-3zM18 8h5v1h-5zM0 9h2v1h-2zM4 9h1v1h-1zM7 9h1v1h-1zM9 9h3v1h-3zM13 9h1v1h-1zM16 9h2v1h-2zM19 9h1v1h-1zM23 9h1v1h-1zM1 10h3v1h-3zM6 10h3v1h-3zM10 10h1v1h-1zM13 10h1v1h-1zM15 10h5v1h-5zM21 10h1v1h-1zM23 10h2v1h-2zM1 11h2v1h-2zM4 11h1v1h-1zM7 11h3v1h-3zM11 11h2v1h-2zM14 11h3v1h-3zM19 11h1v1h-1zM24 11h1v1h-1zM0 12h2v1h-2zM3 12h1v1h-1zM6 12h3v1h-3zM11 12h1v1h-1zM13 12h1v1h-1zM17 12h2v1h-2zM20 12h1v1h-1zM22 12h3v1h-3zM0 13h1v1h-1zM9 13h1v1h-1zM12 13h2v1h-2zM16 13h1v1h-1zM19 13h1v1h-1zM21 13h1v1h-1zM23 13h1v1h-1zM0 14h1v1h-1zM2 14h1v1h-1zM5 14h4v1h-4zM13 14h5v1h-5zM19 14h3v1h-3zM23 14h2v1h-2zM0 15h1v1h-1zM2 15h2v1h-2zM5 15h1v1h-1zM7 15h2v1h-2zM10 15h1v1h-1zM12 15h1v1h-1zM15 15h1v1h-1zM17 15h1v1h-1zM19 15h2v1h-2zM24 15h1v1h-1zM0 16h1v1h-1zM2 16h2v1h-2zM6 16h3v1h-3zM12 16h9v1h-9zM22 16h1v1h-1zM8 17h1v1h-1zM10 17h1v1h-1zM13 17h1v1h-1zM15 17h2v1h-2zM20 17h2v1h-2zM0 18h7v1h-7zM11 18h4v1h-4zM16 18h1v1h-1zM18 18h1v1h-1zM20 18h1v1h-1zM22 18h3v1h-3zM0 19h1v1h-1zM6 19h1v1h-1zM8 19h4v1h-4zM14 19h1v1h-1zM16 19h1v1h-1zM20 19h2v1h-2zM24 19h1v1h-1zM0 20h1v1h-1zM2 20h3v1h-3zM6 20h1v1h-1zM8 20h1v1h-1zM10 20h11v1h-11zM22 20h1v1h-1zM0 21h1v1h-1zM2 21h3v1h-3zM6 21h1v1h-1zM8 21h3v1h-3zM12 21h1v1h-1zM14 21h5v1h-5zM20 21h5v1h-5zM0 22h1v1h-1zM2 22h3v1h-3zM6 22h1v1h-1zM8 22h1v1h-1zM10 22h1v1h-1zM13 22h1v1h-1zM15 22h1v1h-1zM21 22h2v1h-2zM24 22h1v1h-1zM0 23h1v1h-1zM6 23h1v1h-1zM11 23h1v1h-1zM16 23h6v1h-6zM24 23h1v1h-1zM0 24h7v1h-7zM8 24h1v1h-1zM10 24h1v1h-1zM12 24h3v1h-3zM19 24h6v1h-6z"/></svg>
+    </div>
+  </section>
+  <section class="card">
+    <div class="title">Built of <span class="help">the pieces and their licences</span></div>
+    <div class="body">
+      <table class="kv">
+        <tr><td>Outcast Uplink</td><td>The plugin, the core, the dashboard and DJ mode. MIT. <a href="https://github.com/foonerd/outcast/blob/main/LICENSE" target="_blank" rel="noopener">Licence</a></td></tr>
+        <tr><td>evotap</td><td>The ALSA tap the sound passes through and the ring it writes. <a href="https://github.com/foonerd/evotap" target="_blank" rel="noopener">Repository</a></td></tr>
+        <tr><td>evopeg</td><td>FFmpeg built down to encoding and muxing from a pipe to a pipe, one child per uplink. LGPL, with its licences and corresponding source in its releases. <a href="https://github.com/foonerd/evopeg" target="_blank" rel="noopener">Repository</a></td></tr>
+        <tr><td>symphonia</td><td>The pure-Rust decoder that makes an uploaded insert the WAV the mixer plays. MPL-2.0. <a href="https://github.com/pdeljanov/Symphonia" target="_blank" rel="noopener">Repository</a></td></tr>
+        <tr><td>Volumio</td><td>The player this is a plugin of. <a href="https://volumio.com" target="_blank" rel="noopener">volumio.com</a></td></tr>
+      </table>
+    </div>
+  </section>
+  <section class="card">
+    <div class="title">Support <span class="help">free and open source, built by one developer in his own time</span></div>
+    <div class="body">
+      <p>If Outcast Uplink has earned a place on your player: <a href="https://github.com/sponsors/foonerd" target="_blank" rel="noopener">GitHub Sponsors</a> · <a href="https://ko-fi.com/justanerd" target="_blank" rel="noopener">Ko-fi</a>.</p>
+      <p class="help">Provided as-is under the MIT licence; sponsorship is a thank-you, not a purchase: it buys no priority, no features and no support agreement.</p>
+    </div>
+  </section>
+</div>
+<script>
+(function () {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  fetch('/status.json', { cache: 'no-store' }).then((r) => r.json()).then((s) => {
+    $('version').textContent = 'core ' + s.version + ' · tag ' + s.tag;
+  }).catch(() => {});
+  if (window.parent === window) {
+    $('close').classList.remove('hidden');
+    $('close').onclick = function () {
+      window.close();
+      setTimeout(function () { if (window.closed) return; if (window.history.length > 1) window.history.back(); else window.location.href = 'http://' + location.hostname + '/'; }, 100);
+    };
+  }
+})();
+</script>
+</body>
+</html>

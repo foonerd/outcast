@@ -24,6 +24,9 @@ const PAGE: &str = include_str!("../assets/dashboard.html");
 /// DJ mode's editor, served beside it; it talks to the plugin over the player's
 /// own socket, as the Volumio page does.
 const DJ_PAGE: &str = include_str!("../assets/dj.html");
+/// About: what this is, the evo framework it comes from (with a code to scan), what it
+/// is built of, and how to support it. The QR code is an SVG built into the page.
+const ABOUT_PAGE: &str = include_str!("../assets/about.html");
 /// Connections answered at once; the rest wait in the listen queue.
 const AT_ONCE: usize = 8;
 /// An upload larger than this is refused.
@@ -115,6 +118,12 @@ pub fn answer(
             "text/html; charset=utf-8",
             "no-cache",
             DJ_PAGE.to_string(),
+        ),
+        "/about" | "/about/" | "/about.html" => (
+            200,
+            "text/html; charset=utf-8",
+            "no-cache",
+            ABOUT_PAGE.to_string(),
         ),
         _ => (404, "text/plain", "no-store", String::new()),
     }
@@ -502,6 +511,16 @@ mod tests {
                 && body.contains("/jingles/")
                 && !body.contains("<script src"),
             "the editor talks to the plugin over the player's own socket, uploads to the core, and fetches nothing from outside"
+        );
+        let (code, _, _, body) = answer("GET", "/about", "{}");
+        assert_eq!(code, 200);
+        assert!(
+            body.contains("<title>Outcast Uplink · About</title>")
+                && body.contains("evoframework.org")
+                && body.contains("<svg class=\"qr\"")
+                && !body.contains("<script src")
+                && !body.contains("<img "),
+            "the About page names the framework with its code built in, and fetches nothing"
         );
         assert_eq!(answer("GET", "/secret", "{}").0, 404);
         assert_eq!(answer("POST", "/", "{}").0, 405);
