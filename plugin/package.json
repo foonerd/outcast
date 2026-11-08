@@ -1,6 +1,6 @@
 {
   "name": "outcast",
-  "version": "0.1.21",
+  "version": "0.1.22",
   "description": "Casts whatever the player plays out to any uplink: Icecast, SHOUTcast, RTMP, SRT, HLS, the LAN or a file. An evo framework plugin built on evotap.",
   "main": "index.js",
   "scripts": {
@@ -21,7 +21,7 @@
     "os": ["bookworm"],
     "architectures": ["armhf", "amd64"],
     "details": "Streams whatever the player plays, from any service, to Icecast, SHOUTcast, RTMP, SRT, HLS, the LAN or a file, with the screen's title. Built on evotap.",
-    "changelog": "0.1.21 DJ mode, the second stage: inserts, jingles and IDs as WAV files mixed into the stream over the programme by the core, on the hour, every so many tracks or at a block's start."
+    "changelog": "0.1.22 DJ mode is told to the core again whenever the core's status lacks it, so the dashboard shows it after the core's start or restart."
   },
   "dependencies": {
     "kew": "^0.7.0",

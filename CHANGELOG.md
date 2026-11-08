@@ -2,6 +2,12 @@
 
 All notable changes to Outcast Uplink. The format follows Keep a Changelog; the versions follow Semantic Versioning.
 
+## [0.1.22] - 2026-11-08
+
+### Fixed
+
+- The dashboard and the status could show nothing of DJ mode: the plugin told the core once per change, and when the first word went while the core was still starting, or the core restarted later, nothing was said again. The plugin now tells the core again whenever the core's status lacks DJ mode.
+
 ## [0.1.21] - 2026-11-08
 
 ### Added
