@@ -2,6 +2,12 @@
 
 All notable changes to Outcast Uplink. The format follows Keep a Changelog; the versions follow Semantic Versioning.
 
+## [0.1.21] - 2026-11-08
+
+### Added
+
+- DJ mode, the second stage: inserts. Jingles, station IDs and announcements as WAV files in the player's jingles folder, played into the stream over the programme by the core's mixer, the programme ducked under them (a bed, under, well under, or cut) and brought back after, the insert's edges faded; fitted to the stream's rate and channels as they play. When: every hour at a minute, every so many tracks, or at each block's start; soft at the end of the track playing (five minutes at most where none ends) or on the clock; or now, from the programme page. The room's audio is untouched: the inserts go to the uplinks and the recording alone. The status says the insert playing, the Since card counts them, and a one-bit stream, which is not mixed, says so.
+
 ## [0.1.20] - 2026-11-08
 
 ### Added
