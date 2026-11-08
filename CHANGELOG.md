@@ -2,6 +2,19 @@
 
 All notable changes to Outcast Uplink. The format follows Keep a Changelog; the versions follow Semantic Versioning.
 
+## [0.1.19] - 2026-11-08
+
+### Added
+
+- A Since card on the dashboard: what happened since the core started or since the card's Clear: dead-air events with their time in all and the last one, connections made again in all and by uplink, errors with the last one, the peaks of CPU, Outcast's share, temperature and listeners, bytes carried and the uplinks' average rate, bytes lost and pieces dropped, meter hops at full scale, and the last events with their times (dead air and back on air, an uplink lost and back, an error, the uplinks' start, the clearing). Clear starts the counts again for every viewer; it is the page's one write, and it touches nothing else. One line of it under the status button.
+- The Level card as a meter bridge across the page: left and right on a scaled trough with the zones marked, the instant peak, a held peak that falls after three seconds and turns red at full scale, the dead-air floor as set; readouts for the peak hold, RMS over ten seconds, the highest peak of the last minute, balance, overs and the floor; and the last minute as a graph of RMS left and right with the peaks above them.
+- A Played card: the titles the player showed with their start times and how long each ran, the current one on top with its running time; twenty are kept in the status.
+- A clock in the dashboard's header.
+
+### Changed
+
+- An encoder's cost below the meter's step prints as "<0.1 %" rather than "0.0 %".
+
 ## [0.1.18] - 2026-11-08
 
 ### Added
