@@ -12,6 +12,7 @@ const path = require('path');
 const { execFile } = require('child_process');
 const VConf = require('v-conf');
 const h = require('./helpers');
+const dj = require('./dj');
 
 const LOG = 'outcast: ';
 const CONTRIBUTION = 'Outcast.postOutcast.5.conf';
@@ -47,6 +48,13 @@ function Outcast(context) {
     this.audioPathError = '';
     this.lastLoggedTitle = '';
     this.uplinksFile = null;
+    // DJ mode: the programme, the scheduler's decisions, the last state seen.
+    this.djFile = null;
+    this.dj = { enabled: false, blocks: [] };
+    this.sched = new dj.Scheduler();
+    this.djTimer = null;
+    this.lastState = null;
+    this.lastDjKey = '';
 }
 
 // ----------------------------------------------------------------- lifecycle
@@ -56,6 +64,8 @@ Outcast.prototype.onVolumioStart = function () {
     this.config.loadFile(this.configFile);
     // The uplinks, as the core reads them, beside the configuration.
     this.uplinksFile = path.join(path.dirname(this.configFile), 'uplinks.json');
+    this.djFile = path.join(path.dirname(this.configFile), 'dj.json');
+    this.loadDj();
     return libQ.resolve();
 };
 
@@ -67,6 +77,7 @@ Outcast.prototype.onStart = function () {
     // The core reads the uplinks at its start: the file is written first, whatever the
     // audio path's fate; the core's status says what it sees.
     try { self.writeUplinks(); } catch (e) { self.logger.error(LOG + 'uplinks: ' + msg(e)); }
+    self.djTimer = setInterval(() => { try { self.djTick(); } catch (e) { self.logger.error(LOG + 'dj: ' + msg(e)); } }, 15000);
     return self.installAudioPath()
         .fail(() => undefined)
         .then(() => self.startCore())
@@ -82,6 +93,7 @@ Outcast.prototype.onStop = function () {
     self.active = false;
     self.unsubscribeState();
     self.unwatchChain();
+    if (self.djTimer) { clearInterval(self.djTimer); self.djTimer = null; }
     return self.stopCore()
         .fail((e) => { self.logger.warn(LOG + 'stop: ' + msg(e)); })
         .then(() => self.removeAudioPath())
@@ -347,7 +359,10 @@ Outcast.prototype.unsubscribeState = function () {
 // Every state push while playing is handed to the core, which carries a title on only
 // where it differs from the one an uplink has.
 Outcast.prototype.onVolumioState = function (state) {
-    if (!this.active || !state || state.status !== 'play') return;
+    if (!this.active || !state) return;
+    this.lastState = state;
+    try { this.djTick(state); } catch (e) { this.logger.error(LOG + 'dj: ' + msg(e)); }
+    if (state.status !== 'play') return;
     const title = h.screenTitle(state);
     if (!title) return;
     if (title !== this.lastLoggedTitle) {
@@ -355,6 +370,97 @@ Outcast.prototype.onVolumioState = function (state) {
         this.logger.info(LOG + 'title: ' + title);
     }
     this.tellCore({ op: 'title', title });
+};
+
+// -------------------------------------------------------------------- DJ mode
+// The programme (dj.json beside the configuration) drives the player through the
+// command router; the scheduler decides, this acts and tells the core for the status.
+
+Outcast.prototype.loadDj = function () {
+    try { this.dj = dj.tidy(JSON.parse(fs.readFileSync(this.djFile, 'utf8'))); } catch (e) { this.dj = { enabled: false, blocks: [] }; }
+};
+
+Outcast.prototype.saveDjFile = function () {
+    const part = this.djFile + '.part';
+    fs.writeFileSync(part, JSON.stringify(this.dj, null, 2) + '\n', { mode: 0o600 });
+    fs.renameSync(part, this.djFile);
+};
+
+Outcast.prototype.djReport = function () {
+    return this.sched.report(this.dj, new Date());
+};
+
+// To the editor page over the player's socket, as the Volumio page is told things.
+Outcast.prototype.pushDj = function (extra) {
+    this.commandRouter.broadcastMessage('pushDj', Object.assign({ now: this.djReport() }, extra || {}));
+};
+
+Outcast.prototype.djGet = function () { this.pushDj({ programme: this.dj }); return libQ.resolve(); };
+Outcast.prototype.djNow = function () { this.pushDj({}); return libQ.resolve(); };
+
+Outcast.prototype.djSave = function (data) {
+    const err = dj.validate(data);
+    if (err) { this.pushDj({ error: this.i18n(err) }); return libQ.resolve(); }
+    this.dj = dj.tidy(data);
+    try { this.saveDjFile(); } catch (e) { this.pushDj({ error: this.i18n('ERR_SAVE', { error: msg(e) }) }); return libQ.resolve(); }
+    this.logger.info(LOG + 'dj: programme saved, ' + this.dj.blocks.length + ' blocks, ' + (this.dj.enabled ? 'on' : 'off'));
+    this.pushDj({ programme: this.dj, saved: true });
+    this.djTick();
+    return libQ.resolve();
+};
+
+Outcast.prototype.djTakeOver = function () {
+    this.sched.takeOver();
+    this.djTick();
+    this.pushDj({});
+    return libQ.resolve();
+};
+
+// The Volumio page's switch alone; the blocks are the editor's.
+Outcast.prototype.updateDj = function (data) {
+    this.dj.enabled = data && data.dj_enabled === true;
+    try { this.saveDjFile(); } catch (e) { this.toast('error', 'ERR_SAVE', { error: msg(e) }); return libQ.resolve(); }
+    this.toast('success', 'DJ_SAVED');
+    this.djTick();
+    return libQ.resolve();
+};
+
+// One look: the block in force against the player; acted on when due; the core told.
+Outcast.prototype.djTick = function (state) {
+    const self = this;
+    if (!self.active) return;
+    let st = state || self.lastState;
+    if (!st) { try { st = self.commandRouter.volumioGetState(); } catch (e) { st = null; } }
+    let queue = null;
+    try { const q = self.commandRouter.volumioGetQueue(); queue = Array.isArray(q) ? q : null; } catch (e) { queue = null; }
+    self.sched.settle(queue);
+    const d = self.sched.decide(self.dj, new Date(), st ? { status: st.status, uri: st.uri } : null, queue);
+    if (d.action === 'act') self.djAct(d.block);
+    else self.tellDj('');
+};
+
+Outcast.prototype.djAct = function (block) {
+    const self = this;
+    self.sched.didAct(block, new Date());
+    self.logger.info(LOG + 'dj: ' + block.name + ' (' + block.source.kind + ')');
+    try {
+        if (block.source.kind === 'playlist') {
+            self.commandRouter.volumioRandom(block.random === true);
+            self.commandRouter.playListManager.playPlaylist(block.source.name);
+        } else if (block.source.kind === 'webradio') {
+            self.commandRouter.replaceAndPlay({ uri: block.source.uri, service: 'webradio', title: block.source.title || block.name, type: 'webradio' });
+        }
+    } catch (e) { self.logger.error(LOG + 'dj: ' + block.name + ': ' + msg(e)); }
+    self.tellDj('DJ mode: ' + block.name + ' started');
+};
+
+// The core told once per change, so the status and the dashboard carry DJ mode.
+Outcast.prototype.tellDj = function (event) {
+    const r = this.djReport();
+    const key = JSON.stringify([r.enabled, r.block, r.next, r.yielded, r.acted_at]);
+    if (!event && key === this.lastDjKey) return;
+    this.lastDjKey = key;
+    this.tellCore(event ? { op: 'dj', dj: r, event } : { op: 'dj', dj: r });
 };
 
 // ------------------------------------------------------------------ the page
@@ -464,6 +570,27 @@ Outcast.prototype.getUIConfig = function () {
             setValue(hls, 'hls_dash', c.get('hls_dash', false) === true);
             h.hideWhenOff(hls, 'hls', (k, d) => c.get(k, d));
 
+            // DJ mode: the switch from the programme file, the editor's buttons at the
+            // dashboard's address.
+            const djs = section('dj_section');
+            setValue(djs, 'dj_enabled', self.dj.enabled === true);
+            const djHere = djs.find((x) => x.id === 'open_dj');
+            const djTab = djs.find((x) => x.id === 'open_dj_tab');
+            {
+                const found2 = h.lanAddress(require('os').networkInterfaces());
+                const address2 = String(c.get('mon_dashboard_host', '')).trim() || found2;
+                if (c.get('mon_dashboard', true) !== false && address2) {
+                    const links = h.dashboardLinks(address2, c.get('mon_dashboard_port', '8020'), 'dj');
+                    if (djHere) djHere.onClick.performerUrl = links.here;
+                    if (djTab) {
+                        djTab.onClick.url = links.url;
+                        djTab.doc = self.commandRouter.getI18nString('OUTCAST.DJ_OPEN_TAB_DESC') + ' ' + links.url;
+                    }
+                } else {
+                    if (djHere) djHere.hidden = true;
+                    if (djTab) djTab.hidden = true;
+                }
+            }
             const mon = section('monitor_section');
             setValue(mon, 'mon_dashboard', c.get('mon_dashboard', true) !== false);
             setValue(mon, 'mon_dashboard_port', String(c.get('mon_dashboard_port', '8020')));

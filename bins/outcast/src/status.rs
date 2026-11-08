@@ -70,6 +70,9 @@ pub struct Status {
     pub since: Since,
     /// The titles the player showed, newest last, twenty at most.
     pub played: VecDeque<Played>,
+    /// DJ mode as the plugin reports it: the block in force, the next, whether
+    /// it stands back for the presenter. Null when the plugin has said nothing.
+    pub dj: serde_json::Value,
 }
 
 /// Events kept and titles kept.
@@ -250,6 +253,7 @@ impl Status {
             dead_air_level: -60.0,
             since: Since::new(started),
             played: VecDeque::new(),
+            dj: serde_json::Value::Null,
         }
     }
 

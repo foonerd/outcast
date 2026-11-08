@@ -17,6 +17,9 @@ use crate::status::{self, Status};
 
 /// The page, whole.
 const PAGE: &str = include_str!("../assets/dashboard.html");
+/// DJ mode's editor, served beside it; it talks to the plugin over the player's
+/// own socket, as the Volumio page does.
+const DJ_PAGE: &str = include_str!("../assets/dj.html");
 /// Connections answered at once; the rest wait in the listen queue.
 const AT_ONCE: usize = 8;
 
@@ -95,6 +98,12 @@ pub fn answer(
             PAGE.to_string(),
         ),
         "/status.json" => (200, "application/json", "no-store", status_json.to_string()),
+        "/dj" | "/dj/" | "/dj.html" => (
+            200,
+            "text/html; charset=utf-8",
+            "no-cache",
+            DJ_PAGE.to_string(),
+        ),
         _ => (404, "text/plain", "no-store", String::new()),
     }
 }
@@ -192,6 +201,15 @@ mod tests {
         assert_eq!(
             (code, kind, cache, body.as_str()),
             (200, "application/json", "no-store", r#"{"version":"x"}"#)
+        );
+        let (code, _, _, body) = answer("GET", "/dj", "{}");
+        assert_eq!(code, 200);
+        assert!(
+            body.contains("<title>Outcast Uplink · DJ mode</title>")
+                && body.contains("'/socket.io/socket.io.js'")
+                && body.contains("djSave")
+                && !body.contains("<script src"),
+            "the editor talks to the plugin over the player's own socket and fetches nothing from outside"
         );
         assert_eq!(answer("GET", "/secret", "{}").0, 404);
         assert_eq!(answer("POST", "/", "{}").0, 405);

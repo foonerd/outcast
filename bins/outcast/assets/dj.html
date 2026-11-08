@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Outcast Uplink · DJ mode</title>
+<style>
+  :root {
+    --bg: #1c1c1c; --panel: #262626; --panel2: #303030; --line: #404040;
+    --text: #e6e6e6; --muted: #9a9a9a; --accent: #54b948; --accent2: #3f8f37;
+    --warn: #e6a23c; --danger: #d64545; --info: #4a90e2;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background: var(--bg); color: var(--text); font-size: 15px; line-height: 1.4; }
+  a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
+  button { font: inherit; cursor: pointer; border: 1px solid var(--line); background: var(--panel2); color: var(--text); padding: 8px 14px; border-radius: 6px; transition: background .15s, border-color .15s; }
+  button:hover:not(:disabled) { background: #3a3a3a; border-color: #555; }
+  button:disabled { opacity: .5; cursor: default; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover:not(:disabled) { background: var(--accent2); border-color: var(--accent2); }
+  button.danger { color: #ffb3b3; border-color: #6b2a2a; } button.danger:hover:not(:disabled) { background: #4a1f1f; }
+  button.small { padding: 5px 10px; font-size: 13px; }
+  input[type=text], input[type=time], input[type=url], select { font: inherit; background: #1a1a1a; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; width: 100%; }
+  input:focus, select:focus { outline: none; border-color: var(--accent); }
+  input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); vertical-align: middle; }
+  .hidden { display: none !important; }
+  .header { position: sticky; top: 0; z-index: 20; background: #232323; border-bottom: 1px solid var(--line); padding: 12px 20px; display: flex; align-items: center; gap: 16px; box-shadow: 0 2px 8px rgba(0,0,0,.35); }
+  .header h1 { font-size: 19px; font-weight: 600; color: #fff; white-space: nowrap; }
+  .header .sub { color: var(--muted); font-size: 13px; }
+  .header .grow { flex: 1; min-width: 0; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 16px 20px 60px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin-bottom: 14px; }
+  .card .title { background: var(--panel2); color: #fff; font-weight: 600; padding: 9px 14px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 10px; }
+  .card .title .help { font-weight: 400; } .card .title .grow { flex: 1; }
+  .card .body { padding: 12px 14px 14px; }
+  .help { color: var(--muted); font-size: 13px; }
+  .badge { display: inline-block; font-size: 11px; font-weight: 600; letter-spacing: .3px; padding: 2px 8px; border-radius: 10px; background: #3a3a3a; color: #bbb; text-transform: uppercase; vertical-align: middle; }
+  .badge.green { background: var(--accent); color: #fff; } .badge.orange { background: var(--warn); color: #222; } .badge.red { background: var(--danger); color: #fff; }
+  table.blocks { width: 100%; border-collapse: collapse; }
+  table.blocks th { text-align: left; color: var(--muted); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .3px; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  table.blocks td { padding: 7px 8px; border-bottom: 1px solid #333; vertical-align: middle; }
+  table.blocks tr:last-child td { border-bottom: 0; }
+  table.blocks td.c { text-align: center; }
+  table.blocks input[type=time] { width: 7.5em; }
+  table.blocks .src { display: grid; grid-template-columns: 11em 1fr; gap: 6px; }
+  table.blocks tr.now td { background: rgba(84,185,72,.07); }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .row .grow { flex: 1; }
+  .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+  .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: #232323; border: 1px solid var(--line); border-radius: 8px; padding: 10px 16px; box-shadow: 0 4px 16px rgba(0,0,0,.5); font-size: 14px; z-index: 50; }
+  .toast.error { border-color: var(--danger); color: #ffb3b3; }
+  .switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+  table.kv { width: 100%; border-collapse: collapse; } table.kv td { padding: 6px 8px; border-bottom: 1px solid #333; } table.kv tr:last-child td { border-bottom: 0; } table.kv td:first-child { color: var(--muted); width: 32%; }
+  .empty { color: var(--muted); padding: 16px 8px; }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>DJ mode</h1>
+  <span class="sub grow" id="sub">the programme as blocks over the day</span>
+  <a class="small" href="/" id="to-dash" style="font-size:13px">Dashboard</a>
+  <button class="small hidden" id="close">Close</button>
+</div>
+<div class="container">
+  <section class="card">
+    <div class="title">Now <span class="help" id="now-help"></span><span class="grow"></span><span class="badge" id="state-badge"></span></div>
+    <div class="body">
+      <table class="kv">
+        <tr><td>DJ mode</td><td><label class="switch"><input type="checkbox" id="enabled"> <span id="enabled-text">off</span></label></td></tr>
+        <tr><td>Block in force</td><td id="now-block">—</td></tr>
+        <tr><td>Next</td><td id="now-next">—</td></tr>
+        <tr><td>The presenter</td><td id="now-yield">—</td></tr>
+      </table>
+      <div class="toolbar">
+        <button class="small" id="takeover" title="Act on the block in force again, now">Take over now</button>
+        <span class="help">A queue changed by hand makes DJ mode stand back until the next block; this hands it back.</span>
+      </div>
+    </div>
+  </section>
+  <section class="card">
+    <div class="title">The programme <span class="help">each block from its start until the next; the last block runs over midnight into the first</span></div>
+    <div class="body">
+      <table class="blocks">
+        <thead><tr><th style="width:8em">Start</th><th style="width:14em">Name</th><th>Source</th><th class="c" style="width:5em">Random</th><th class="c" style="width:6em">On the clock</th><th style="width:5em"></th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <div class="empty hidden" id="none">No blocks yet. Add one: a start time and a source. With one block alone, that source plays all day.</div>
+      <div class="toolbar">
+        <button class="small" id="add">Add a block</button>
+        <span class="grow"></span>
+        <span class="help" id="dirty"></span>
+        <button class="primary" id="save">Save</button>
+      </div>
+      <p class="help" style="margin-top:10px">Source: the player's own queue leaves the player alone for the block; a playlist plays from the start, on random when set; a web radio plays its stream. Soft start (the default) waits for the track playing to end; on the clock cuts in at the start time. The player's own clock and time zone are used.</p>
+    </div>
+  </section>
+</div>
+<div class="toast hidden" id="toast"></div>
+<script>
+(function () {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const host = location.hostname;
+  // The player's own socket, as the Volumio page uses it: the plugin's methods and the playlists.
+  const player = 'http://' + host + ':3000';
+  let socket = null, playlists = [], dj = { enabled: false, blocks: [] }, dirty = false, toastTimer = null;
+  function toast(text, error) {
+    const t = $('toast'); t.textContent = text; t.className = 'toast' + (error ? ' error' : '');
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.add('hidden'), error ? 6000 : 2500);
+  }
+  function call(method, data) {
+    if (!socket || !socket.connected) { toast('The player does not answer.', true); return; }
+    socket.emit('callMethod', { endpoint: 'audio_interface/outcast', method, data: data || {} });
+  }
+  const hm = (s) => s >= 3600 ? Math.floor(s / 3600) + ' h ' + Math.floor((s % 3600) / 60) + ' min' : s >= 60 ? Math.floor(s / 60) + ' min' : s + ' s';
+  function renderNow(r) {
+    $('enabled').checked = !!r.enabled; $('enabled-text').textContent = r.enabled ? 'on' : 'off';
+    $('state-badge').className = 'badge ' + (r.enabled ? (r.yielded ? 'orange' : 'green') : '');
+    $('state-badge').textContent = r.enabled ? (r.yielded ? 'standing back' : 'on air') : 'off';
+    $('now-block').textContent = r.enabled && r.block ? r.block + ' (since ' + r.block_start + ')' : '—';
+    $('now-next').textContent = r.enabled && r.next ? r.next + ' in ' + hm(r.next_in) : '—';
+    $('now-yield').textContent = r.enabled ? (r.yielded ? 'changed the queue; DJ mode stands back until the next block' : 'has not touched the queue') : '—';
+    $('takeover').disabled = !r.enabled;
+    $('rows').querySelectorAll('tr').forEach((tr) => tr.classList.toggle('now', r.enabled && tr.dataset.name === r.block));
+  }
+  function sourceCell(b, i) {
+    const kind = b.source.kind;
+    const opts = ['<option value="queue"' + (kind === 'queue' ? ' selected' : '') + '>The player\'s queue</option>', '<option value="playlist"' + (kind === 'playlist' ? ' selected' : '') + '>Playlist</option>', '<option value="webradio"' + (kind === 'webradio' ? ' selected' : '') + '>Web radio</option>'].join('');
+    let detail = '';
+    if (kind === 'playlist') {
+      const known = playlists.includes(b.source.name);
+      detail = '<select data-i="' + i + '" data-f="name">' + (known ? '' : '<option value="' + esc(b.source.name) + '" selected>' + esc(b.source.name || 'choose…') + '</option>') + playlists.map((p) => '<option' + (p === b.source.name ? ' selected' : '') + '>' + esc(p) + '</option>').join('') + '</select>';
+    } else if (kind === 'webradio') {
+      detail = '<div class="row"><input type="url" placeholder="http://… the stream\'s address" value="' + esc(b.source.uri) + '" data-i="' + i + '" data-f="uri" style="flex:2"><input type="text" placeholder="its name" value="' + esc(b.source.title) + '" data-i="' + i + '" data-f="title" style="flex:1"></div>';
+    } else {
+      detail = '<span class="help">nothing is changed for this block</span>';
+    }
+    return '<div class="src"><select data-i="' + i + '" data-f="kind">' + opts + '</select>' + detail + '</div>';
+  }
+  function render() {
+    const rows = $('rows'); rows.innerHTML = '';
+    $('none').classList.toggle('hidden', dj.blocks.length > 0);
+    dj.blocks.forEach((b, i) => {
+      const tr = document.createElement('tr'); tr.dataset.name = b.name;
+      tr.innerHTML = '<td><input type="time" value="' + esc(b.start) + '" data-i="' + i + '" data-f="start"></td>'
+        + '<td><input type="text" value="' + esc(b.name) + '" placeholder="' + esc(b.source.kind === 'playlist' ? b.source.name : b.source.kind === 'webradio' ? b.source.title : 'The player\'s queue') + '" data-i="' + i + '" data-f="bname"></td>'
+        + '<td>' + sourceCell(b, i) + '</td>'
+        + '<td class="c"><input type="checkbox"' + (b.random ? ' checked' : '') + (b.source.kind === 'playlist' ? '' : ' disabled') + ' data-i="' + i + '" data-f="random"></td>'
+        + '<td class="c"><input type="checkbox"' + (b.hard ? ' checked' : '') + ' data-i="' + i + '" data-f="hard"></td>'
+        + '<td class="c"><button class="small danger" data-i="' + i + '" data-f="remove" title="Remove this block">×</button></td>';
+      rows.appendChild(tr);
+    });
+    $('dirty').textContent = dirty ? 'unsaved changes' : '';
+  }
+  $('rows').addEventListener('change', (e) => {
+    const el = e.target; const i = Number(el.dataset.i); const f = el.dataset.f; const b = dj.blocks[i]; if (!b) return;
+    if (f === 'start') b.start = el.value;
+    else if (f === 'bname') b.name = el.value;
+    else if (f === 'kind') { b.source = el.value === 'playlist' ? { kind: 'playlist', name: playlists[0] || '' } : el.value === 'webradio' ? { kind: 'webradio', uri: '', title: '' } : { kind: 'queue' }; if (el.value !== 'playlist') b.random = false; }
+    else if (f === 'name') b.source.name = el.value;
+    else if (f === 'uri') b.source.uri = el.value;
+    else if (f === 'title') b.source.title = el.value;
+    else if (f === 'random') b.random = el.checked;
+    else if (f === 'hard') b.hard = el.checked;
+    dirty = true; render();
+  });
+  $('rows').addEventListener('click', (e) => {
+    const el = e.target.closest('button[data-f="remove"]'); if (!el) return;
+    dj.blocks.splice(Number(el.dataset.i), 1); dirty = true; render();
+  });
+  $('add').onclick = () => {
+    const last = dj.blocks[dj.blocks.length - 1];
+    const next = last ? (() => { const [h, m] = last.start.split(':').map(Number); return String((h + 4) % 24).padStart(2, '0') + ':' + String(m).padStart(2, '0'); })() : '06:00';
+    dj.blocks.push({ id: 'b' + Date.now(), start: next, name: '', source: playlists.length ? { kind: 'playlist', name: playlists[0] } : { kind: 'queue' }, random: false, hard: false });
+    dirty = true; render();
+  };
+  $('save').onclick = () => { call('djSave', { enabled: $('enabled').checked, blocks: dj.blocks }); };
+  $('enabled').onchange = () => { $('enabled-text').textContent = $('enabled').checked ? 'on' : 'off'; call('djSave', { enabled: $('enabled').checked, blocks: dj.blocks }); };
+  $('takeover').onclick = () => call('djTakeOver', {});
+  // The socket library comes from the player itself, the one the Volumio page uses;
+  // nothing is fetched from anywhere else.
+  function load() {
+    const s = document.createElement('script');
+    s.src = player + '/socket.io/socket.io.js';
+    s.onload = connect;
+    s.onerror = () => { $('sub').textContent = 'the player\'s socket library did not load from ' + player; };
+    document.head.appendChild(s);
+  }
+  function connect() {
+    if (typeof io === 'undefined') { $('sub').textContent = 'the player\'s socket library did not load'; return; }
+    socket = io.connect(player, { reconnection: true });
+    socket.on('connect', () => { $('sub').textContent = 'the programme as blocks over the day'; socket.emit('listPlaylist', {}); call('djGet', {}); });
+    socket.on('disconnect', () => { $('sub').textContent = 'the player does not answer'; });
+    socket.on('pushListPlaylist', (list) => { playlists = Array.isArray(list) ? list.map(String) : []; render(); });
+    socket.on('pushDj', (d) => {
+      if (!d) return;
+      if (d.error) { toast(d.error, true); return; }
+      if (d.programme) { dj = d.programme; dirty = false; render(); }
+      if (d.saved) toast('Saved.');
+      if (d.now) renderNow(d.now);
+    });
+    setInterval(() => { if (socket && socket.connected) call('djNow', {}); }, 5000);
+  }
+  if (window.parent === window) {
+    $('close').classList.remove('hidden');
+    $('close').onclick = function () { window.close(); setTimeout(function () { if (window.closed) return; if (window.history.length > 1) window.history.back(); else window.location.href = 'http://' + host + '/'; }, 100); };
+  }
+  load();
+})();
+</script>
+</body>
+</html>

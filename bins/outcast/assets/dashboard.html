@@ -110,6 +110,7 @@
           <tr><td>Title</td><td id="title">—</td></tr>
           <tr><td>Stream</td><td id="stream">—</td></tr>
           <tr><td>Dead air</td><td id="deadair">—</td></tr>
+          <tr id="djrow" class="hidden"><td>DJ mode</td><td id="dj">—</td></tr>
         </table>
       </div>
     </section>
@@ -310,6 +311,13 @@
     }
     $('title').textContent = s.title || '—';
     $('deadair').innerHTML = s.dead_air ? '<span class="dead">yes, ' + s.quiet_seconds + ' s</span>' : (s.quiet_seconds ? 'no (quiet ' + s.quiet_seconds + ' s)' : 'no');
+    const dj = s.dj && typeof s.dj === 'object' ? s.dj : null;
+    $('djrow').classList.toggle('hidden', !dj);
+    if (dj) {
+      $('dj').innerHTML = dj.enabled
+        ? '<b>' + esc(dj.block || '—') + '</b>' + (dj.block_start ? ' <span class="help">since ' + esc(dj.block_start) + '</span>' : '') + (dj.next ? ' · next ' + esc(dj.next) + ' in ' + ago(0, dj.next_in || 0) : '') + (dj.yielded ? ' · <span class="warn">standing back for the presenter</span>' : '') + ' · <a href="/dj">programme</a>'
+        : 'off · <a href="/dj">programme</a>';
+    }
     $('deadair-badge').innerHTML = s.dead_air ? '<span class="badge red">dead air</span>' : (s.ring ? '<span class="badge green">on air</span>' : '<span class="badge">silent</span>');
     renderLevel(s);
     renderSystem(s.system);

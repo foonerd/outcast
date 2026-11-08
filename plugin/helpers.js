@@ -392,9 +392,9 @@ function lanAddress(interfaces) {
 // page ignores). So "here" goes to Volumio's own iframe page holding the dashboard,
 // with the UI's arrow back; the page's address is the ui-router parameter, its
 // slashes as ~2F. The address is the operator's when set, else the one found here.
-function dashboardLinks(address, port) {
+function dashboardLinks(address, port, page) {
     const host = /:/.test(address) && !/^\[/.test(address) ? '[' + address + ']' : address;
-    const url = 'http://' + host + ':' + String(port) + '/';
+    const url = 'http://' + host + ':' + String(port) + '/' + (page ? String(page).replace(/^\//, '') : '');
     return { url, here: 'http://' + host + '/iframe-page/' + url.replace(/\//g, '~2F') };
 }
 

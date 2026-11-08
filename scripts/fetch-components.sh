@@ -16,7 +16,31 @@ ARCHES="arm armv7 armv8 x64"
 PUB="$ROOT/keys/release-signing.pub"
 
 fetch() { # url, file
-  curl -fsSL --retry 3 --retry-delay 5 -o "$2" "$1" || { echo "fetch-components: $1 did not arrive" >&2; exit 1; }
+  # GitHub's download addresses falter at times (504 for minutes on end); tried with
+  # patience, then through the API's asset endpoint, which has served when they did not.
+  local url=$1 file=$2
+  if curl -fsSL --retry 6 --retry-delay 10 --retry-all-errors --retry-max-time 240 -o "$file" "$url"; then
+    return 0
+  fi
+  echo "fetch-components: $url did not arrive from the download address; asking the API for it" >&2
+  # https://github.com/<owner>/<repo>/releases/download/<tag>/<asset>
+  local rest=${url#https://github.com/} owner repo tag asset id
+  owner=${rest%%/*}; rest=${rest#*/}
+  repo=${rest%%/*}; rest=${rest#*/releases/download/}
+  tag=${rest%%/*}; asset=${rest#*/}
+  command -v jq >/dev/null 2>&1 || { echo "fetch-components: $url did not arrive, and jq is not here for the API" >&2; exit 1; }
+  # The token, when the environment has one, through a curl configuration file, so the
+  # header with its space never meets the shell's word splitting.
+  local conf
+  conf=$(mktemp)
+  if [[ -n "${GITHUB_TOKEN:-}" ]]; then printf 'header = "Authorization: Bearer %s"\n' "$GITHUB_TOKEN" > "$conf"; fi
+  id=$(curl -fsSL --retry 3 --retry-delay 5 -K "$conf" -H "Accept: application/vnd.github+json" \
+    "https://api.github.com/repos/$owner/$repo/releases/tags/$tag" | jq -r --arg n "$asset" '.assets[] | select(.name == $n) | .id' | head -n1) || id=""
+  [[ -n "$id" ]] || { rm -f "$conf"; echo "fetch-components: $url did not arrive, and the API names no asset $asset" >&2; exit 1; }
+  curl -fsSL --retry 6 --retry-delay 10 --retry-all-errors --retry-max-time 240 -K "$conf" \
+    -H "Accept: application/octet-stream" -o "$file" "https://api.github.com/repos/$owner/$repo/releases/assets/$id" \
+    || { rm -f "$conf"; echo "fetch-components: $url did not arrive from the API either" >&2; exit 1; }
+  rm -f "$conf"
 }
 
 one() {

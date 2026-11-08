@@ -333,6 +333,8 @@ test('the dashboard has a switch and a port, and the address of the player is th
         here: 'http://192.168.1.5/iframe-page/http:~2F~2F192.168.1.5:8020~2F'
     });
     assert.equal(h.dashboardLinks('fd00::7', 8020).url, 'http://[fd00::7]:8020/');
+    assert.equal(h.dashboardLinks('192.168.1.5', '8020', 'dj').url, 'http://192.168.1.5:8020/dj');
+    assert.equal(h.dashboardLinks('192.168.1.5', '8020', 'dj').here, 'http://192.168.1.5/iframe-page/http:~2F~2F192.168.1.5:8020~2Fdj');
 });
 
 test('the dead-air watch takes a level and a time, and the file carries them', () => {

@@ -20,6 +20,12 @@ struct Request {
     op: String,
     #[serde(default)]
     title: String,
+    /// DJ mode as the plugin reports it, for the status and the page.
+    #[serde(default)]
+    dj: serde_json::Value,
+    /// A line for the page's events, when something of DJ mode's happened.
+    #[serde(default)]
+    event: String,
 }
 
 /// What answering needs: the status to render and the hub to tell.
@@ -55,6 +61,18 @@ pub fn answer(line: &str, link: &Link) -> String {
         }
         "reload" => {
             let _ = link.commands.send(Command::Reload);
+            "{\"ok\":true}\n".to_string()
+        }
+        "dj" => {
+            let mut s = link.status.lock().unwrap_or_else(|e| e.into_inner());
+            if s.dj != request.dj {
+                s.dj = request.dj;
+                s.touch();
+            }
+            let event: String = request.event.chars().take(200).collect();
+            if !event.is_empty() {
+                s.event("info", event);
+            }
             "{\"ok\":true}\n".to_string()
         }
         other => format!(
@@ -115,6 +133,24 @@ mod tests {
             },
             rx,
         )
+    }
+
+    #[test]
+    fn dj_mode_is_kept_for_the_page_with_its_event() {
+        let (link, _rx) = link();
+        let line = r#"{"op":"dj","dj":{"enabled":true,"block":"Morning","next":"Midday","next_in":600,"yielded":false},"event":"DJ mode: Morning started"}"#;
+        assert_eq!(answer(line, &link), "{\"ok\":true}\n");
+        let s = link.status.lock().unwrap();
+        assert_eq!(s.dj["block"], "Morning");
+        assert_eq!(
+            s.since.events.back().unwrap().text,
+            "DJ mode: Morning started"
+        );
+        drop(s);
+        // The same report again: nothing new, no event.
+        let line = r#"{"op":"dj","dj":{"enabled":true,"block":"Morning","next":"Midday","next_in":600,"yielded":false}}"#;
+        assert_eq!(answer(line, &link), "{\"ok\":true}\n");
+        assert_eq!(link.status.lock().unwrap().since.events.len(), 1);
     }
 
     #[test]

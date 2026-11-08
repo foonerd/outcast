@@ -347,6 +347,20 @@
       ]
     },
     {
+      "id": "dj_section",
+      "element": "section",
+      "label": "TRANSLATE.OUTCAST.DJ_SECTION",
+      "icon": "fa-music",
+      "description": "TRANSLATE.OUTCAST.DJ_SECTION_DESC",
+      "onSave": { "type": "controller", "endpoint": "audio_interface/outcast", "method": "updateDj" },
+      "saveButton": { "label": "TRANSLATE.OUTCAST.SAVE", "data": ["dj_enabled"] },
+      "content": [
+        { "id": "dj_enabled", "element": "switch", "label": "TRANSLATE.OUTCAST.DJ_ENABLE", "doc": "TRANSLATE.OUTCAST.DJ_ENABLE_DESC", "value": false },
+        { "id": "open_dj", "element": "button", "label": "TRANSLATE.OUTCAST.DJ_OPEN", "doc": "TRANSLATE.OUTCAST.DJ_OPEN_DESC", "onClick": { "type": "oauth", "plugin": "outcast", "performerUrl": "", "scopes": [] } },
+        { "id": "open_dj_tab", "element": "button", "label": "TRANSLATE.OUTCAST.DJ_OPEN_TAB", "doc": "TRANSLATE.OUTCAST.DJ_OPEN_TAB_DESC", "onClick": { "type": "openUrl", "url": "" } }
+      ]
+    },
+    {
       "id": "monitor_section",
       "element": "section",
       "label": "TRANSLATE.OUTCAST.MON_SECTION",

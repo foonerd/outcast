@@ -119,6 +119,9 @@ jobs:
       - run: scripts/ship.sh
       - name: evotap and evopeg from their releases, verified against the evo release key
         run: scripts/fetch-components.sh
+        env:
+          # For the API's asset endpoint, the way round GitHub's download addresses when they fail.
+          GITHUB_TOKEN: ${{ github.token }}
       - run: scripts/package.sh
       - name: The zip names the commit it was built from
         run: |
