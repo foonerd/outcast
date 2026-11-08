@@ -265,6 +265,9 @@
     "ERR_DJ_SOURCE": "时段的来源必须是播放器队列、播放列表或网络电台。",
     "ERR_DJ_PLAYLIST": "播放列表时段需要播放列表名称。",
     "ERR_DJ_URI": "网络电台时段需要流地址，http:// 或 https://。",
+    "ERR_DJ_INSERT_FILE": "插入需要来自片头音乐文件夹的 WAV 文件。",
+    "ERR_DJ_INSERT_WHEN": "插入每小时、每若干首曲目或在时段开始时播放。",
+    "ERR_DJ_INSERT_NUMBER": "插入的分钟须为 0 到 59，曲目数至少为 1，电平为 0 到 −60 dB。",
     "ERR_SAVE": "无法保存设置：{{error}}"
   }
 }

@@ -265,6 +265,9 @@
     "ERR_DJ_SOURCE": "A block's source must be the player's queue, a playlist or a web radio.",
     "ERR_DJ_PLAYLIST": "A playlist block needs the playlist's name.",
     "ERR_DJ_URI": "A web radio block needs the stream's address, http:// or https://.",
+    "ERR_DJ_INSERT_FILE": "An insert needs a WAV file from the jingles folder.",
+    "ERR_DJ_INSERT_WHEN": "An insert plays every hour, every so many tracks, or at a block's start.",
+    "ERR_DJ_INSERT_NUMBER": "An insert's minute must be 0 to 59, its track count 1 or more, and its level 0 to −60 dB.",
     "ERR_SAVE": "The settings could not be saved: {{error}}"
   }
 }

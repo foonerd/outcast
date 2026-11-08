@@ -265,6 +265,9 @@
     "ERR_DJ_SOURCE": "Die Quelle eines Blocks muss die Warteschlange des Players, eine Playlist oder ein Webradio sein.",
     "ERR_DJ_PLAYLIST": "Ein Playlist-Block braucht den Namen der Playlist.",
     "ERR_DJ_URI": "Ein Webradio-Block braucht die Adresse des Streams, http:// oder https://.",
+    "ERR_DJ_INSERT_FILE": "Ein Einspieler braucht eine WAV-Datei aus dem Jingle-Ordner.",
+    "ERR_DJ_INSERT_WHEN": "Ein Einspieler läuft stündlich, alle so-und-so-viele Titel oder zu Beginn eines Blocks.",
+    "ERR_DJ_INSERT_NUMBER": "Die Minute eines Einspielers muss 0 bis 59 sein, seine Titelzahl mindestens 1 und sein Pegel 0 bis −60 dB.",
     "ERR_SAVE": "Die Einstellungen konnten nicht gespeichert werden: {{error}}"
   }
 }

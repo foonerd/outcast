@@ -70,7 +70,7 @@ function validate(dj) {
         if (src.kind === 'playlist' && !String(src.name || '').trim()) return 'ERR_DJ_PLAYLIST';
         if (src.kind === 'webradio' && !/^https?:\/\/\S+$/.test(String(src.uri || '').trim())) return 'ERR_DJ_URI';
     }
-    return null;
+    return validateInserts(dj.inserts);
 }
 
 // The programme as kept: the same shape every time, ids given, blocks in order.
@@ -90,7 +90,7 @@ function tidy(dj) {
             };
         })
         .sort((a, b) => parseStart(a.start) - parseStart(b.start));
-    return { enabled: !!(dj && dj.enabled === true), blocks };
+    return { enabled: !!(dj && dj.enabled === true), blocks, inserts: tidyInserts(dj && dj.inserts) };
 }
 
 // The decisions, held between ticks: what was last acted on, what is pending a track
@@ -171,4 +171,81 @@ class Scheduler {
     }
 }
 
-module.exports = { DAY, KINDS, parseStart, secondsOfDay, blockAt, nextBlock, signature, validate, tidy, Scheduler };
+// ---- inserts: jingles, IDs and announcements into the stream -------------------------
+// An insert names a WAV file in the jingles folder and when it plays: every hour at a
+// minute, every so many tracks, or at each block's start; soft (at the next track's
+// end, or after five minutes of waiting where no track ends, as on a web radio) or on
+// the clock. The core mixes it over the programme, ducked to `duck_db`.
+
+const WHENS = ['hour', 'tracks', 'block'];
+const SOFT_WAIT_MAX = 300;
+
+function validateInserts(list) {
+    if (list === undefined) return null;
+    if (!Array.isArray(list)) return 'ERR_DJ_SHAPE';
+    for (const i of list) {
+        const file = String(i.file || '').trim();
+        if (!file || /[\/\\\0]/.test(file) || !/\.wav$/i.test(file)) return 'ERR_DJ_INSERT_FILE';
+        if (!WHENS.includes(i.when)) return 'ERR_DJ_INSERT_WHEN';
+        const minute = Number(i.minute === undefined ? 0 : i.minute);
+        const every = Number(i.every === undefined ? 1 : i.every);
+        if (!Number.isInteger(minute) || minute < 0 || minute > 59 || !Number.isInteger(every) || every < 1) return 'ERR_DJ_INSERT_NUMBER';
+        const duck = Number(i.duck_db === undefined ? -12 : i.duck_db);
+        if (!Number.isFinite(duck) || duck < -60 || duck > 0) return 'ERR_DJ_INSERT_NUMBER';
+        if (/["\n\r]/.test(String(i.name || ''))) return 'ERR_DJ_NAME';
+    }
+    return null;
+}
+
+function tidyInserts(list) {
+    return (Array.isArray(list) ? list : []).map((i, n) => ({
+        id: String(i.id || ('i' + (n + 1))),
+        name: String(i.name || '').trim() || String(i.file || '').replace(/\.wav$/i, ''),
+        file: String(i.file || '').trim(),
+        when: i.when,
+        minute: i.when === 'hour' ? Number(i.minute || 0) : 0,
+        every: i.when === 'tracks' ? Number(i.every || 1) : 1,
+        duck_db: Number(i.duck_db === undefined ? -12 : i.duck_db),
+        hard: i.hard === true
+    }));
+}
+
+class Inserts {
+    constructor() {
+        this.firedHour = {};   // insert id -> the hour it last fired for
+        this.tracks = {};      // insert id -> tracks since it last played
+        this.soft = [];        // { insert, since } waiting for a track's end
+    }
+
+    // The inserts due now. `boundary`: a track ended since the last look; `blockStarted`:
+    // a block was acted on this look.
+    tick(inserts, now, boundary, blockStarted) {
+        const due = [];
+        const hourKey = now.getFullYear() + '-' + now.getMonth() + '-' + now.getDate() + '-' + now.getHours();
+        for (const i of inserts || []) {
+            if (i.when === 'hour') {
+                if (now.getMinutes() === (i.minute || 0) && this.firedHour[i.id] !== hourKey) {
+                    this.firedHour[i.id] = hourKey;
+                    if (i.hard) due.push(i); else this.soft.push({ insert: i, since: now.getTime() });
+                }
+            } else if (i.when === 'tracks') {
+                if (boundary) {
+                    this.tracks[i.id] = (this.tracks[i.id] || 0) + 1;
+                    if (this.tracks[i.id] >= (i.every || 1)) { this.tracks[i.id] = 0; due.push(i); }
+                }
+            } else if (i.when === 'block' && blockStarted) {
+                due.push(i);
+            }
+        }
+        if (this.soft.length) {
+            const keep = [];
+            for (const s of this.soft) {
+                if (boundary || (now.getTime() - s.since) / 1000 >= SOFT_WAIT_MAX) due.push(s.insert); else keep.push(s);
+            }
+            this.soft = keep;
+        }
+        return due;
+    }
+}
+
+module.exports = { DAY, KINDS, WHENS, parseStart, secondsOfDay, blockAt, nextBlock, signature, validate, tidy, validateInserts, tidyInserts, Scheduler, Inserts };

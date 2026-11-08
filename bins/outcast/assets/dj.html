@@ -96,6 +96,22 @@
       <p class="help" style="margin-top:10px">Source: the player's own queue leaves the player alone for the block; a playlist plays from the start, on random when set; a web radio plays its stream. Soft start (the default) waits for the track playing to end; on the clock cuts in at the start time. The player's own clock and time zone are used.</p>
     </div>
   </section>
+  <section class="card">
+    <div class="title">Inserts <span class="help">jingles, IDs and announcements into the stream, over the programme; the room hears none of it</span></div>
+    <div class="body">
+      <table class="blocks">
+        <thead><tr><th style="width:12em">Name</th><th style="width:13em">File</th><th>When</th><th style="width:14em">Under it</th><th class="c" style="width:6em">On the clock</th><th style="width:10.5em"></th></tr></thead>
+        <tbody id="irows"></tbody>
+      </table>
+      <div class="empty hidden" id="inone">No inserts yet. Put WAV files in the jingles folder on the player (its path is below), then add one here.</div>
+      <div class="toolbar">
+        <button class="small" id="iadd">Add an insert</button>
+        <span class="grow"></span>
+        <button class="primary" id="isave">Save</button>
+      </div>
+      <p class="help" style="margin-top:10px">Files: WAV, 8 to 32 bits or float, any rate, mono or stereo, from <code id="folder">the jingles folder</code> on the player's share. When: every hour at a minute, every so many tracks, or at each block's start. Soft (the default) waits for the track playing to end, five minutes at most where none ends; on the clock plays at once. Under it: the programme ducked to −12 dB, or cut. Play now puts it into the stream at once.</p>
+    </div>
+  </section>
 </div>
 <div class="toast hidden" id="toast"></div>
 <script>
@@ -140,7 +156,51 @@
     }
     return '<div class="src"><select data-i="' + i + '" data-f="kind">' + opts + '</select>' + detail + '</div>';
   }
+  let files = [];
+  const ducks = [['-6', 'bed: programme at −6 dB'], ['-12', 'under: programme at −12 dB'], ['-24', 'well under: −24 dB'], ['-60', 'cut: programme silent']];
+  function renderInserts() {
+    const rows = $('irows'); rows.innerHTML = '';
+    const list = dj.inserts || [];
+    $('inone').classList.toggle('hidden', list.length > 0);
+    list.forEach((it, i) => {
+      const tr = document.createElement('tr');
+      const fileOpts = (files.includes(it.file) ? [] : ['<option value="' + esc(it.file) + '" selected>' + esc(it.file || 'choose…') + '</option>']).concat(files.map((f) => '<option' + (f === it.file ? ' selected' : '') + '>' + esc(f) + '</option>')).join('');
+      const whenOpts = [['hour', 'every hour at minute'], ['tracks', 'every N tracks'], ['block', 'at each block\'s start']].map(([v, l]) => '<option value="' + v + '"' + (it.when === v ? ' selected' : '') + '>' + l + '</option>').join('');
+      const num = it.when === 'hour' ? '<input type="text" value="' + esc(String(it.minute)) + '" data-i="' + i + '" data-f="iminute" style="width:4.5em" title="minute">' : it.when === 'tracks' ? '<input type="text" value="' + esc(String(it.every)) + '" data-i="' + i + '" data-f="ievery" style="width:4.5em" title="tracks">' : '';
+      tr.innerHTML = '<td><input type="text" value="' + esc(it.name) + '" placeholder="' + esc(it.file.replace(/\.wav$/i, '')) + '" data-i="' + i + '" data-f="iname"></td>'
+        + '<td><select data-i="' + i + '" data-f="ifile">' + fileOpts + '</select></td>'
+        + '<td><div class="row"><select data-i="' + i + '" data-f="iwhen" style="width:auto;flex:1">' + whenOpts + '</select>' + num + '</div></td>'
+        + '<td><select data-i="' + i + '" data-f="iduck">' + ducks.map(([v, l]) => '<option value="' + v + '"' + (String(it.duck_db) === v ? ' selected' : '') + '>' + l + '</option>').join('') + '</select></td>'
+        + '<td class="c"><input type="checkbox"' + (it.hard ? ' checked' : '') + ' data-i="' + i + '" data-f="ihard"></td>'
+        + '<td class="c"><button class="small" data-i="' + i + '" data-f="iplay" title="Into the stream now">Play now</button> <button class="small danger" data-i="' + i + '" data-f="iremove" title="Remove">×</button></td>';
+      rows.appendChild(tr);
+    });
+  }
+  $('irows').addEventListener('change', (e) => {
+    const el = e.target; const i = Number(el.dataset.i); const f = el.dataset.f; const it = (dj.inserts || [])[i]; if (!it) return;
+    if (f === 'iname') it.name = el.value;
+    else if (f === 'ifile') it.file = el.value;
+    else if (f === 'iwhen') it.when = el.value;
+    else if (f === 'iminute') it.minute = Number(el.value);
+    else if (f === 'ievery') it.every = Number(el.value);
+    else if (f === 'iduck') it.duck_db = Number(el.value);
+    else if (f === 'ihard') it.hard = el.checked;
+    dirty = true; render();
+  });
+  $('irows').addEventListener('click', (e) => {
+    const el = e.target.closest('button[data-f]'); if (!el) return;
+    const i = Number(el.dataset.i);
+    if (el.dataset.f === 'iremove') { dj.inserts.splice(i, 1); dirty = true; render(); }
+    if (el.dataset.f === 'iplay') { const it = dj.inserts[i]; if (it && it.id) call('djPlayInsert', { id: it.id }); else toast('Save first, then play.', true); }
+  });
+  $('iadd').onclick = () => {
+    dj.inserts = dj.inserts || [];
+    dj.inserts.push({ id: 'i' + Date.now(), name: '', file: files[0] || '', when: 'hour', minute: 0, every: 3, duck_db: -12, hard: false });
+    dirty = true; render();
+  };
+  $('isave').onclick = () => { call('djSave', { enabled: $('enabled').checked, blocks: dj.blocks, inserts: dj.inserts || [] }); };
   function render() {
+    renderInserts();
     const rows = $('rows'); rows.innerHTML = '';
     $('none').classList.toggle('hidden', dj.blocks.length > 0);
     dj.blocks.forEach((b, i) => {
@@ -177,8 +237,8 @@
     dj.blocks.push({ id: 'b' + Date.now(), start: next, name: '', source: playlists.length ? { kind: 'playlist', name: playlists[0] } : { kind: 'queue' }, random: false, hard: false });
     dirty = true; render();
   };
-  $('save').onclick = () => { call('djSave', { enabled: $('enabled').checked, blocks: dj.blocks }); };
-  $('enabled').onchange = () => { $('enabled-text').textContent = $('enabled').checked ? 'on' : 'off'; call('djSave', { enabled: $('enabled').checked, blocks: dj.blocks }); };
+  $('save').onclick = () => { call('djSave', { enabled: $('enabled').checked, blocks: dj.blocks, inserts: dj.inserts || [] }); };
+  $('enabled').onchange = () => { $('enabled-text').textContent = $('enabled').checked ? 'on' : 'off'; call('djSave', { enabled: $('enabled').checked, blocks: dj.blocks, inserts: dj.inserts || [] }); };
   $('takeover').onclick = () => call('djTakeOver', {});
   // The socket library comes from the player itself, the one the Volumio page uses;
   // nothing is fetched from anywhere else.
@@ -198,7 +258,9 @@
     socket.on('pushDj', (d) => {
       if (!d) return;
       if (d.error) { toast(d.error, true); return; }
-      if (d.programme) { dj = d.programme; dirty = false; render(); }
+      if (d.files) files = d.files;
+      if (d.folder) $('folder').textContent = d.folder;
+      if (d.programme) { dj = d.programme; dj.inserts = dj.inserts || []; dirty = false; render(); }
       if (d.saved) toast('Saved.');
       if (d.now) renderNow(d.now);
     });

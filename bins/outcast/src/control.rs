@@ -26,6 +26,17 @@ struct Request {
     /// A line for the page's events, when something of DJ mode's happened.
     #[serde(default)]
     event: String,
+    /// An insert: the WAV file's path, its name, the programme's level under it.
+    #[serde(default)]
+    file: String,
+    #[serde(default)]
+    name: String,
+    #[serde(default = "default_duck")]
+    duck_db: f32,
+}
+
+fn default_duck() -> f32 {
+    -12.0
 }
 
 /// What answering needs: the status to render and the hub to tell.
@@ -61,6 +72,25 @@ pub fn answer(line: &str, link: &Link) -> String {
         }
         "reload" => {
             let _ = link.commands.send(Command::Reload);
+            "{\"ok\":true}\n".to_string()
+        }
+        "insert" => {
+            if request.file.is_empty() {
+                return "{\"ok\":false,\"error\":\"an insert needs a file\"}\n".to_string();
+            }
+            let name: String = if request.name.is_empty() {
+                Path::new(&request.file)
+                    .file_stem()
+                    .map(|s| s.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "insert".into())
+            } else {
+                request.name.chars().take(100).collect()
+            };
+            let _ = link.commands.send(Command::Insert {
+                name,
+                file: request.file,
+                duck_db: request.duck_db,
+            });
             "{\"ok\":true}\n".to_string()
         }
         "dj" => {
@@ -151,6 +181,33 @@ mod tests {
         let line = r#"{"op":"dj","dj":{"enabled":true,"block":"Morning","next":"Midday","next_in":600,"yielded":false}}"#;
         assert_eq!(answer(line, &link), "{\"ok\":true}\n");
         assert_eq!(link.status.lock().unwrap().since.events.len(), 1);
+    }
+
+    #[test]
+    fn an_insert_is_told_with_its_name_and_duck() {
+        let (link, rx) = link();
+        assert_eq!(
+            answer(
+                r#"{"op":"insert","file":"/data/INTERNAL/outcast/jingles/top.wav"}"#,
+                &link
+            ),
+            "{\"ok\":true}\n"
+        );
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(Command::Insert { name, file, duck_db }) if name == "top" && file.ends_with("top.wav") && duck_db == -12.0
+        ));
+        assert_eq!(
+            answer(
+                r#"{"op":"insert","file":"/x/id.wav","name":"Station ID","duck_db":-60}"#,
+                &link
+            ),
+            "{\"ok\":true}\n"
+        );
+        assert!(
+            matches!(rx.try_recv(), Ok(Command::Insert { name, duck_db, .. }) if name == "Station ID" && duck_db == -60.0)
+        );
+        assert!(answer(r#"{"op":"insert"}"#, &link).contains("needs a file"));
     }
 
     #[test]

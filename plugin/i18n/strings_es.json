@@ -265,6 +265,9 @@
     "ERR_DJ_SOURCE": "La fuente de un bloque debe ser la cola del reproductor, una lista o una radio web.",
     "ERR_DJ_PLAYLIST": "Un bloque de lista necesita el nombre de la lista.",
     "ERR_DJ_URI": "Un bloque de radio web necesita la dirección del flujo, http:// o https://.",
+    "ERR_DJ_INSERT_FILE": "Una inserción necesita un archivo WAV de la carpeta de cuñas.",
+    "ERR_DJ_INSERT_WHEN": "Una inserción suena cada hora, cada tantas pistas o al comenzar un bloque.",
+    "ERR_DJ_INSERT_NUMBER": "El minuto de una inserción debe ser de 0 a 59, su número de pistas 1 o más y su nivel de 0 a −60 dB.",
     "ERR_SAVE": "No se pudieron guardar los ajustes: {{error}}"
   }
 }

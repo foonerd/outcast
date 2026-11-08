@@ -25,6 +25,13 @@ const QUEUE: usize = 64;
 pub enum Command {
     Title(String),
     Reload,
+    /// An insert into the stream: a WAV file by path, its name for the page,
+    /// the programme's level under it in dB.
+    Insert {
+        name: String,
+        file: String,
+        duck_db: f32,
+    },
 }
 
 /// One uplink's worker thread and the two ways in: pieces of the stream,
@@ -63,6 +70,8 @@ pub struct Hub {
     generation: u64,
     /// The core's own page, while the settings want it.
     dashboard: Option<crate::dashboard::Server>,
+    /// Inserts into the stream, mixed over the programme before the fan-out.
+    mixer: crate::mixer::Mixer,
 }
 
 impl Hub {
@@ -79,6 +88,7 @@ impl Hub {
             monitor: Monitor::default(),
             generation: 0,
             dashboard: None,
+            mixer: crate::mixer::Mixer::new(),
         }
     }
 
@@ -357,6 +367,33 @@ impl Hub {
         if self.converted.is_empty() {
             return;
         }
+        // An insert over the programme, when one plays or waits; a plain pass otherwise.
+        if self.mixer.playing().is_some() || self.mixer.waiting() > 0 {
+            let segment = *segment;
+            let moments = self.mixer.process(&segment, &mut self.converted);
+            if !moments.is_empty() {
+                let mut s = self.status.lock().unwrap_or_else(|e| e.into_inner());
+                for m in moments {
+                    match m {
+                        crate::mixer::Moment::Started(name) => {
+                            eprintln!("outcast: insert: {name}");
+                            s.insert = name.clone();
+                            s.since.inserts += 1;
+                            s.event("info", format!("insert: {name}"));
+                        }
+                        crate::mixer::Moment::Ended(_) => {
+                            s.insert.clear();
+                            s.touch();
+                        }
+                        crate::mixer::Moment::Skipped(name, why) => {
+                            eprintln!("outcast: insert {name} skipped: {why}");
+                            s.insert.clear();
+                            s.event("err", format!("insert {name} skipped: {why}"));
+                        }
+                    }
+                }
+            }
+        }
         let piece = Arc::new(std::mem::take(&mut self.converted));
         let mut dropped: Vec<&str> = Vec::new();
         for w in &self.workers {
@@ -420,6 +457,30 @@ impl Hub {
                     s.touch();
                 }
             }
+            Command::Insert {
+                name,
+                file,
+                duck_db,
+            } => match crate::mixer::load_wav(Path::new(&file)) {
+                Ok(clip) => {
+                    eprintln!(
+                        "outcast: insert queued: {name} ({} s at {} Hz, {} ch)",
+                        clip.frames() / clip.rate.max(1) as usize,
+                        clip.rate,
+                        clip.channels
+                    );
+                    self.mixer.insert(crate::mixer::Insert {
+                        name,
+                        clip: Arc::new(clip),
+                        duck_db,
+                    });
+                }
+                Err(e) => {
+                    eprintln!("outcast: insert {name}: {file}: {e}");
+                    let mut s = self.status.lock().unwrap_or_else(|e| e.into_inner());
+                    s.event("err", format!("insert {name}: {e}"));
+                }
+            },
         }
     }
 

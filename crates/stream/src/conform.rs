@@ -278,6 +278,63 @@ fn map_channels(frame: &[f32], out: usize, samples: &mut Vec<f32>) {
     }
 }
 
+/// A whole clip (interleaved floats, `channels` wide, at `rate`) made the
+/// shape of a segment: the channels mapped as a stream's are, the rate
+/// converted with the same windowed sinc. For an insert that is read once
+/// and played into the stream; the filter's few milliseconds of delay lead it.
+pub fn fit_clip(
+    samples: &[f32],
+    channels: usize,
+    rate: u32,
+    to_channels: usize,
+    to_rate: u32,
+) -> Vec<f32> {
+    let channels = channels.max(1);
+    let to_channels = to_channels.max(1);
+    let mut mapped = Vec::with_capacity(samples.len() / channels * to_channels);
+    for frame in samples.chunks_exact(channels) {
+        map_channels(frame, to_channels, &mut mapped);
+    }
+    if rate == 0 || to_rate == 0 || rate == to_rate {
+        return mapped;
+    }
+    let mut r = Async::<f32>::new_sinc(
+        f64::from(to_rate) / f64::from(rate),
+        1.0,
+        &SincInterpolationParameters::default(),
+        CHUNK,
+        to_channels,
+        FixedAsync::Input,
+    )
+    .expect("a sinc resampler for two rates");
+    let mut out: Vec<f32> = Vec::with_capacity(mapped.len() * 2);
+    let need = r.input_frames_next() * to_channels;
+    let mut at = 0;
+    while at + need <= mapped.len() {
+        let chunk = InterleavedSlice::new(&mapped[at..at + need], to_channels, need / to_channels)
+            .expect("a chunk of frames");
+        if let Ok(made) = r.process(&chunk, None) {
+            out.extend_from_slice(&made.take_data());
+        }
+        at += need;
+    }
+    let frames = (mapped.len() - at) / to_channels;
+    if frames > 0 {
+        let mut pending = mapped[at..].to_vec();
+        pending.resize(need, 0.0);
+        let chunk = InterleavedSlice::new(&pending[..need], to_channels, need / to_channels)
+            .expect("a chunk of frames");
+        let indexing = rubato::Indexing::new().partial_len(frames);
+        if let Ok(made) = r.process(&chunk, Some(&indexing)) {
+            let keep = (frames as f64 * r.resample_ratio()).round() as usize;
+            let data = made.take_data();
+            let keep = keep.min(data.len() / to_channels);
+            out.extend_from_slice(&data[..keep * to_channels]);
+        }
+    }
+    out
+}
+
 /// Float samples onto `out` as S32_LE: a sample that came in as an integer
 /// goes out as the same integer, full scale clamped to the top value.
 fn write_s32(samples: &[f32], out: &mut Vec<u8>) {

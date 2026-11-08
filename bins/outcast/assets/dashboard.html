@@ -312,11 +312,12 @@
     $('title').textContent = s.title || '—';
     $('deadair').innerHTML = s.dead_air ? '<span class="dead">yes, ' + s.quiet_seconds + ' s</span>' : (s.quiet_seconds ? 'no (quiet ' + s.quiet_seconds + ' s)' : 'no');
     const dj = s.dj && typeof s.dj === 'object' ? s.dj : null;
-    $('djrow').classList.toggle('hidden', !dj);
-    if (dj) {
-      $('dj').innerHTML = dj.enabled
-        ? '<b>' + esc(dj.block || '—') + '</b>' + (dj.block_start ? ' <span class="help">since ' + esc(dj.block_start) + '</span>' : '') + (dj.next ? ' · next ' + esc(dj.next) + ' in ' + ago(0, dj.next_in || 0) : '') + (dj.yielded ? ' · <span class="warn">standing back for the presenter</span>' : '') + ' · <a href="/dj">programme</a>'
-        : 'off · <a href="/dj">programme</a>';
+    $('djrow').classList.toggle('hidden', !dj && !s.insert);
+    if (dj || s.insert) {
+      const insert = s.insert ? ' · <span class="badge green">insert</span> ' + esc(s.insert) : '';
+      $('dj').innerHTML = dj && dj.enabled
+        ? '<b>' + esc(dj.block || '—') + '</b>' + (dj.block_start ? ' <span class="help">since ' + esc(dj.block_start) + '</span>' : '') + (dj.next ? ' · next ' + esc(dj.next) + ' in ' + ago(0, dj.next_in || 0) : '') + (dj.yielded ? ' · <span class="warn">standing back for the presenter</span>' : '') + insert + ' · <a href="/dj">programme</a>'
+        : 'off' + insert + ' · <a href="/dj">programme</a>';
     }
     $('deadair-badge').innerHTML = s.dead_air ? '<span class="badge red">dead air</span>' : (s.ring ? '<span class="badge green">on air</span>' : '<span class="badge">silent</span>');
     renderLevel(s);

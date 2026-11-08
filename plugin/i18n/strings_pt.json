@@ -265,6 +265,9 @@
     "ERR_DJ_SOURCE": "A fonte de um bloco tem de ser a fila do leitor, uma lista ou uma rádio web.",
     "ERR_DJ_PLAYLIST": "Um bloco de lista precisa do nome da lista.",
     "ERR_DJ_URI": "Um bloco de rádio web precisa do endereço do fluxo, http:// ou https://.",
+    "ERR_DJ_INSERT_FILE": "Uma inserção precisa de um ficheiro WAV da pasta de jingles.",
+    "ERR_DJ_INSERT_WHEN": "Uma inserção toca a cada hora, a cada tantas faixas ou no início de um bloco.",
+    "ERR_DJ_INSERT_NUMBER": "O minuto de uma inserção vai de 0 a 59, o número de faixas é 1 ou mais e o nível vai de 0 a −60 dB.",
     "ERR_SAVE": "Não foi possível guardar as definições: {{error}}"
   }
 }

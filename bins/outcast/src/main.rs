@@ -20,6 +20,7 @@ mod encoder;
 mod follow;
 mod hub;
 mod level;
+mod mixer;
 mod status;
 mod system;
 mod uplink;

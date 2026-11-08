@@ -41,7 +41,8 @@ test('the programme is checked and tidied', () => {
         blocks: [
             { id: 'b2', start: '06:00', name: "The player's queue", source: { kind: 'queue' }, random: true, hard: false },
             { id: 'b1', start: '09:05', name: 'Late', source: { kind: 'playlist', name: 'Late' }, random: false, hard: false }
-        ]
+        ],
+        inserts: []
     });
 });
 
@@ -86,6 +87,39 @@ test('the presenter changing the queue makes the scheduler yield until the next 
     s2.decide(programme, at(10, 3), { status: 'play', uri: 'a' }, theirs);
     s2.takeOver();
     assert.equal(s2.decide(programme, at(10, 4), { status: 'play', uri: 'a' }, theirs).action, 'act');
+});
+
+test('inserts fire on the hour, every so many tracks, or at a block start; soft ones wait for a track end or five minutes', () => {
+    const inserts = dj.tidyInserts([
+        { id: 'top', name: 'Top of the hour', file: 'top.wav', when: 'hour', minute: 0, duck_db: -60, hard: true },
+        { id: 'id', file: 'id.wav', when: 'tracks', every: 2 },
+        { id: 'sweep', file: 'sweep.wav', when: 'block', duck_db: -6 },
+        { id: 'soft', file: 'soft.wav', when: 'hour', minute: 30 }
+    ]);
+    assert.equal(dj.validateInserts(inserts), null);
+    assert.equal(inserts[1].name, 'id');
+    assert.equal(dj.validateInserts([{ file: '../etc/passwd.wav', when: 'hour' }]), 'ERR_DJ_INSERT_FILE');
+    assert.equal(dj.validateInserts([{ file: 'a.mp3', when: 'hour' }]), 'ERR_DJ_INSERT_FILE');
+    assert.equal(dj.validateInserts([{ file: 'a.wav', when: 'sometimes' }]), 'ERR_DJ_INSERT_WHEN');
+    assert.equal(dj.validateInserts([{ file: 'a.wav', when: 'hour', minute: 60 }]), 'ERR_DJ_INSERT_NUMBER');
+    assert.equal(dj.validateInserts([{ file: 'a.wav', when: 'tracks', every: 0 }]), 'ERR_DJ_INSERT_NUMBER');
+    const ins = new dj.Inserts();
+    // 09:00:05: the hard top-of-hour fires once in the hour; not again at 09:00:20.
+    assert.deepEqual(ins.tick(inserts, at(9, 0, 5), false, false).map((i) => i.id), ['top']);
+    assert.deepEqual(ins.tick(inserts, at(9, 0, 20), false, false), []);
+    // Two track ends: the every-two insert on the second.
+    assert.deepEqual(ins.tick(inserts, at(9, 3), true, false).map((i) => i.id), []);
+    assert.deepEqual(ins.tick(inserts, at(9, 7), true, false).map((i) => i.id), ['id']);
+    // A block start: the sweeper.
+    assert.deepEqual(ins.tick(inserts, at(10, 5), false, true).map((i) => i.id), ['sweep']);
+    // 09:30 soft: waits for a track end, and takes it.
+    assert.deepEqual(ins.tick(inserts, at(9, 30, 10), false, false), []);
+    assert.deepEqual(ins.tick(inserts, at(9, 31), true, false).map((i) => i.id), ['soft']);
+    // A soft one with no track end in five minutes fires anyway (a web radio).
+    const ins2 = new dj.Inserts();
+    assert.deepEqual(ins2.tick(inserts, at(11, 30, 0), false, false), []);
+    assert.deepEqual(ins2.tick(inserts, at(11, 34, 50), false, false), []);
+    assert.deepEqual(ins2.tick(inserts, at(11, 35, 1), false, false).map((i) => i.id), ['soft']);
 });
 
 test('a block of the player\'s own queue leaves the player alone and never yields', () => {

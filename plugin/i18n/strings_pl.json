@@ -265,6 +265,9 @@
     "ERR_DJ_SOURCE": "Źródłem bloku musi być kolejka odtwarzacza, playlista lub radio internetowe.",
     "ERR_DJ_PLAYLIST": "Blok playlisty potrzebuje nazwy playlisty.",
     "ERR_DJ_URI": "Blok radia internetowego potrzebuje adresu strumienia, http:// lub https://.",
+    "ERR_DJ_INSERT_FILE": "Wstawka potrzebuje pliku WAV z folderu dżingli.",
+    "ERR_DJ_INSERT_WHEN": "Wstawka gra co godzinę, co tyle a tyle utworów albo na początku bloku.",
+    "ERR_DJ_INSERT_NUMBER": "Minuta wstawki to 0 do 59, liczba utworów 1 lub więcej, a poziom 0 do −60 dB.",
     "ERR_SAVE": "Nie udało się zapisać ustawień: {{error}}"
   }
 }

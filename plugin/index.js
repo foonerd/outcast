@@ -22,6 +22,7 @@ const LIBRARY = path.join(__dirname, 'lib', 'libevotap.so');
 const ALSA_FILE = '/etc/asound.conf';
 const SERVICE = 'outcast.service';
 const RUN_DIR = '/run/outcast';
+const JINGLES_DIR = '/data/INTERNAL/outcast/jingles';
 const STATUS_FILE = RUN_DIR + '/status.json';
 const CONTROL_SOCKET = RUN_DIR + '/control.sock';
 const CHECK_CONF = '/tmp/outcast-check.conf';
@@ -52,8 +53,10 @@ function Outcast(context) {
     this.djFile = null;
     this.dj = { enabled: false, blocks: [] };
     this.sched = new dj.Scheduler();
+    this.inserts = new dj.Inserts();
     this.djTimer = null;
     this.lastState = null;
+    this.lastUri = null;
     this.lastDjKey = '';
 }
 
@@ -377,7 +380,13 @@ Outcast.prototype.onVolumioState = function (state) {
 // command router; the scheduler decides, this acts and tells the core for the status.
 
 Outcast.prototype.loadDj = function () {
-    try { this.dj = dj.tidy(JSON.parse(fs.readFileSync(this.djFile, 'utf8'))); } catch (e) { this.dj = { enabled: false, blocks: [] }; }
+    try { this.dj = dj.tidy(JSON.parse(fs.readFileSync(this.djFile, 'utf8'))); } catch (e) { this.dj = { enabled: false, blocks: [], inserts: [] }; }
+    try { fs.mkdirSync(JINGLES_DIR, { recursive: true }); } catch (e) { /* the folder is made by the install; a player without it says so in the status */ }
+};
+
+// The WAV files in the jingles folder, for the programme page.
+Outcast.prototype.jingles = function () {
+    try { return fs.readdirSync(JINGLES_DIR).filter((f) => /\.wav$/i.test(f)).sort(); } catch (e) { return []; }
 };
 
 Outcast.prototype.saveDjFile = function () {
@@ -395,7 +404,7 @@ Outcast.prototype.pushDj = function (extra) {
     this.commandRouter.broadcastMessage('pushDj', Object.assign({ now: this.djReport() }, extra || {}));
 };
 
-Outcast.prototype.djGet = function () { this.pushDj({ programme: this.dj }); return libQ.resolve(); };
+Outcast.prototype.djGet = function () { this.pushDj({ programme: this.dj, files: this.jingles(), folder: JINGLES_DIR }); return libQ.resolve(); };
 Outcast.prototype.djNow = function () { this.pushDj({}); return libQ.resolve(); };
 
 Outcast.prototype.djSave = function (data) {
@@ -404,8 +413,21 @@ Outcast.prototype.djSave = function (data) {
     this.dj = dj.tidy(data);
     try { this.saveDjFile(); } catch (e) { this.pushDj({ error: this.i18n('ERR_SAVE', { error: msg(e) }) }); return libQ.resolve(); }
     this.logger.info(LOG + 'dj: programme saved, ' + this.dj.blocks.length + ' blocks, ' + (this.dj.enabled ? 'on' : 'off'));
-    this.pushDj({ programme: this.dj, saved: true });
+    this.pushDj({ programme: this.dj, saved: true, files: this.jingles(), folder: JINGLES_DIR });
     this.djTick();
+    return libQ.resolve();
+};
+
+// An insert played into the stream by the core: the file from the jingles folder.
+Outcast.prototype.djInsert = function (insert) {
+    this.logger.info(LOG + 'dj: insert ' + insert.name + ' (' + insert.file + ')');
+    this.tellCore({ op: 'insert', file: path.join(JINGLES_DIR, insert.file), name: insert.name, duck_db: insert.duck_db });
+};
+
+// The programme page asks for an insert now, by its id.
+Outcast.prototype.djPlayInsert = function (data) {
+    const ins = (this.dj.inserts || []).find((i) => i.id === String(data && data.id));
+    if (ins) this.djInsert(ins);
     return libQ.resolve();
 };
 
@@ -434,9 +456,17 @@ Outcast.prototype.djTick = function (state) {
     let queue = null;
     try { const q = self.commandRouter.volumioGetQueue(); queue = Array.isArray(q) ? q : null; } catch (e) { queue = null; }
     self.sched.settle(queue);
-    const d = self.sched.decide(self.dj, new Date(), st ? { status: st.status, uri: st.uri } : null, queue);
+    const now = new Date();
+    const d = self.sched.decide(self.dj, now, st ? { status: st.status, uri: st.uri } : null, queue);
     if (d.action === 'act') self.djAct(d.block);
     else self.tellDj('');
+    // A track ended: the playing uri changed while playing. The inserts due go to the core.
+    const uri = st && st.status === 'play' ? String(st.uri || '') : null;
+    const boundary = uri !== null && self.lastUri !== null && uri !== self.lastUri;
+    if (uri !== null) self.lastUri = uri;
+    if (self.dj.enabled) {
+        for (const ins of self.inserts.tick(self.dj.inserts, now, boundary, d.action === 'act')) self.djInsert(ins);
+    }
 };
 
 Outcast.prototype.djAct = function (block) {

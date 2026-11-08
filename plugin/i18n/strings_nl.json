@@ -265,6 +265,9 @@
     "ERR_DJ_SOURCE": "De bron van een blok moet de wachtrij van de speler, een afspeellijst of een webradio zijn.",
     "ERR_DJ_PLAYLIST": "Een afspeellijstblok heeft de naam van de afspeellijst nodig.",
     "ERR_DJ_URI": "Een webradioblok heeft het adres van de stream nodig, http:// of https://.",
+    "ERR_DJ_INSERT_FILE": "Een insert heeft een WAV-bestand uit de jinglemap nodig.",
+    "ERR_DJ_INSERT_WHEN": "Een insert speelt elk uur, om de zoveel nummers of bij het begin van een blok.",
+    "ERR_DJ_INSERT_NUMBER": "De minuut van een insert is 0 tot 59, het aantal nummers 1 of meer en het niveau 0 tot −60 dB.",
     "ERR_SAVE": "De instellingen konden niet worden opgeslagen: {{error}}"
   }
 }

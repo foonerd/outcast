@@ -73,6 +73,8 @@ pub struct Status {
     /// DJ mode as the plugin reports it: the block in force, the next, whether
     /// it stands back for the presenter. Null when the plugin has said nothing.
     pub dj: serde_json::Value,
+    /// The insert playing into the stream now, by name; empty when none.
+    pub insert: String,
 }
 
 /// Events kept and titles kept.
@@ -119,6 +121,8 @@ pub struct Since {
     pub dropped: u64,
     /// Meter hops at full scale.
     pub overs: u32,
+    /// Inserts played into the stream.
+    pub inserts: u32,
     pub events: VecDeque<Event>,
 }
 
@@ -254,6 +258,7 @@ impl Status {
             since: Since::new(started),
             played: VecDeque::new(),
             dj: serde_json::Value::Null,
+            insert: String::new(),
         }
     }
 

@@ -265,6 +265,9 @@
     "ERR_DJ_SOURCE": "La sorgente di un blocco deve essere la coda del lettore, una playlist o una web radio.",
     "ERR_DJ_PLAYLIST": "Un blocco playlist ha bisogno del nome della playlist.",
     "ERR_DJ_URI": "Un blocco web radio ha bisogno dell'indirizzo del flusso, http:// o https://.",
+    "ERR_DJ_INSERT_FILE": "Un inserto ha bisogno di un file WAV dalla cartella dei jingle.",
+    "ERR_DJ_INSERT_WHEN": "Un inserto suona ogni ora, ogni tot brani o all'inizio di un blocco.",
+    "ERR_DJ_INSERT_NUMBER": "Il minuto di un inserto va da 0 a 59, il suo numero di brani è 1 o più e il suo livello va da 0 a −60 dB.",
     "ERR_SAVE": "Impossibile salvare le impostazioni: {{error}}"
   }
 }
