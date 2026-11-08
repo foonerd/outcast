@@ -294,6 +294,10 @@ test('the status carries the machine in one line when the core has read it', () 
     assert.ok(h.summarize(warm, 'ready', '', t).includes('STATUS_SYSTEM_TEMP {"cpu":"18","outcast":"6.3","mem":"19","temp":"52"}'));
     const cold = Object.assign({}, base, { system: { cpu_pct: 2, outcast_cpu_pct: 0.4, mem_used_mb: 100, mem_total_mb: 1000, temp_c: null } });
     assert.ok(h.summarize(cold, 'ready', '', t).includes('STATUS_SYSTEM {"cpu":"2","outcast":"0.4","mem":"10"}'));
+    // The counts since the mark, in one line; none without a mark.
+    const since = Object.assign({}, base, { since: { at: Math.floor(new Date(2026, 10, 8, 6, 24).getTime() / 1000), dead_air_events: 2, reconnects: 3, errors: 1, overs: 0 } });
+    assert.ok(h.summarize(since, 'ready', '', t).includes('STATUS_SINCE {"time":"06:24","dead":2,"reconnects":3,"errors":1,"overs":0}'));
+    assert.ok(!h.summarize(Object.assign({}, base, { since: { at: 0 } }), 'ready', '', t).some((l) => l.startsWith('STATUS_SINCE')));
 });
 
 test('the dashboard has a switch and a port, and the address of the player is the wired one first', () => {

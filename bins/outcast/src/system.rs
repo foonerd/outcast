@@ -40,6 +40,17 @@ pub struct System {
     pub net_iface: String,
 }
 
+/// An uplink as it was at the last reading, for what changed since.
+#[derive(Clone, Debug, Default, PartialEq)]
+struct Seen {
+    state: String,
+    reconnects: u32,
+    dropped: u64,
+    last_error: String,
+    /// It has been up at some point, so a return is a return.
+    was_up: bool,
+}
+
 /// The reader, holding the last reading for the deltas.
 pub struct Sampler {
     at: Option<Instant>,
@@ -48,9 +59,90 @@ pub struct Sampler {
     children: HashMap<u32, u64>,
     tx: u64,
     uplink_bytes: u64,
+    lost: u64,
+    seen: HashMap<String, Seen>,
     thermal: Option<PathBuf>,
     clk_tck: f64,
     page: u64,
+}
+
+/// A state that is up, as the page counts them.
+fn up(state: &str) -> bool {
+    matches!(state, "connected" | "streaming" | "recording" | "listening")
+}
+
+/// What changed in the uplinks since the last reading, counted into the status's
+/// `since`: connections made again, pieces dropped, errors, an uplink lost or
+/// back, the listeners' peak; and the bytes carried, the peaks of the machine.
+fn account(
+    s: &mut Status,
+    seen: &mut HashMap<String, Seen>,
+    sent: u64,
+    lost: u64,
+    reading: &System,
+) {
+    let now = crate::status::now();
+    let mut listeners = 0u32;
+    let mut events: Vec<(&'static str, String)> = Vec::new();
+    for u in &s.uplinks {
+        listeners += u.listeners;
+        let was_up = up(&u.state) || seen.get(&u.id).is_some_and(|b| b.was_up);
+        let now_seen = Seen {
+            state: u.state.clone(),
+            reconnects: u.reconnects,
+            dropped: u.dropped,
+            last_error: u.last_error.clone(),
+            was_up,
+        };
+        if let Some(before) = seen.get(&u.id) {
+            let again = u.reconnects.saturating_sub(before.reconnects);
+            if again > 0 {
+                s.since.reconnects += again;
+                *s.since.reconnects_by.entry(u.id.clone()).or_insert(0) += again;
+            }
+            s.since.dropped += u.dropped.saturating_sub(before.dropped);
+            let erred = !u.last_error.is_empty() && u.last_error != before.last_error;
+            if erred {
+                s.since.errors += 1;
+                s.since.error_last = format!("{}: {}", u.id, u.last_error);
+                s.since.error_last_at = now;
+            }
+            if up(&before.state) && !up(&u.state) && u.state != "off" && u.state != "idle" {
+                events.push((
+                    "err",
+                    format!(
+                        "{}: {}{}",
+                        u.id,
+                        u.state,
+                        if u.last_error.is_empty() {
+                            String::new()
+                        } else {
+                            format!(": {}", u.last_error)
+                        }
+                    ),
+                ));
+            } else if !up(&before.state) && up(&u.state) && before.was_up {
+                events.push(("ok", format!("{}: {} again", u.id, u.state)));
+            } else if erred && u.state == "error" {
+                events.push(("err", format!("{}: {}", u.id, u.last_error)));
+            }
+        }
+        seen.insert(u.id.clone(), now_seen);
+    }
+    seen.retain(|id, _| s.uplinks.iter().any(|u| &u.id == id));
+    for (kind, text) in events {
+        s.event(kind, text);
+    }
+    s.since.listeners_peak = s.since.listeners_peak.max(listeners);
+    s.since.bytes += sent;
+    s.since.lost += lost;
+    let span = now.saturating_sub(s.since.at).max(1) as f64;
+    s.since.uplinks_kbps_avg = (s.since.bytes as f64 * 8.0 / 1000.0 / span) as f32;
+    s.since.cpu_peak = s.since.cpu_peak.max(reading.cpu_pct);
+    s.since.outcast_peak = s.since.outcast_peak.max(reading.outcast_cpu_pct);
+    if let Some(t) = reading.temp_c {
+        s.since.temp_peak = Some(s.since.temp_peak.map_or(t, |p| p.max(t)));
+    }
 }
 
 impl Default for Sampler {
@@ -68,6 +160,8 @@ impl Sampler {
             children: HashMap::new(),
             tx: 0,
             uplink_bytes: 0,
+            lost: 0,
+            seen: HashMap::new(),
             thermal: thermal_zone(),
             clk_tck: clk_tck(),
             page: page_size(),
@@ -104,9 +198,9 @@ impl Sampler {
             .as_ref()
             .and_then(|p| read(&p.to_string_lossy()).trim().parse::<f64>().ok())
             .map(|milli| (milli / 1000.0) as f32);
-        let uplink_bytes: u64 = {
+        let (uplink_bytes, lost): (u64, u64) = {
             let s = status.lock().unwrap_or_else(|e| e.into_inner());
-            s.uplinks.iter().map(|u| u.bytes).sum()
+            (s.uplinks.iter().map(|u| u.bytes).sum(), s.lost)
         };
 
         if let Some(at) = self.at {
@@ -159,7 +253,29 @@ impl Sampler {
             for u in s.uplinks.iter_mut() {
                 u.cpu_pct = per_uplink.get(&u.id).copied().unwrap_or(0.0);
             }
+            account(
+                &mut s,
+                &mut self.seen,
+                uplink_bytes.saturating_sub(self.uplink_bytes),
+                lost.saturating_sub(self.lost),
+                &reading,
+            );
             s.system = Some(reading);
+        } else {
+            // The first reading: the uplinks as they are, so the next one sees changes.
+            let s = status.lock().unwrap_or_else(|e| e.into_inner());
+            for u in &s.uplinks {
+                self.seen.insert(
+                    u.id.clone(),
+                    Seen {
+                        state: u.state.clone(),
+                        reconnects: u.reconnects,
+                        dropped: u.dropped,
+                        last_error: u.last_error.clone(),
+                        was_up: up(&u.state),
+                    },
+                );
+            }
         }
 
         self.at = Some(now);
@@ -171,6 +287,7 @@ impl Sampler {
             .collect();
         self.tx = tx;
         self.uplink_bytes = uplink_bytes;
+        self.lost = lost;
     }
 }
 
@@ -352,6 +469,60 @@ mod tests {
         let dev = "Inter-|   Receive |  Transmit\n face |bytes packets errs drop fifo frame compressed multicast|bytes packets errs drop fifo colls carrier compressed\n    lo: 1 2 0 0 0 0 0 0 3 4 0 0 0 0 0 0\n  eth0: 626527087 533429 0 0 0 0 0 20 118552582 171555 0 0 0 0 0 0\n";
         assert_eq!(parse_net_dev(dev, "eth0"), Some(118552582));
         assert_eq!(parse_net_dev(dev, "wlan0"), None);
+    }
+
+    #[test]
+    fn what_changed_in_the_uplinks_is_counted_since_the_mark() {
+        use crate::status::Uplink;
+        let mut s = Status::new("test");
+        let mut seen = HashMap::new();
+        let mut rtmp = Uplink {
+            id: "rtmp".into(),
+            state: "connected".into(),
+            listeners: 0,
+            ..Uplink::default()
+        };
+        let mut lan = Uplink {
+            id: "lan".into(),
+            state: "streaming".into(),
+            listeners: 2,
+            ..Uplink::default()
+        };
+        s.uplinks = vec![rtmp.clone(), lan.clone()];
+        let reading = System {
+            cpu_pct: 12.0,
+            outcast_cpu_pct: 3.0,
+            temp_c: Some(50.0),
+            ..System::default()
+        };
+        account(&mut s, &mut seen, 1000, 0, &reading);
+        assert_eq!(s.since.events.len(), 0, "the first look only remembers");
+        // The RTMP link lost with a reason, the listeners up, the machine hotter.
+        rtmp.state = "waiting".into();
+        rtmp.last_error = "connection lost: peer stalled".into();
+        lan.listeners = 4;
+        s.uplinks = vec![rtmp.clone(), lan.clone()];
+        let hotter = System {
+            cpu_pct: 31.0,
+            temp_c: Some(61.0),
+            ..reading.clone()
+        };
+        account(&mut s, &mut seen, 2000, 5, &hotter);
+        assert_eq!(s.since.errors, 1);
+        assert_eq!(s.since.error_last, "rtmp: connection lost: peer stalled");
+        assert_eq!(s.since.events.back().unwrap().kind, "err");
+        assert_eq!(s.since.listeners_peak, 4);
+        assert_eq!((s.since.bytes, s.since.lost), (3000, 5));
+        assert_eq!((s.since.cpu_peak, s.since.temp_peak), (31.0, Some(61.0)));
+        // Back, with the reconnect counted.
+        rtmp.state = "connected".into();
+        rtmp.reconnects = 1;
+        s.uplinks = vec![rtmp.clone(), lan.clone()];
+        account(&mut s, &mut seen, 0, 0, &reading);
+        assert_eq!(s.since.reconnects, 1);
+        assert_eq!(s.since.reconnects_by.get("rtmp"), Some(&1));
+        assert_eq!(s.since.events.back().unwrap().text, "rtmp: connected again");
+        assert_eq!(s.since.errors, 1, "the same error is not counted twice");
     }
 
     #[test]

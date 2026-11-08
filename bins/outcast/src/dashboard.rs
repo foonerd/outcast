@@ -120,6 +120,18 @@ fn serve(mut stream: TcpStream, status: &Arc<Mutex<Status>>) {
     let mut parts = head.lines().next().unwrap_or("").split_whitespace();
     let method = parts.next().unwrap_or("").to_string();
     let path = parts.next().unwrap_or("/").to_string();
+    // The page's one write: the counts started again from now.
+    if method == "POST" && path.split('?').next() == Some("/since/clear") {
+        status
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear_since();
+        let _ = stream.write_all(
+            b"HTTP/1.0 204 No Content\r\nServer: outcast\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n",
+        );
+        let _ = stream.shutdown(Shutdown::Both);
+        return;
+    }
     let json = if path.starts_with("/status.json") {
         status::render(status)
     } else {
@@ -165,6 +177,14 @@ mod tests {
             "the machine's card, from the status's system reading"
         );
         assert!(
+            body.contains(r#"id="since""#)
+                && body.contains(r#"id="played""#)
+                && body.contains(r#"id="bridge""#)
+                && body.contains(r#"id="history""#)
+                && body.contains("/since/clear"),
+            "the counts, the titles, the meter bridge and its history, and the one write"
+        );
+        assert!(
             !body.contains("<script src") && !body.contains("<link ") && !body.contains("@import"),
             "nothing fetched from anywhere else"
         );
@@ -189,6 +209,20 @@ mod tests {
         c.read_to_string(&mut out).unwrap();
         assert!(out.starts_with("HTTP/1.0 200 OK"));
         assert!(out.contains("\"tag\"") && out.contains("\"test\""), "{out}");
+        // The one write: the counts cleared, the mark moved.
+        status.lock().unwrap().since.reconnects = 7;
+        let mark = status.lock().unwrap().since.at;
+        std::thread::sleep(Duration::from_millis(1100));
+        let mut c = TcpStream::connect(("127.0.0.1", port)).unwrap();
+        c.write_all(b"POST /since/clear HTTP/1.0\r\nContent-Length: 0\r\n\r\n")
+            .unwrap();
+        let mut out = String::new();
+        c.read_to_string(&mut out).unwrap();
+        assert!(out.starts_with("HTTP/1.0 204"), "{out}");
+        let s2 = status.lock().unwrap();
+        assert_eq!(s2.since.reconnects, 0);
+        assert!(s2.since.at > mark);
+        drop(s2);
         s.stop();
         assert!(
             TcpListener::bind(("0.0.0.0", port)).is_ok(),

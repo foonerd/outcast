@@ -611,6 +611,14 @@ function summarize(status, audioPath, audioPathError, t, tapNote) {
         if (y.temp_c != null) lines.push(t('STATUS_SYSTEM_TEMP', Object.assign(vars, { temp: Number(y.temp_c).toFixed(0) })));
         else lines.push(t('STATUS_SYSTEM', vars));
     }
+    if (status && status.since && status.since.at) {
+        const z = status.since;
+        const when = new Date(z.at * 1000);
+        lines.push(t('STATUS_SINCE', {
+            time: String(when.getHours()).padStart(2, '0') + ':' + String(when.getMinutes()).padStart(2, '0'),
+            dead: z.dead_air_events || 0, reconnects: z.reconnects || 0, errors: z.errors || 0, overs: z.overs || 0
+        }));
+    }
     if (audioPath === 'ready') lines.push(t('STATUS_TAP_READY'));
     else if (audioPath === 'lost') lines.push(t('STATUS_TAP_LOST'));
     else lines.push(t('STATUS_TAP_FAILED', { error: audioPathError || '' }));

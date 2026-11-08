@@ -2,6 +2,7 @@
 //! it: the ring being followed, the segments and bytes so far, the title
 //! the player last gave, and each uplink's state.
 
+use std::collections::{BTreeMap, VecDeque};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -62,6 +63,109 @@ pub struct Status {
     /// The machine under the uplinks, read once a second; none until the
     /// second reading.
     pub system: Option<crate::system::System>,
+    /// The dead-air floor as set, in dBFS, for the page's meter.
+    pub dead_air_level: f32,
+    /// Counts, peaks and the last events since a mark: the core's start, or
+    /// the dashboard's Clear.
+    pub since: Since,
+    /// The titles the player showed, newest last, twenty at most.
+    pub played: VecDeque<Played>,
+}
+
+/// Events kept and titles kept.
+const KEPT: usize = 20;
+
+/// One thing that happened: dead air, an uplink lost or back, an error, a
+/// mark. `kind` is `dead`, `err`, `ok` or `info`, as the page colours them.
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+pub struct Event {
+    pub at: u64,
+    pub kind: String,
+    pub text: String,
+}
+
+/// A title the player showed, and when it began.
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+pub struct Played {
+    pub at: u64,
+    pub title: String,
+}
+
+/// What happened since the mark.
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+pub struct Since {
+    /// Seconds since the epoch of the mark.
+    pub at: u64,
+    pub dead_air_events: u32,
+    /// Seconds the programme stood silent in those events, in all.
+    pub dead_air_seconds: u64,
+    pub dead_air_last: u64,
+    pub reconnects: u32,
+    pub reconnects_by: BTreeMap<String, u32>,
+    pub errors: u32,
+    pub error_last: String,
+    pub error_last_at: u64,
+    pub cpu_peak: f32,
+    pub outcast_peak: f32,
+    pub temp_peak: Option<f32>,
+    pub listeners_peak: u32,
+    /// Bytes the uplinks sent since the mark, together.
+    pub bytes: u64,
+    pub uplinks_kbps_avg: f32,
+    pub lost: u64,
+    pub dropped: u64,
+    /// Meter hops at full scale.
+    pub overs: u32,
+    pub events: VecDeque<Event>,
+}
+
+impl Since {
+    pub fn new(at: u64) -> Self {
+        Self {
+            at,
+            ..Self::default()
+        }
+    }
+
+    pub fn event(&mut self, kind: &str, text: String) {
+        self.events.push_back(Event {
+            at: now(),
+            kind: kind.to_string(),
+            text,
+        });
+        while self.events.len() > KEPT {
+            self.events.pop_front();
+        }
+    }
+}
+
+impl Status {
+    /// Something that happened, for the page's list.
+    pub fn event(&mut self, kind: &str, text: String) {
+        self.since.event(kind, text);
+        self.touch();
+    }
+
+    /// The counts started again from now, at the dashboard's word.
+    pub fn clear_since(&mut self) {
+        self.since = Since::new(now());
+        self.event("info", "counts cleared".into());
+    }
+
+    /// A title the player showed, kept when it is new.
+    pub fn played_title(&mut self, title: &str) {
+        if title.is_empty() || self.played.back().is_some_and(|p| p.title == title) {
+            return;
+        }
+        self.played.push_back(Played {
+            at: now(),
+            title: title.to_string(),
+        });
+        while self.played.len() > KEPT {
+            self.played.pop_front();
+        }
+        self.touch();
+    }
 }
 
 /// The newest hop's level per channel, in dBFS.
@@ -143,6 +247,9 @@ impl Status {
             dead_air: false,
             quiet_seconds: 0,
             system: None,
+            dead_air_level: -60.0,
+            since: Since::new(started),
+            played: VecDeque::new(),
         }
     }
 
@@ -204,6 +311,41 @@ mod tests {
         assert_eq!(v["uplinks"][0]["state"], "connected");
         assert_eq!(v["uplinks"][0]["listeners"], 0);
         assert!(text.ends_with('\n'));
+    }
+
+    #[test]
+    fn the_counts_the_events_and_the_titles_are_kept_and_cleared() {
+        let mut s = Status::new("outcast");
+        let start = s.since.at;
+        s.played_title("Artist - One");
+        s.played_title("Artist - One");
+        s.played_title("");
+        s.played_title("Artist - Two");
+        assert_eq!(s.played.len(), 2, "a repeated or empty title is not kept");
+        for i in 0..25 {
+            s.played_title(&format!("Title {i}"));
+            s.event("info", format!("event {i}"));
+        }
+        assert_eq!(s.played.len(), KEPT);
+        assert_eq!(s.since.events.len(), KEPT);
+        assert_eq!(s.since.events.back().unwrap().text, "event 24");
+        s.since.reconnects = 3;
+        s.since.overs = 2;
+        std::thread::sleep(std::time::Duration::from_millis(1100));
+        s.clear_since();
+        assert!(s.since.at > start);
+        assert_eq!((s.since.reconnects, s.since.overs), (0, 0));
+        assert_eq!(
+            s.since.events.len(),
+            1,
+            "the clearing is the first event after it"
+        );
+        assert_eq!(s.played.len(), KEPT, "the titles are not the counts");
+        let v: serde_json::Value =
+            serde_json::from_str(&serde_json::to_string(&s).unwrap()).unwrap();
+        assert_eq!(v["since"]["events"][0]["kind"], "info");
+        assert_eq!(v["played"][19]["title"], "Title 24");
+        assert_eq!(v["dead_air_level"], -60.0);
     }
 
     #[test]

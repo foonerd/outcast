@@ -208,6 +208,7 @@
     "STATUS_DEAD_AIR": "Тишина в эфире: {{seconds}} с ниже уровня.",
     "STATUS_SYSTEM": "Плеер: CPU {{cpu}} %, Outcast {{outcast}} %, память {{mem}} % занята.",
     "STATUS_SYSTEM_TEMP": "Плеер: CPU {{cpu}} %, Outcast {{outcast}} %, память {{mem}} % занята, {{temp}} °C.",
+    "STATUS_SINCE": "С {{time}}: тишина в эфире {{dead}}, переподключений {{reconnects}}, ошибок {{errors}}, перегрузок {{overs}}.",
     "STATUS_SRT_LINK": "обход {{rtt}} мс, потеряно пакетов: {{lost}}",
     "STATUS_HLS_SEGMENTS": "сегментов нарезано: {{segments}}, ждут origin: {{pending}}",
     "STATUS_HLS_REFUSED": "{{refused}} запросов отклонено на пределе соединений",

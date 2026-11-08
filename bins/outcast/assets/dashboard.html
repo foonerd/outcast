@@ -23,6 +23,7 @@
   .header h1 { font-size: 19px; font-weight: 600; color: #fff; white-space: nowrap; }
   .header .sub { color: var(--muted); font-size: 13px; }
   .header .grow { flex: 1; min-width: 0; }
+  .header .clock { font-variant-numeric: tabular-nums; font-weight: 600; font-size: 17px; color: #fff; letter-spacing: .5px; }
   .container { max-width: 1400px; margin: 0 auto; padding: 16px 20px 60px; }
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
   .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; }
@@ -64,6 +65,28 @@
   .srow { display: grid; grid-template-columns: 4.6em 1fr; gap: 10px; font-size: 13px; margin: 8px 0 0; align-items: baseline; }
   .srow .lab { color: var(--muted); font-weight: 600; }
   .srow b { color: var(--text); font-weight: 600; }
+
+  .card .title .grow { flex: 1; }
+  .card .title button.small { padding: 3px 9px; font-size: 12px; font-weight: 500; }
+  table.kv.tight td { padding: 5px 6px; font-size: 13px; }
+  table.kv.tight td:first-child { width: 34%; }
+  .events { margin-top: 8px; border-top: 1px solid #333; padding-top: 6px; font-size: 12.5px; }
+  .events div { display: grid; grid-template-columns: 3.4em 1fr; gap: 8px; padding: 2px 0; color: var(--muted); }
+  .events .t { font-variant-numeric: tabular-nums; }
+  .events .ev-dead { color: var(--danger); } .events .ev-err { color: #ffb3b3; } .events .ev-ok { color: var(--accent); } .events .ev-info { color: var(--text); }
+
+  .readouts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px 10px; margin: 8px 0 2px; }
+  .readouts > div { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
+  .readouts .k { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .3px; }
+  .readouts .v { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .readouts .v small { color: var(--muted); font-weight: 400; font-size: 12px; }
+
+  .played div { display: grid; grid-template-columns: 3.4em 1fr 5.6em; gap: 8px; padding: 5px 0; border-bottom: 1px solid #333; font-size: 13px; align-items: baseline; }
+  .played div:last-child { border-bottom: 0; }
+  .played .t { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .played .d { color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; font-size: 12px; }
+  .played .now { color: #fff; font-weight: 600; }
+  .played .now .d { color: var(--accent); }
   .dead { color: var(--danger); font-weight: 600; }
   .warn { color: var(--warn); }
   .empty { color: var(--muted); padding: 20px 8px; }
@@ -74,6 +97,7 @@
 <div class="header">
   <h1>Outcast Uplink</h1>
   <span class="sub grow" id="core">connecting…</span>
+  <span class="clock" id="clock"></span>
   <button class="small hidden" id="close">Close</button>
 </div>
 <div class="container">
@@ -90,12 +114,25 @@
       </div>
     </section>
     <section class="card">
-      <div class="title">Level <span class="help">RMS and peak, dBFS, from the tap's meter</span></div>
-      <div class="body" id="meters"></div>
-    </section>
-    <section class="card">
       <div class="title">Player <span class="help">the machine, every second</span></div>
       <div class="body" id="player"><div class="empty">no reading yet</div></div>
+    </section>
+    <section class="card">
+      <div class="title">Since <span class="help" id="since-when"></span><span class="grow"></span><button class="small" id="clear" title="Start the counts again from now">Clear</button></div>
+      <div class="body" id="since"></div>
+    </section>
+    <section class="card">
+      <div class="title">Played <span class="help" id="played-help"></span></div>
+      <div class="body" id="played"></div>
+    </section>
+    <section class="card wide">
+      <div class="title">Level <span class="help">dBFS, from the tap's meter</span><span class="grow"></span><span class="badge" id="overs-badge"></span></div>
+      <div class="body">
+        <canvas id="bridge" width="1320" height="96" style="width:100%;display:block"></canvas>
+        <div class="readouts" id="readouts"></div>
+        <canvas id="history" width="1320" height="130" style="width:100%;display:block;margin-top:8px"></canvas>
+        <div class="help" style="margin-top:4px">The last minute: RMS left and right, the peaks above them, the dead-air floor dashed.</div>
+      </div>
     </section>
     <section class="card wide">
       <div class="title">Uplinks <span class="help" id="count"></span></div>
@@ -146,6 +183,119 @@
     rows.push('<div class="srow"><span class="lab">Out</span><span>uplinks <b>' + y.uplinks_kbps.toFixed(0) + ' kbit/s</b>' + (y.net_iface ? ' <span class="help">· the player ' + y.net_tx_kbps.toFixed(0) + ' kbit/s on ' + esc(y.net_iface) + '</span>' : '') + '</span></div>');
     p.innerHTML = rows.join('');
   }
+
+  const hm = (epoch) => new Date(epoch * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const dur = (s) => s < 60 ? s + ' s' : s < 3600 ? Math.floor(s / 60) + ' min ' + (s % 60) + ' s' : Math.floor(s / 3600) + ' h ' + Math.floor((s % 3600) / 60) + ' min';
+  const mss = (s) => s >= 3600 ? Math.floor(s / 3600) + ':' + String(Math.floor((s % 3600) / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0') : Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+  function renderSince(z, now) {
+    const p = $('since');
+    if (!z) { p.innerHTML = '<div class="empty">no counts yet</div>'; $('since-when').textContent = ''; return; }
+    $('since-when').textContent = hm(z.at) + ' · ' + ago(z.at, now);
+    const worst = Object.entries(z.reconnects_by || {}).sort((a, b) => b[1] - a[1]).map(([k, v]) => (kinds[k.replace(/\d+$/, '')] || k) + ' ' + v).join(', ');
+    const rows = [
+      ['Dead air', z.dead_air_events ? '<span class="dead">' + z.dead_air_events + '</span>, ' + dur(z.dead_air_seconds) + ' in all, last ' + hm(z.dead_air_last) : 'none'],
+      ['Reconnects', z.reconnects ? z.reconnects + (worst ? ' <span class="help">(' + worst + ')</span>' : '') : 'none'],
+      ['Errors', z.errors ? z.errors + (z.error_last ? ' <span class="help">· last ' + hm(z.error_last_at) + ' ' + esc(z.error_last) + '</span>' : '') : 'none'],
+      ['Peaks', 'CPU <b>' + z.cpu_peak.toFixed(0) + ' %</b> · Outcast <b>' + z.outcast_peak.toFixed(1) + ' %</b>' + (z.temp_peak != null ? ' · <b>' + z.temp_peak.toFixed(0) + ' °C</b>' : '') + ' · listeners <b>' + z.listeners_peak + '</b>'],
+      ['Carried', mb(z.bytes) + ' · uplinks ' + (z.uplinks_kbps_avg).toFixed(0) + ' kbit/s on average'],
+      ['Lost', z.lost + ' bytes to the reader · ' + z.dropped + ' pieces dropped by uplinks']
+    ];
+    let html = '<table class="kv tight">' + rows.map(([k, v]) => '<tr><td>' + k + '</td><td>' + v + '</td></tr>').join('') + '</table>';
+    if (z.events && z.events.length) {
+      html += '<div class="events">' + z.events.slice(-6).reverse().map((e) => '<div><span class="t">' + hm(e.at) + '</span><span class="ev-' + e.kind + '">' + esc(e.text) + '</span></div>').join('') + '</div>';
+    }
+    p.innerHTML = html;
+  }
+
+  // ---- the level: a meter bridge, readouts and a minute of history, all on the page
+  const HIST = 60; const hist = []; let peakHold = [-60, -60]; let holdAge = [0, 0]; let overs = 0;
+  const dbx = (db, w) => Math.max(0, Math.min(1, (db + 60) / 60)) * w;
+  const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  const rr = (g, x, y, w, h, r) => { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); };
+  const fit = (c, h) => { const w = Math.max(320, Math.floor(c.clientWidth || c.parentNode.clientWidth || 1320)); if (c.width !== w || c.height !== h) { c.width = w; c.height = h; } };
+  function drawBridge(level, floor) {
+    const c = $('bridge'); fit(c, 96); const g = c.getContext('2d'); const W = c.width, H = c.height; g.clearRect(0, 0, W, H);
+    const left = 30, right = W - 12, w = right - left; const rows = [[12, 'L', 0], [40, 'R', 1]];
+    g.font = '13px -apple-system, Segoe UI, Roboto, sans-serif'; g.textBaseline = 'middle';
+    rows.forEach(([y, label, i]) => {
+      const rms = level ? level.rms_db[i] : -60, peak = level ? (level.peak_db[i] == null ? rms : level.peak_db[i]) : -60;
+      g.fillStyle = css('--muted'); g.textAlign = 'left'; g.fillText(label, 4, y + 8);
+      // the trough and the zones
+      g.save(); rr(g, left, y, w, 16, 3); g.clip(); g.fillStyle = '#111'; g.fillRect(left, y, w, 16);
+      const zone = (a, b, col) => { g.fillStyle = col; g.fillRect(left + dbx(a, w), y + 13, dbx(b, w) - dbx(a, w), 3); };
+      zone(-60, -12, 'rgba(84,185,72,.35)'); zone(-12, -3, 'rgba(230,162,60,.45)'); zone(-3, 0, 'rgba(214,69,69,.6)');
+      // the RMS bar in the zone colours
+      const x = left + dbx(rms, w);
+      const grad = g.createLinearGradient(left, 0, right, 0); grad.addColorStop(0, '#3f8f37'); grad.addColorStop(0.78, '#54b948'); grad.addColorStop(0.8, '#e6a23c'); grad.addColorStop(0.95, '#e6a23c'); grad.addColorStop(0.951, '#d64545'); grad.addColorStop(1, '#d64545');
+      g.fillStyle = grad; g.fillRect(left, y + 1, x - left, 11);
+      // the instant peak, and the held peak
+      g.fillStyle = 'rgba(255,255,255,.55)'; g.fillRect(left + dbx(peak, w) - 1, y, 2, 13);
+      g.fillStyle = peakHold[i] >= -1 ? '#d64545' : '#fff'; g.fillRect(left + dbx(peakHold[i], w) - 1, y - 1, 3, 15);
+      // the dead-air floor
+      g.restore();
+      g.strokeStyle = 'rgba(214,69,69,.7)'; g.setLineDash([2, 2]); g.beginPath(); const fx = left + dbx(floor, w) + 0.5; g.moveTo(fx, y - 2); g.lineTo(fx, y + 18); g.stroke(); g.setLineDash([]);
+    });
+    // the scale
+    g.fillStyle = css('--muted'); g.textAlign = 'center'; g.font = '11px -apple-system, Segoe UI, Roboto, sans-serif';
+    [-60, -50, -40, -30, -20, -12, -6, -3, 0].forEach((db) => { const x = left + dbx(db, w); g.fillRect(x, 66, 1, 4); g.fillText(db === 0 ? '0' : String(db), Math.min(right - 6, Math.max(left + 10, x)), 80); });
+    g.textAlign = 'left'; g.fillText('dB', 4, 80);
+  }
+  function drawHistory(floor) {
+    const c = $('history'); fit(c, 130); const g = c.getContext('2d'); const W = c.width, H = c.height; g.clearRect(0, 0, W, H);
+    const left = 30, right = W - 12, top = 6, bottom = H - 16, w = right - left, h = bottom - top;
+    const y = (db) => bottom - Math.max(0, Math.min(1, (db + 60) / 60)) * h;
+    g.save(); rr(g, left, top, w, h, 4); g.clip(); g.fillStyle = '#111'; g.fillRect(left, top, w, h);
+    g.strokeStyle = '#2a2a2a'; g.lineWidth = 1; [-50, -40, -30, -20, -12, -6, 0].forEach((db) => { g.beginPath(); g.moveTo(left, y(db) + 0.5); g.lineTo(right, y(db) + 0.5); g.stroke(); });
+    g.restore();
+    g.fillStyle = css('--muted'); g.font = '11px -apple-system, Segoe UI, Roboto, sans-serif'; g.textAlign = 'right'; g.textBaseline = 'middle';
+    [-50, -30, -12, 0].forEach((db) => g.fillText(String(db), left - 4, y(db)));
+    g.textAlign = 'center'; g.textBaseline = 'alphabetic'; [60, 45, 30, 15, 0].forEach((s) => { const x = left + (1 - s / HIST) * w; g.fillRect(x, bottom, 1, 3); g.fillText(s ? '-' + s + ' s' : 'now', Math.min(right - 12, Math.max(left + 12, x)), H - 3); });
+    g.save(); rr(g, left, top, w, h, 4); g.clip();
+    g.strokeStyle = 'rgba(214,69,69,.7)'; g.setLineDash([3, 3]); g.beginPath(); g.moveTo(left, y(floor) + 0.5); g.lineTo(right, y(floor) + 0.5); g.stroke(); g.setLineDash([]);
+    if (hist.length < 2) { g.restore(); return; }
+    const xAt = (i) => left + (1 - (hist.length - 1 - i) / (HIST - 1)) * w;
+    // the peak envelope, filled faintly
+    g.beginPath(); hist.forEach((s, i) => { const v = Math.max(s.peak[0], s.peak[1]); i ? g.lineTo(xAt(i), y(v)) : g.moveTo(xAt(i), y(v)); }); g.lineTo(xAt(hist.length - 1), bottom); g.lineTo(xAt(0), bottom); g.closePath(); g.fillStyle = 'rgba(255,255,255,.06)'; g.fill();
+    const line = (pick, col, width) => { g.beginPath(); hist.forEach((s, i) => { i ? g.lineTo(xAt(i), y(pick(s))) : g.moveTo(xAt(i), y(pick(s))); }); g.strokeStyle = col; g.lineWidth = width; g.stroke(); };
+    line((s) => Math.max(s.peak[0], s.peak[1]), 'rgba(255,255,255,.35)', 1);
+    line((s) => s.rms[0], '#54b948', 1.6); line((s) => s.rms[1], '#4a90e2', 1.6);
+    g.restore();
+  }
+  function renderLevel(s) {
+    const floor = s.dead_air_level != null ? s.dead_air_level : -60;
+    const lv = s.level && s.level.rms_db && s.level.rms_db.length ? s.level : null;
+    if (lv) {
+      const rms = [lv.rms_db[0], lv.rms_db[1] == null ? lv.rms_db[0] : lv.rms_db[1]];
+      const peak = [lv.peak_db[0] == null ? rms[0] : lv.peak_db[0], lv.peak_db[1] == null ? rms[1] : lv.peak_db[1]];
+      hist.push({ rms, peak }); while (hist.length > HIST) hist.shift();
+      for (let i = 0; i < 2; i++) { if (peak[i] >= peakHold[i] || holdAge[i] >= 3) { peakHold[i] = peak[i]; holdAge[i] = 0; } else holdAge[i]++; }
+      if (Math.max(peak[0], peak[1]) >= -0.3) overs++;
+    }
+    drawBridge(lv, floor); drawHistory(floor);
+    const r = $('readouts');
+    if (!lv) { r.innerHTML = '<div style="grid-column:1/-1" class="help">no level: the tap is not measuring</div>'; $('overs-badge').textContent = ''; return; }
+    const avg = (pick) => hist.slice(-10).reduce((a, s) => a + pick(s), 0) / Math.min(10, hist.length);
+    const rms10 = avg((s) => (s.rms[0] + s.rms[1]) / 2); const bal = lv.rms_db[0] - (lv.rms_db[1] == null ? lv.rms_db[0] : lv.rms_db[1]);
+    const minPeak = Math.max(...hist.map((s) => Math.max(s.peak[0], s.peak[1])));
+    r.innerHTML = '<div><div class="k">Peak hold</div><div class="v">' + peakHold[0].toFixed(1) + ' <small>/</small> ' + peakHold[1].toFixed(1) + '</div></div>'
+      + '<div><div class="k">RMS, 10 s</div><div class="v">' + rms10.toFixed(1) + ' <small>dBFS</small></div></div>'
+      + '<div><div class="k">Peak, 60 s</div><div class="v">' + minPeak.toFixed(1) + ' <small>dBFS</small></div></div>'
+      + '<div><div class="k">Balance</div><div class="v">' + (Math.abs(bal) < 0.05 ? 'centre' : (bal > 0 ? 'L ' : 'R ') + '+' + Math.abs(bal).toFixed(1) + ' <small>dB</small>') + '</div></div>'
+      + '<div><div class="k">Overs</div><div class="v' + (overs ? ' dead' : '') + '">' + overs + ' <small>at full scale</small></div></div>'
+      + '<div><div class="k">Dead-air floor</div><div class="v">' + floor + ' <small>dBFS, ' + (s.quiet_seconds ? 'quiet ' + s.quiet_seconds + ' s' : 'on air') + '</small></div></div>';
+    $('overs-badge').className = 'badge ' + (overs ? 'red' : ''); $('overs-badge').textContent = overs ? overs + ' over' + (overs > 1 ? 's' : '') : 'no overs';
+  }
+
+  function renderPlayed(list, now) {
+    const p = $('played');
+    if (!list || !list.length) { p.innerHTML = '<div class="empty">nothing yet</div>'; $('played-help').textContent = ''; return; }
+    $('played-help').textContent = list.length + ' since the core started';
+    const items = list.slice(-8).reverse();
+    p.innerHTML = '<div class="played">' + items.map((e, i) => {
+      const end = i === 0 ? now : items[i - 1].at;
+      return '<div' + (i === 0 ? ' class="now"' : '') + '><span class="t">' + hm(e.at) + '</span><span>' + esc(e.title) + '</span><span class="d">' + (i === 0 ? 'now · ' : '') + mss(end - e.at) + '</span></div>';
+    }).join('') + '</div>';
+  }
   let failures = 0;
   function render(s) {
     const now = Math.floor(Date.now() / 1000);
@@ -161,13 +311,10 @@
     $('title').textContent = s.title || '—';
     $('deadair').innerHTML = s.dead_air ? '<span class="dead">yes, ' + s.quiet_seconds + ' s</span>' : (s.quiet_seconds ? 'no (quiet ' + s.quiet_seconds + ' s)' : 'no');
     $('deadair-badge').innerHTML = s.dead_air ? '<span class="badge red">dead air</span>' : (s.ring ? '<span class="badge green">on air</span>' : '<span class="badge">silent</span>');
-    const m = $('meters');
-    if (s.level && s.level.rms_db && s.level.rms_db.length) {
-      m.innerHTML = s.level.rms_db.map((rms, i) => meter(i === 0 ? 'L' : i === 1 ? 'R' : String(i + 1), rms, s.level.peak_db[i] == null ? rms : s.level.peak_db[i])).join('') + '<div class="help">−60 to 0 dBFS; the white line is the peak.</div>';
-    } else {
-      m.innerHTML = '<div class="empty">no level: the tap is not measuring</div>';
-    }
+    renderLevel(s);
     renderSystem(s.system);
+    renderSince(s.since, now);
+    renderPlayed(s.played, now);
     const u = $('uplinks');
     if (!s.uplinks || !s.uplinks.length) { u.innerHTML = '<div class="empty">none set up</div>'; $('count').textContent = ''; return; }
     const up = s.uplinks.filter((x) => /^(connected|streaming|recording|listening)$/.test(x.state)).length;
@@ -184,7 +331,7 @@
       if (x.kind === 'lan') c.push('listening <b>' + (x.listeners || 0) + '</b>');
       if (x.kind === 'record' && x.files) c.push('files <b>' + x.files + '</b>');
       if (x.kind === 'srt' && x.state === 'connected') c.push('round trip <b>' + x.rtt_ms + ' ms</b>, lost <b>' + x.lost_packets + '</b>');
-      if (x.cpu_pct) c.push('cpu <b>' + x.cpu_pct.toFixed(1) + ' %</b>');
+      if (x.cpu_pct) c.push('cpu <b>' + (x.cpu_pct < 0.05 ? '<0.1' : x.cpu_pct.toFixed(1)) + ' %</b>');
       if (x.silence) c.push('<span class="warn">silence</span>');
       return '<div class="uplink">'
         + '<div class="name">' + esc(name) + '<span class="help">' + esc(x.id) + '</span></div>'
@@ -195,7 +342,9 @@
         + '</div>';
     }).join('');
   }
+  function tickClock() { $('clock').textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }); }
   function tick() {
+    tickClock();
     fetch('/status.json', { cache: 'no-store' }).then((r) => r.json()).then((s) => {
       failures = 0; render(s);
       $('foot').textContent = 'updated ' + new Date().toLocaleTimeString();
@@ -204,6 +353,9 @@
       if (failures > 2) { $('core').innerHTML = '<span class="warn">the core does not answer</span>'; }
     });
   }
+  $('clear').onclick = function () {
+    fetch('/since/clear', { method: 'POST' }).then(tick).catch(() => {});
+  };
   // Close: only when this page is the window itself. Inside Volumio's own iframe page
   // its arrow back is the way out. The window closes where the browser allows (one the
   // UI opened), else the page steps back, else it goes to the player's own page.

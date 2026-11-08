@@ -17,6 +17,8 @@ use crate::status::{self, Level, Status};
 const SAMPLE: Duration = Duration::from_millis(100);
 /// The floor a silent sample is said at, in dBFS.
 const FLOOR: f32 = -120.0;
+/// A peak at or above this is an over: full scale, within the meter's step.
+const OVER_DB: f32 = -0.3;
 
 pub struct Meter {
     shm: PathBuf,
@@ -28,6 +30,8 @@ pub struct Meter {
     /// the start.
     last_sound: Instant,
     dead_air: bool,
+    /// When dead air was last said, for how long it stood.
+    dead_since: Option<Instant>,
 }
 
 /// Linear, 1.0 full scale, as dBFS.
@@ -50,6 +54,7 @@ impl Meter {
             last_sample: now - SAMPLE,
             last_sound: now,
             dead_air: false,
+            dead_since: None,
         }
     }
 
@@ -97,6 +102,14 @@ impl Meter {
         }
         let quiet = self.last_sound.elapsed().as_secs();
         let dead_air = monitor.dead_air_seconds > 0 && quiet >= monitor.dead_air_seconds;
+        // A hop at full scale: an over, counted since the mark.
+        let over = level
+            .as_ref()
+            .is_some_and(|l| l.peak_db.iter().any(|v| *v >= OVER_DB));
+        let mut s = self.status.lock().unwrap_or_else(|e| e.into_inner());
+        if over {
+            s.since.overs += 1;
+        }
         if dead_air != self.dead_air {
             self.dead_air = dead_air;
             if dead_air {
@@ -104,11 +117,25 @@ impl Meter {
                     "outcast: dead air: below {} dBFS for {} s",
                     monitor.dead_air_level, monitor.dead_air_seconds
                 );
+                self.dead_since = Some(Instant::now());
+                s.since.dead_air_events += 1;
+                s.since.dead_air_last = status::now();
+                s.event(
+                    "dead",
+                    format!(
+                        "dead air: below {} dBFS for {} s",
+                        monitor.dead_air_level, monitor.dead_air_seconds
+                    ),
+                );
             } else {
-                eprintln!("outcast: dead air over after {quiet} s");
+                // The silence lasted the threshold and then the time dead air stood.
+                let stood = self.dead_since.take().map_or(0, |t| t.elapsed().as_secs());
+                let silent = monitor.dead_air_seconds + stood;
+                eprintln!("outcast: dead air over after {silent} s");
+                s.since.dead_air_seconds += silent;
+                s.event("ok", format!("on air again after {silent} s of silence"));
             }
         }
-        let mut s = self.status.lock().unwrap_or_else(|e| e.into_inner());
         let changed = s.level != level || s.dead_air != dead_air || s.quiet_seconds != quiet;
         s.level = level;
         s.dead_air = dead_air;

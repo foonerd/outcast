@@ -224,6 +224,12 @@ impl Hub {
             self.broadcast(Event::Segment(segment));
         }
         eprintln!("outcast: uplinks: {}", self.names());
+        {
+            let names = self.names();
+            let mut s = self.status.lock().unwrap_or_else(|e| e.into_inner());
+            s.dead_air_level = self.monitor.dead_air_level;
+            s.event("info", format!("uplinks: {names}"));
+        }
         Ok(())
     }
 
@@ -393,6 +399,10 @@ impl Hub {
         if due {
             if let Some((title, _)) = self.pending_title.take() {
                 self.title = title.clone();
+                self.status
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .played_title(&title);
                 self.broadcast(Event::Title(title));
             }
         }

@@ -208,6 +208,7 @@
     "STATUS_DEAD_AIR": "Silence à l'antenne : {{seconds}} s sous le niveau.",
     "STATUS_SYSTEM": "Lecteur : CPU {{cpu}} %, Outcast {{outcast}} %, mémoire {{mem}} % utilisée.",
     "STATUS_SYSTEM_TEMP": "Lecteur : CPU {{cpu}} %, Outcast {{outcast}} %, mémoire {{mem}} % utilisée, {{temp}} °C.",
+    "STATUS_SINCE": "Depuis {{time}} : {{dead}} silences d'antenne, {{reconnects}} reconnexions, {{errors}} erreurs, {{overs}} dépassements.",
     "STATUS_SRT_LINK": "aller-retour {{rtt}} ms, {{lost}} paquets perdus",
     "STATUS_HLS_SEGMENTS": "{{segments}} segments découpés, {{pending}} en attente de l'origine",
     "STATUS_HLS_REFUSED": "{{refused}} requêtes refusées à la limite de connexions",

@@ -208,6 +208,7 @@
     "STATUS_DEAD_AIR": "Dead air: {{seconds}} s below the level.",
     "STATUS_SYSTEM": "Player: CPU {{cpu}} %, Outcast {{outcast}} %, memory {{mem}} % used.",
     "STATUS_SYSTEM_TEMP": "Player: CPU {{cpu}} %, Outcast {{outcast}} %, memory {{mem}} % used, {{temp}} °C.",
+    "STATUS_SINCE": "Since {{time}}: {{dead}} dead air, {{reconnects}} reconnects, {{errors}} errors, {{overs}} overs.",
     "STATUS_SRT_LINK": "round trip {{rtt}} ms, {{lost}} packets lost",
     "STATUS_HLS_SEGMENTS": "{{segments}} segments cut, {{pending}} waiting for the origin",
     "STATUS_HLS_REFUSED": "{{refused}} requests refused at the connection limit",

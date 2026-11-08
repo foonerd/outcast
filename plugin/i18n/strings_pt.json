@@ -208,6 +208,7 @@
     "STATUS_DEAD_AIR": "Silêncio no ar: {{seconds}} s abaixo do nível.",
     "STATUS_SYSTEM": "Leitor: CPU {{cpu}} %, Outcast {{outcast}} %, memória {{mem}} % em uso.",
     "STATUS_SYSTEM_TEMP": "Leitor: CPU {{cpu}} %, Outcast {{outcast}} %, memória {{mem}} % em uso, {{temp}} °C.",
+    "STATUS_SINCE": "Desde as {{time}}: {{dead}} silêncios no ar, {{reconnects}} reconexões, {{errors}} erros, {{overs}} sobrecargas.",
     "STATUS_SRT_LINK": "ida e volta {{rtt}} ms, {{lost}} pacotes perdidos",
     "STATUS_HLS_SEGMENTS": "{{segments}} segmentos cortados, {{pending}} à espera da origem",
     "STATUS_HLS_REFUSED": "{{refused}} pedidos recusados no limite de ligações",
