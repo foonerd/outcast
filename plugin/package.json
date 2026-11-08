@@ -1,6 +1,6 @@
 {
   "name": "outcast",
-  "version": "0.1.25",
+  "version": "0.1.26",
   "description": "Casts whatever the player plays out to any uplink: Icecast, SHOUTcast, RTMP, SRT, HLS, the LAN or a file. An evo framework plugin built on evotap.",
   "main": "index.js",
   "scripts": {
@@ -21,7 +21,7 @@
     "os": ["bookworm"],
     "architectures": ["armhf", "amd64"],
     "details": "Streams whatever the player plays, from any service, to Icecast, SHOUTcast, RTMP, SRT, HLS, the LAN or a file, with the screen's title. Built on evotap.",
-    "changelog": "0.1.25 The About page's credits in the format Glass uses: each piece and each way to support the work with its link and a code to scan."
+    "changelog": "0.1.26 A tab bar under the header of the dashboard, the programme page and the About page, as Glass's manager has."
   },
   "dependencies": {
     "kew": "^0.7.0",

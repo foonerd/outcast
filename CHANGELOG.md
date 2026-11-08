@@ -2,6 +2,12 @@
 
 All notable changes to Outcast Uplink. The format follows Keep a Changelog; the versions follow Semantic Versioning.
 
+## [0.1.26] - 2026-11-08
+
+### Changed
+
+- The dashboard, the programme page and the About page carry a tab bar under their header, as Glass's manager does, the page in hand lit; the header's links to the other pages went into it.
+
 ## [0.1.25] - 2026-11-08
 
 ### Changed
