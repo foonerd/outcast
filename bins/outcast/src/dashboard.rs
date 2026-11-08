@@ -161,6 +161,10 @@ mod tests {
             "a way out when the page is the window itself"
         );
         assert!(
+            body.contains(r#"id="player""#) && body.contains("s.system"),
+            "the machine's card, from the status's system reading"
+        );
+        assert!(
             !body.contains("<script src") && !body.contains("<link ") && !body.contains("@import"),
             "nothing fetched from anywhere else"
         );

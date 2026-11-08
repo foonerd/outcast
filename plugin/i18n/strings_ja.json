@@ -206,6 +206,8 @@
     "STATUS_IDLE": "何も再生していません。",
     "STATUS_LEVEL": "レベル: ピーク {{peak}} dBFS、RMS {{rms}} dBFS。",
     "STATUS_DEAD_AIR": "無音放送: レベル以下が {{seconds}} 秒続いています。",
+    "STATUS_SYSTEM": "プレイヤー：CPU {{cpu}} %、Outcast {{outcast}} %、メモリ使用 {{mem}} %。",
+    "STATUS_SYSTEM_TEMP": "プレイヤー：CPU {{cpu}} %、Outcast {{outcast}} %、メモリ使用 {{mem}} %、{{temp}} °C。",
     "STATUS_SRT_LINK": "往復 {{rtt}} ms、損失 {{lost}} パケット",
     "STATUS_HLS_SEGMENTS": "セグメント {{segments}} 個を切り出し、{{pending}} 個がオリジン待ち",
     "STATUS_HLS_REFUSED": "接続上限で {{refused}} 件のリクエストを拒否",

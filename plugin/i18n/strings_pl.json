@@ -206,6 +206,8 @@
     "STATUS_IDLE": "Nic nie jest odtwarzane.",
     "STATUS_LEVEL": "Poziom: szczyt {{peak}} dBFS, RMS {{rms}} dBFS.",
     "STATUS_DEAD_AIR": "Cisza na antenie: {{seconds}} s poniżej poziomu.",
+    "STATUS_SYSTEM": "Odtwarzacz: CPU {{cpu}} %, Outcast {{outcast}} %, pamięć {{mem}} % zajęta.",
+    "STATUS_SYSTEM_TEMP": "Odtwarzacz: CPU {{cpu}} %, Outcast {{outcast}} %, pamięć {{mem}} % zajęta, {{temp}} °C.",
     "STATUS_SRT_LINK": "podróż {{rtt}} ms, utracono {{lost}} pakietów",
     "STATUS_HLS_SEGMENTS": "{{segments}} segmentów wyciętych, {{pending}} czeka na origin",
     "STATUS_HLS_REFUSED": "{{refused}} żądań odrzuconych na limicie połączeń",

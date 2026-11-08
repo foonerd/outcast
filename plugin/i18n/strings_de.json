@@ -206,6 +206,8 @@
     "STATUS_IDLE": "Es wird nichts gespielt.",
     "STATUS_LEVEL": "Pegel: Spitze {{peak}} dBFS, RMS {{rms}} dBFS.",
     "STATUS_DEAD_AIR": "Sendestille: seit {{seconds}} s unter dem Pegel.",
+    "STATUS_SYSTEM": "Player: CPU {{cpu}} %, Outcast {{outcast}} %, Speicher {{mem}} % belegt.",
+    "STATUS_SYSTEM_TEMP": "Player: CPU {{cpu}} %, Outcast {{outcast}} %, Speicher {{mem}} % belegt, {{temp}} °C.",
     "STATUS_SRT_LINK": "Laufzeit {{rtt}} ms, {{lost}} Pakete verloren",
     "STATUS_HLS_SEGMENTS": "{{segments}} Segmente geschnitten, {{pending}} warten auf den Origin",
     "STATUS_HLS_REFUSED": "{{refused}} Anfragen am Verbindungslimit abgewiesen",

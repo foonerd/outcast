@@ -605,6 +605,12 @@ function summarize(status, audioPath, audioPathError, t, tapNote) {
         lines.push(t('STATUS_LEVEL', { peak: top(status.level.peak_db), rms: top(status.level.rms_db) }));
     }
     if (status && status.dead_air === true) lines.push(t('STATUS_DEAD_AIR', { seconds: status.quiet_seconds }));
+    if (status && status.system) {
+        const y = status.system;
+        const vars = { cpu: Number(y.cpu_pct).toFixed(0), outcast: Number(y.outcast_cpu_pct).toFixed(1), mem: y.mem_total_mb ? (100 * y.mem_used_mb / y.mem_total_mb).toFixed(0) : '0' };
+        if (y.temp_c != null) lines.push(t('STATUS_SYSTEM_TEMP', Object.assign(vars, { temp: Number(y.temp_c).toFixed(0) })));
+        else lines.push(t('STATUS_SYSTEM', vars));
+    }
     if (audioPath === 'ready') lines.push(t('STATUS_TAP_READY'));
     else if (audioPath === 'lost') lines.push(t('STATUS_TAP_LOST'));
     else lines.push(t('STATUS_TAP_FAILED', { error: audioPathError || '' }));

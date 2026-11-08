@@ -18,7 +18,9 @@ RestartSec=3
 KillSignal=SIGTERM
 TimeoutStopSec=5
 NoNewPrivileges=yes
-ProtectSystem=strict
+# full, not strict: /usr, /boot and /etc read-only, /data and /mnt as the recording
+# folder may be anywhere under them (a mounted share included).
+ProtectSystem=full
 ProtectHome=yes
 ReadWritePaths=/run/outcast /data/INTERNAL/outcast
 PrivateTmp=yes

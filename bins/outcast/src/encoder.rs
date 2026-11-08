@@ -4,11 +4,12 @@
 //! The child is told nothing of the network. Its standard error is read on
 //! a thread and logged a line at a time.
 
+use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::mpsc::SyncSender;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, OnceLock};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
@@ -142,13 +143,33 @@ pub fn arguments(segment: &Segment, recipe: &Recipe) -> Vec<String> {
     a
 }
 
+/// The running encoders by the uplink they serve, for the system reading that
+/// costs each uplink's encoder: the uplink's id to the child's pid.
+pub fn encoders() -> &'static Mutex<HashMap<String, u32>> {
+    static ENCODERS: OnceLock<Mutex<HashMap<String, u32>>> = OnceLock::new();
+    ENCODERS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
 /// A running encoder.
 pub struct Encoder {
     child: Child,
     stdin: Option<ChildStdin>,
     reader: Option<JoinHandle<()>>,
     errors: Option<JoinHandle<()>>,
+    /// The uplink it serves, its key in the registry.
+    key: String,
     pub bytes_in: u64,
+}
+
+impl Drop for Encoder {
+    fn drop(&mut self) {
+        // The registry forgets this child, and only this one: an uplink that
+        // started its next encoder before ending this one keeps the new entry.
+        let mut r = encoders().lock().unwrap_or_else(|e| e.into_inner());
+        if r.get(&self.key) == Some(&self.child.id()) {
+            r.remove(&self.key);
+        }
+    }
 }
 
 impl Encoder {
@@ -207,11 +228,16 @@ impl Encoder {
                 })
                 .expect("encoder-err thread")
         });
+        encoders()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(log.to_string(), child.id());
         Ok(Self {
             child,
             stdin,
             reader,
             errors,
+            key: log.to_string(),
             bytes_in: 0,
         })
     }

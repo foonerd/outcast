@@ -21,6 +21,7 @@ mod follow;
 mod hub;
 mod level;
 mod status;
+mod system;
 mod uplink;
 
 use std::path::PathBuf;
@@ -126,14 +127,17 @@ fn main() {
         .spawn(move || control::serve(&socket, link))
         .expect("control thread");
 
-    // The status file, written when something changed, at most once a second.
+    // The status file, written when something changed, at most once a second;
+    // the machine read into the status first, so the file carries it.
     let file = a.run.join("status.json");
     let shared = Arc::clone(&status);
     std::thread::Builder::new()
         .name("status".into())
         .spawn(move || {
             let mut last = String::new();
+            let mut sampler = system::Sampler::new();
             loop {
+                sampler.sample(&shared);
                 let now = status::render(&shared);
                 if now != last {
                     if let Err(e) = status::write_file(&file, &now) {

@@ -206,6 +206,8 @@
     "STATUS_IDLE": "Er speelt niets.",
     "STATUS_LEVEL": "Niveau: piek {{peak}} dBFS, RMS {{rms}} dBFS.",
     "STATUS_DEAD_AIR": "Dode lucht: {{seconds}} s onder het niveau.",
+    "STATUS_SYSTEM": "Speler: CPU {{cpu}} %, Outcast {{outcast}} %, geheugen {{mem}} % in gebruik.",
+    "STATUS_SYSTEM_TEMP": "Speler: CPU {{cpu}} %, Outcast {{outcast}} %, geheugen {{mem}} % in gebruik, {{temp}} °C.",
     "STATUS_SRT_LINK": "rondreis {{rtt}} ms, {{lost}} pakketten verloren",
     "STATUS_HLS_SEGMENTS": "{{segments}} segmenten geknipt, {{pending}} wachten op de origin",
     "STATUS_HLS_REFUSED": "{{refused}} verzoeken geweigerd op de verbindingslimiet",

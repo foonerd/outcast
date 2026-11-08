@@ -57,6 +57,13 @@
   .uplink .counters b { color: var(--text); font-weight: 600; }
   .uplink .err { color: #ffb3b3; font-size: 13px; margin-top: 4px; grid-column: 1 / -1; }
   @media (max-width: 720px) { .uplink { grid-template-columns: 1fr 7em; } .uplink .detail, .uplink .counters { grid-column: 1 / -1; } }
+  .bar .rms.warm { background: var(--warn); } .bar .rms.hot { background: var(--danger); }
+  .smeter { display: grid; grid-template-columns: 4.6em 1fr 4.2em; gap: 4px 10px; align-items: center; font-size: 13px; margin: 6px 0; }
+  .smeter .lab { color: var(--muted); font-weight: 600; }
+  .smeter .sub { grid-column: 2 / 4; color: var(--muted); font-size: 12px; margin-top: -2px; }
+  .srow { display: grid; grid-template-columns: 4.6em 1fr; gap: 10px; font-size: 13px; margin: 8px 0 0; align-items: baseline; }
+  .srow .lab { color: var(--muted); font-weight: 600; }
+  .srow b { color: var(--text); font-weight: 600; }
   .dead { color: var(--danger); font-weight: 600; }
   .warn { color: var(--warn); }
   .empty { color: var(--muted); padding: 20px 8px; }
@@ -85,6 +92,10 @@
     <section class="card">
       <div class="title">Level <span class="help">RMS and peak, dBFS, from the tap's meter</span></div>
       <div class="body" id="meters"></div>
+    </section>
+    <section class="card">
+      <div class="title">Player <span class="help">the machine, every second</span></div>
+      <div class="body" id="player"><div class="empty">no reading yet</div></div>
     </section>
     <section class="card wide">
       <div class="title">Uplinks <span class="help" id="count"></span></div>
@@ -122,6 +133,19 @@
     const pct = (db) => Math.max(0, Math.min(100, (db + 60) / 60 * 100));
     return '<div class="meter"><span class="lab">' + label + '</span><div class="bar"><div class="rms" style="width:' + pct(rms).toFixed(1) + '%"></div><div class="ticks"></div><div class="peak" style="left:' + pct(peak).toFixed(1) + '%"></div></div><span class="num">' + rms.toFixed(1) + ' / ' + peak.toFixed(1) + '</span></div>';
   };
+  const sysMeter = (label, pct, num, sub, cls) => '<div class="smeter"><span class="lab">' + label + '</span><div class="bar"><div class="rms ' + (cls || '') + '" style="width:' + Math.max(0, Math.min(100, pct)).toFixed(1) + '%"></div><div class="ticks"></div></div><span class="num">' + num + '</span><span class="sub">' + sub + '</span></div>';
+  function renderSystem(y) {
+    const p = $('player');
+    if (!y) { p.innerHTML = '<div class="empty">no reading yet</div>'; return; }
+    const rows = [];
+    rows.push(sysMeter('CPU', y.cpu_pct, y.cpu_pct.toFixed(0) + ' %', 'the whole player, ' + y.cores + (y.cores === 1 ? ' core' : ' cores') + '; load ' + y.load1.toFixed(2) + ' · ' + y.load5.toFixed(2) + ' · ' + y.load15.toFixed(2)));
+    rows.push(sysMeter('Outcast', y.outcast_cpu_pct, y.outcast_cpu_pct.toFixed(1) + ' %', 'the core and its encoders; encoders ' + y.encoders_cpu_pct.toFixed(1) + ' %'));
+    const memPct = y.mem_total_mb ? 100 * y.mem_used_mb / y.mem_total_mb : 0;
+    rows.push(sysMeter('Memory', memPct, memPct.toFixed(0) + ' %', (y.mem_used_mb / 1024).toFixed(1) + ' of ' + (y.mem_total_mb / 1024).toFixed(1) + ' GB used; Outcast ' + y.outcast_rss_mb + ' MB'));
+    if (y.temp_c != null) rows.push(sysMeter('Temp', y.temp_c, y.temp_c.toFixed(0) + ' °C', y.temp_c >= 80 ? 'hot: the processor throttles, or is about to' : y.temp_c >= 70 ? 'warm' : 'the processor', y.temp_c >= 80 ? 'hot' : y.temp_c >= 70 ? 'warm' : ''));
+    rows.push('<div class="srow"><span class="lab">Out</span><span>uplinks <b>' + y.uplinks_kbps.toFixed(0) + ' kbit/s</b>' + (y.net_iface ? ' <span class="help">· the player ' + y.net_tx_kbps.toFixed(0) + ' kbit/s on ' + esc(y.net_iface) + '</span>' : '') + '</span></div>');
+    p.innerHTML = rows.join('');
+  }
   let failures = 0;
   function render(s) {
     const now = Math.floor(Date.now() / 1000);
@@ -143,6 +167,7 @@
     } else {
       m.innerHTML = '<div class="empty">no level: the tap is not measuring</div>';
     }
+    renderSystem(s.system);
     const u = $('uplinks');
     if (!s.uplinks || !s.uplinks.length) { u.innerHTML = '<div class="empty">none set up</div>'; $('count').textContent = ''; return; }
     const up = s.uplinks.filter((x) => /^(connected|streaming|recording|listening)$/.test(x.state)).length;
@@ -159,6 +184,7 @@
       if (x.kind === 'lan') c.push('listening <b>' + (x.listeners || 0) + '</b>');
       if (x.kind === 'record' && x.files) c.push('files <b>' + x.files + '</b>');
       if (x.kind === 'srt' && x.state === 'connected') c.push('round trip <b>' + x.rtt_ms + ' ms</b>, lost <b>' + x.lost_packets + '</b>');
+      if (x.cpu_pct) c.push('cpu <b>' + x.cpu_pct.toFixed(1) + ' %</b>');
       if (x.silence) c.push('<span class="warn">silence</span>');
       return '<div class="uplink">'
         + '<div class="name">' + esc(name) + '<span class="help">' + esc(x.id) + '</span></div>'

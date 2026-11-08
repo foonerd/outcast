@@ -59,6 +59,9 @@ pub struct Status {
     pub dead_air: bool,
     /// Seconds since the programme last stood above the dead-air level.
     pub quiet_seconds: u64,
+    /// The machine under the uplinks, read once a second; none until the
+    /// second reading.
+    pub system: Option<crate::system::System>,
 }
 
 /// The newest hop's level per channel, in dBFS.
@@ -71,7 +74,7 @@ pub struct Level {
 }
 
 /// One uplink's state, as the page shows it.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct Uplink {
     /// The reload that made the entry: a worker of an earlier one, still ending,
     /// may not write over it.
@@ -109,6 +112,8 @@ pub struct Uplink {
     pub segments: u64,
     /// Segments cut and not yet on the origin.
     pub pending: u64,
+    /// This uplink's encoder, percent of all the player's cores, last second.
+    pub cpu_pct: f32,
 }
 
 pub fn now() -> u64 {
@@ -137,6 +142,7 @@ impl Status {
             level: None,
             dead_air: false,
             quiet_seconds: 0,
+            system: None,
         }
     }
 

@@ -206,6 +206,8 @@
     "STATUS_IDLE": "Non è in riproduzione nulla.",
     "STATUS_LEVEL": "Livello: picco {{peak}} dBFS, RMS {{rms}} dBFS.",
     "STATUS_DEAD_AIR": "Silenzio in onda: {{seconds}} s sotto il livello.",
+    "STATUS_SYSTEM": "Lettore: CPU {{cpu}} %, Outcast {{outcast}} %, memoria {{mem}} % in uso.",
+    "STATUS_SYSTEM_TEMP": "Lettore: CPU {{cpu}} %, Outcast {{outcast}} %, memoria {{mem}} % in uso, {{temp}} °C.",
     "STATUS_SRT_LINK": "andata e ritorno {{rtt}} ms, {{lost}} pacchetti persi",
     "STATUS_HLS_SEGMENTS": "{{segments}} segmenti tagliati, {{pending}} in attesa dell'origine",
     "STATUS_HLS_REFUSED": "{{refused}} richieste rifiutate al limite di connessioni",

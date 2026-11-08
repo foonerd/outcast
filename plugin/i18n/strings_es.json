@@ -206,6 +206,8 @@
     "STATUS_IDLE": "No se reproduce nada.",
     "STATUS_LEVEL": "Nivel: pico {{peak}} dBFS, RMS {{rms}} dBFS.",
     "STATUS_DEAD_AIR": "Silencio en antena: {{seconds}} s por debajo del nivel.",
+    "STATUS_SYSTEM": "Reproductor: CPU {{cpu}} %, Outcast {{outcast}} %, memoria {{mem}} % en uso.",
+    "STATUS_SYSTEM_TEMP": "Reproductor: CPU {{cpu}} %, Outcast {{outcast}} %, memoria {{mem}} % en uso, {{temp}} °C.",
     "STATUS_SRT_LINK": "ida y vuelta {{rtt}} ms, {{lost}} paquetes perdidos",
     "STATUS_HLS_SEGMENTS": "{{segments}} segmentos cortados, {{pending}} esperando al origen",
     "STATUS_HLS_REFUSED": "{{refused}} peticiones rechazadas en el límite de conexiones",

@@ -286,6 +286,16 @@ test('the HLS uplink serves on a port, goes to an origin, or both, never nowhere
     assert.deepEqual(content.map((c) => c.hidden === true), [false, true, true]);
 });
 
+test('the status carries the machine in one line when the core has read it', () => {
+    const t = (k, v) => k + (v ? ' ' + JSON.stringify(v) : '');
+    const base = { ring: null, uplinks: [] };
+    assert.ok(!h.summarize(base, 'ready', '', t).some((l) => l.startsWith('STATUS_SYSTEM')));
+    const warm = Object.assign({}, base, { system: { cpu_pct: 18.4, outcast_cpu_pct: 6.26, mem_used_mb: 742, mem_total_mb: 3891, temp_c: 52.3 } });
+    assert.ok(h.summarize(warm, 'ready', '', t).includes('STATUS_SYSTEM_TEMP {"cpu":"18","outcast":"6.3","mem":"19","temp":"52"}'));
+    const cold = Object.assign({}, base, { system: { cpu_pct: 2, outcast_cpu_pct: 0.4, mem_used_mb: 100, mem_total_mb: 1000, temp_c: null } });
+    assert.ok(h.summarize(cold, 'ready', '', t).includes('STATUS_SYSTEM {"cpu":"2","outcast":"0.4","mem":"10"}'));
+});
+
 test('the dashboard has a switch and a port, and the address of the player is the wired one first', () => {
     assert.equal(h.validateMonitor({ mon_enabled: true, mon_level: '-60', mon_seconds: '30', mon_dashboard: true, mon_dashboard_port: 'x' }, t), 'ERR_PORT {"field":"MON_DASHBOARD_PORT"}');
     assert.equal(h.validateMonitor({ mon_enabled: false, mon_dashboard: false }, t), null);

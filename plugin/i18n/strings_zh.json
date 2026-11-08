@@ -206,6 +206,8 @@
     "STATUS_IDLE": "没有播放内容。",
     "STATUS_LEVEL": "电平：峰值 {{peak}} dBFS，RMS {{rms}} dBFS。",
     "STATUS_DEAD_AIR": "空播：低于电平已 {{seconds}} 秒。",
+    "STATUS_SYSTEM": "播放器：CPU {{cpu}} %，Outcast {{outcast}} %，内存已用 {{mem}} %。",
+    "STATUS_SYSTEM_TEMP": "播放器：CPU {{cpu}} %，Outcast {{outcast}} %，内存已用 {{mem}} %，{{temp}} °C。",
     "STATUS_SRT_LINK": "往返 {{rtt}} ms，丢失 {{lost}} 个包",
     "STATUS_HLS_SEGMENTS": "已切出 {{segments}} 个分片，{{pending}} 个等待源站",
     "STATUS_HLS_REFUSED": "在连接上限处拒绝了 {{refused}} 个请求",
