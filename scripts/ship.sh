@@ -4,9 +4,10 @@
 #
 # Every binary is linked statically against musl: the daemon needs nothing from a
 # player's C library, and a cross glibc would otherwise bind the standard library to a
-# glibc newer than Volumio's 2.36. The arm binary is the armv7 build: Volumio's universal
-# Raspberry Pi image labels itself arm, and the evotap and evopeg the plugin ships for it
-# are armv7 builds too, so a Pi Zero or Pi 1 (ARMv6) is not served.
+# glibc newer than Volumio's 2.36. Three builds: armv7, armv8 and x64. Volumio's universal
+# Raspberry Pi image labels itself arm and runs ARMv7 code; the install maps arm to the
+# armv7 files (plugin/install.sh), so the zip carries each build once and stays under the
+# store's size limit. A Pi Zero or Pi 1 (ARMv6) is not served.
 set -euo pipefail
 ROOT=$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
@@ -34,9 +35,10 @@ ship() {
 }
 ship x86_64-unknown-linux-musl x64
 ship armv7-unknown-linux-musleabihf armv7
-ship aarch64-unknown-linux-musl armv8
-install -D -m 755 bin/armv7/outcast bin/arm/outcast
+# The lite keeps an arm archive for Glass and the other takers that name it: a copy of
+# the armv7 build, as before. The plugin zip carries no arm copy.
 install -D -m 755 bin/armv7/outcast-lite bin/arm/outcast-lite
+ship aarch64-unknown-linux-musl armv8
 
 echo "ship: static"
 for bin in bin/*/outcast bin/*/outcast-lite; do
@@ -56,4 +58,4 @@ for name in outcast outcast-lite; do
   said=$("bin/x64/$name" --version)
   [ "$said" = "$name $version" ] || { echo "ship: $name says '$said', the workspace is $version" >&2; exit 1; }
 done
-file bin/arm/outcast bin/armv7/outcast bin/armv8/outcast bin/x64/outcast bin/x64/outcast-lite
+file bin/armv7/outcast bin/armv8/outcast bin/x64/outcast bin/x64/outcast-lite

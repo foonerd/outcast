@@ -12,7 +12,7 @@
 set -euo pipefail
 ROOT=$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
-ARCHES="arm armv7 armv8 x64"
+ARCHES="armv7 armv8 x64"
 PUB="$ROOT/keys/release-signing.pub"
 
 fetch() { # url, file

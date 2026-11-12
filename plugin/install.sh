@@ -22,6 +22,9 @@ refuse() {
 ARCH=$(sed -n 's/^VOLUMIO_ARCH="\{0,1\}\([^"]*\)"\{0,1\}$/\1/p' /etc/os-release)
 [ -n "$ARCH" ] || refuse "ERROR: could not detect the Volumio architecture"
 case "$ARCH" in
+  # Volumio's universal Raspberry Pi image calls itself arm and runs ARMv7 code: the armv7
+  # files serve it, the same build it had under its own name until 0.1.27, shipped once.
+  arm) ARCH=armv7 ;;
   aarch64) ARCH=armv8 ;;
   amd64) ARCH=x64 ;;
 esac

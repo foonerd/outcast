@@ -12,7 +12,7 @@ cd "$ROOT"
 VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)
 NAME=outcast
 STAGE=$ROOT/dist/stage/$NAME
-ARCHES="arm armv7 armv8 x64"
+ARCHES="armv7 armv8 x64"
 rm -rf "$ROOT/dist/stage"
 mkdir -p "$STAGE" "$ROOT/dist"
 cp -r "$ROOT/plugin/." "$STAGE/"

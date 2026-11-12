@@ -32,7 +32,7 @@ The plugin installs from the Volumio plugin store, or from a release here throug
 
 ## How it is built
 
-The plugin is three parts in one zip, one copy of each binary per Volumio architecture (`arm`, `armv7`, `armv8`, `x64`), nothing of the player's own software relied on:
+The plugin is three parts in one zip, one copy of each binary per build (`armv7`, which also serves Volumio's universal Raspberry Pi image that calls itself `arm`; `armv8`; `x64`), nothing of the player's own software relied on:
 
 | Part | What | Where it comes from |
 | --- | --- | --- |
