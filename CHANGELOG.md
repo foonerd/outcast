@@ -2,6 +2,12 @@
 
 All notable changes to Outcast Uplink. The format follows Keep a Changelog; the versions follow Semantic Versioning.
 
+## [0.1.28] - 2026-11-12
+
+### Changed
+
+- The zip carries each build once: `armv7`, `armv8` and `x64`. Volumio's universal Raspberry Pi image, which calls itself `arm` and runs ARMv7 code, takes the `armv7` files at install, the same build it had under its own name until now. The zip is a third smaller and under the plugin store's limit.
+
 ## [0.1.27] - 2026-11-08
 
 ### Changed

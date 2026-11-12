@@ -1,6 +1,6 @@
 {
   "name": "outcast",
-  "version": "0.1.27",
+  "version": "0.1.28",
   "description": "Casts whatever the player plays out to any uplink: Icecast, SHOUTcast, RTMP, SRT, HLS, the LAN or a file. An evo framework plugin built on evotap.",
   "main": "index.js",
   "scripts": {
@@ -21,7 +21,7 @@
     "os": ["bookworm"],
     "architectures": ["armhf", "amd64"],
     "details": "Streams whatever the player plays, from any service, to Icecast, SHOUTcast, RTMP, SRT, HLS, the LAN or a file, with the screen's title. Built on evotap.",
-    "changelog": "0.1.27 The three pages aligned as Glass's manager is: the name over the player's tag and the core's version, the tab bar and the content in one centred column."
+    "changelog": "0.1.28 The zip carries each build once (armv7, armv8, x64); the universal Raspberry Pi image, which calls itself arm, takes the armv7 files at install; a third smaller, under the plugin store's limit."
   },
   "dependencies": {
     "kew": "^0.7.0",
