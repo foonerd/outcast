@@ -3,7 +3,8 @@
 # files at its root, the core from bin/<arch> for every architecture, evotap's library and
 # reader and evopeg's binary from the verified component releases (scripts/
 # fetch-components.sh), components.json naming each component's version and every file's
-# digest, build.json naming the commit, and the node modules.
+# digest, build.json naming the commit, and the lock file the node modules are made from on
+# the player at install.
 #
 # The plugin's version follows the workspace version in Cargo.toml.
 set -euo pipefail
@@ -16,7 +17,7 @@ ARCHES="armv7 armv8 x64"
 rm -rf "$ROOT/dist/stage"
 mkdir -p "$STAGE" "$ROOT/dist"
 cp -r "$ROOT/plugin/." "$STAGE/"
-rm -rf "$STAGE/test" "$STAGE/node_modules" "$STAGE/package-lock.json"
+rm -rf "$STAGE/test" "$STAGE/node_modules"
 rm -f "$STAGE"/asound/*.conf
 sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" "$STAGE/package.json"
 
@@ -74,23 +75,18 @@ install -m 644 "$ROOT/target/components/evotap/x64/evotap-$EVOTAP-x64/LICENSE" "
   echo "}"
 } > "$STAGE/components.json"
 
-# Node modules: with npm on this machine, directly; otherwise in a container with the
-# Node major Volumio ships. A zip without them is no plugin: the install must succeed,
-# and every module package.json names must be there.
-if command -v npm >/dev/null 2>&1; then
-  ( cd "$STAGE" && npm install --omit=dev --no-audit --no-fund --loglevel=error >/dev/null )
-else
-  docker run --rm -v "$STAGE:/plugin" -w /plugin node:20-bookworm-slim sh -c \
-    "npm install --omit=dev --no-audit --no-fund --loglevel=error >/dev/null; rc=\$?; chown -R $(id -u):$(id -g) /plugin/node_modules /plugin/package-lock.json 2>/dev/null; exit \$rc" \
-    || { echo "package: npm install failed; the zip was not made" >&2; exit 1; }
-fi
-rm -f "$STAGE/package-lock.json"
+# The node modules are not in the zip: the plugin store wants them made on the player,
+# which install.sh does from the npm registry at the versions package-lock.json pins. The
+# lock file rides in the zip at the zip's version, and every dependency must be in it.
+[ -f "$STAGE/package-lock.json" ] || { echo "package: plugin/package-lock.json is missing; the zip was not made" >&2; exit 1; }
+sed -i "1,10s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" "$STAGE/package-lock.json"
 for module in $(sed -n '/"dependencies"/,/}/p' "$STAGE/package.json" | sed -n 's/^ *"\([^"]*\)": *"[^"]*",*$/\1/p'); do
-  [ -f "$STAGE/node_modules/$module/package.json" ] || { echo "package: the module $module is not in the stage; the zip was not made" >&2; exit 1; }
+  grep -q "\"node_modules/$module\"" "$STAGE/package-lock.json" || { echo "package: the module $module is not in plugin/package-lock.json; the zip was not made" >&2; exit 1; }
 done
 
 ZIP=$ROOT/dist/$NAME-$VERSION.zip
 rm -f "$ZIP"
 ( cd "$STAGE" && zip -qr "$ZIP" . )
+if unzip -l "$ZIP" | grep -q " node_modules/"; then echo "package: the zip carries node_modules; the zip was not made" >&2; rm -f "$ZIP"; exit 1; fi
 rm -rf "$ROOT/dist/stage"
 echo "package: $ZIP: $(stat -c %s "$ZIP") bytes, sha256 $(sha256sum "$ZIP" | cut -d' ' -f1); evotap $EVOTAP, evopeg $EVOPEG"

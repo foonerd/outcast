@@ -126,7 +126,7 @@ jobs:
       - name: The zip names the commit it was built from
         run: |
           unzip -p dist/outcast-*.zip build.json | grep -F "\"commit\": \"$(git rev-parse --short HEAD)\""
-      - name: The zip carries the core, the tap and the encoder for each build, no arm copy, the modules, and stays under the store's limit
+      - name: The zip carries the core, the tap and the encoder for each build, no arm copy, no modules, and stays under the store's limit
         run: |
           for arch in armv7 armv8 x64; do
             for f in bin/$arch/outcast bin/$arch/evopeg bin/$arch/evotap-cat lib/$arch/libevotap.so; do
@@ -139,9 +139,19 @@ jobs:
           size=$(stat -c %s dist/outcast-*.zip)
           [ "$size" -lt 17000000 ] || { echo "the zip is $size bytes, over the store's limit" >&2; exit 1; }
           echo "the zip is $size bytes"
+          # The plugin store wants the node modules made on the player at install, which install.sh
+          # does from the lock file in the zip: none travel in it.
+          if unzip -l dist/outcast-*.zip | grep -q " node_modules/"; then echo "the zip carries node_modules" >&2; exit 1; fi
+          unzip -l dist/outcast-*.zip | grep -q " package-lock.json$" || { echo "no package-lock.json in the zip" >&2; exit 1; }
+      - name: The modules install from the zip's lock file the way install.sh installs them on a player
+        run: |
+          d=$(mktemp -d)
+          unzip -q dist/outcast-*.zip -d "$d"
+          ( cd "$d" && npm install --omit=dev --no-audit --no-fund --loglevel=error --fetch-retries=3 )
           for module in kew v-conf; do
-            unzip -l dist/outcast-*.zip | grep -q " node_modules/$module/package.json\$" || { echo "no module $module in the zip" >&2; exit 1; }
+            [ -f "$d/node_modules/$module/package.json" ] || { echo "no module $module after the install" >&2; exit 1; }
           done
+          echo "the modules installed from the lock file: $(find "$d/node_modules" -mindepth 1 -maxdepth 1 -type d | wc -l)"
       - run: scripts/package-lite.sh
       - run: scripts/package-client.sh linux-x64 linux-armv7 linux-armv8
       - name: The lite component for every architecture, and the x64 one runs and says its version

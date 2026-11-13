@@ -28,11 +28,11 @@ Beside the plugin, every release carries `outcast-lite`, a small static binary p
 
 ## Installing and the audio chain
 
-The plugin installs from the Volumio plugin store, or from a release here through the player's plugin manager. On enabling, the tap is proved before it is taken into the player's audio chain: the player's own ALSA loads it and plays a second through it into nothing; only then is its contribution registered, and the chain as written is verified. Any failure takes the contribution back and says why, so a player is never left with a chain it cannot open. Disabling the plugin takes the tap out again. Nothing of the player's own software is modified; every binary the plugin runs is in its own folder.
+The plugin installs from the Volumio plugin store, or from a release here through the player's plugin manager; the install makes the plugin's node modules on the player from the npm registry, at the versions the zip's lock file pins, as the store asks of every plugin. On enabling, the tap is proved before it is taken into the player's audio chain: the player's own ALSA loads it and plays a second through it into nothing; only then is its contribution registered, and the chain as written is verified. Any failure takes the contribution back and says why, so a player is never left with a chain it cannot open. Disabling the plugin takes the tap out again. Nothing of the player's own software is modified; every binary the plugin runs is in its own folder.
 
 ## How it is built
 
-The plugin is three parts in one zip, one copy of each binary per build (`armv7`, which also serves Volumio's universal Raspberry Pi image that calls itself `arm`; `armv8`; `x64`), nothing of the player's own software relied on:
+The plugin is three parts in one zip, one copy of each binary per build (`armv7`, which also serves Volumio's universal Raspberry Pi image that calls itself `arm`; `armv8`; `x64`), nothing of the player's own software relied on; the node modules alone are made on the player at install, from the lock file in the zip:
 
 | Part | What | Where it comes from |
 | --- | --- | --- |

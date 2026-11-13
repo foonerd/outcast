@@ -112,6 +112,25 @@ echo "check: plugin"
 with_node --check plugin/index.js plugin/helpers.js
 with_node --test plugin/test/
 
+echo "check: the lock file"
+# The node modules are made on the player at install from plugin/package-lock.json, which
+# rides in the zip: it must name every dependency at the spec package.json gives.
+with_node - <<'JS'
+const fs = require('fs');
+const pkg = JSON.parse(fs.readFileSync('plugin/package.json', 'utf8'));
+const lock = JSON.parse(fs.readFileSync('plugin/package-lock.json', 'utf8'));
+const root = (lock.packages || {})[''] || {};
+const wanted = Object.entries(pkg.dependencies || {});
+for (const [name, spec] of wanted) {
+  const locked = (root.dependencies || {})[name];
+  if (locked !== spec) { console.error('plugin/package-lock.json: ' + name + ' is ' + locked + ', package.json says ' + spec); process.exit(1); }
+  if (!lock.packages['node_modules/' + name]) { console.error('plugin/package-lock.json: no entry for ' + name); process.exit(1); }
+}
+const extra = Object.keys(root.dependencies || {}).filter((name) => !(name in (pkg.dependencies || {})));
+if (extra.length) { console.error('plugin/package-lock.json: not in package.json: ' + extra.join(', ')); process.exit(1); }
+console.log(wanted.length + ' dependencies pinned by the lock file');
+JS
+
 echo "check: undefined names"
 # A name nothing defines parses and passes the tests, and throws when its line runs:
 # the plugin's scripts are linted for it, with one pinned ESLint fetched for the run.
