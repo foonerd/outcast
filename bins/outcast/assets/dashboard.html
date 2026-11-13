@@ -217,22 +217,38 @@
 
   // ---- the level: a meter bridge, readouts and a minute of history, all on the page.
   // The core sends the tap's measurements about thirty times a second on /level, each
-  // send the highest of every hop since the one before, and the bridge is drawn from them
+  // send the highest of every hop since the one before. The bridge is drawn from them
   // every frame the browser draws: the bars rise at once and fall at a meter's pace, the
-  // highest peak is held. Without that stream (a browser without it, something in the
-  // way, the page in the background) the card reads the status once a second, as the
-  // rest of the page does.
-  const HIST = 60; const hist = []; let peakHold = [-60, -60]; let heldAt = [0, 0]; let overs = 0;
+  // highest peak is held. The minute under it is kept at ten points a second and drawn
+  // against the clock, so it glides instead of stepping. Without that stream (a browser
+  // without it, something in the way, the page in the background) the card reads the
+  // status once a second, as the rest of the page does, and the minute is a point a second.
+  const HIST = 60; let peakHold = [-60, -60]; let heldAt = [0, 0]; let overs = 0;
+  // The minute: points in the order they were measured, { t, rms, peak, f } with t on the
+  // page's own clock in ms and f for a point of the stream's, or { t, gap } where the
+  // level went away.
+  const trace = []; const tenth = { b: 0, n: 0, sum: [0, 0], top: [-120, -120] };
   const FALL = 20 / 1.7; // dB a second: a peak programme meter's fall, 20 dB in 1.7 s
   const HOLD = 3000; // ms the held peak stands before it follows the level again
-  const live = { at: 0, has: false, rms: [-60, -60], peak: [-60, -60], sum: [0, 0], top: [-120, -120], n: 0 };
+  const live = { at: 0, has: false, rms: [-60, -60], peak: [-60, -60] };
   const shown = { rms: [-60, -60], peak: [-60, -60], at: 0 };
-  let cur = null; let floorNow = -60; let quietNow = 0; let readAt = 0; let readHtml = null; let sinceAt = '';
+  let cur = null; let floorNow = -60; let quietNow = 0; let readAt = 0; let readHtml = null; let sinceAt = ''; let histAt = 0;
   // Live while the stream speaks: a level thirty times a second, or its word each second that there is none.
   const isLive = () => live.at > 0 && performance.now() - live.at < 2500;
   const pair = (a, b) => [0, 1].map((i) => { const v = a[i] == null ? a[0] : a[i]; return v == null ? (b ? b[i] : -120) : v; });
   // The held peak: taken by a higher one at once, let go after HOLD.
   const hold = (peak, now) => { for (let i = 0; i < 2; i++) { if (peak[i] >= peakHold[i] || now - heldAt[i] >= HOLD) { peakHold[i] = peak[i]; heldAt[i] = now; } } };
+  const db10 = (power) => 10 * Math.log10(power);
+  const power = (points, i) => points.reduce((a, p) => a + Math.pow(10, p.rms[i] / 10), 0) / points.length;
+  // The tenth of a second being gathered from the stream, made a point of the minute:
+  // its highest peak, the mean power of its sends.
+  function flush() {
+    if (tenth.n) trace.push({ t: (tenth.b + 0.5) * 100, f: true, rms: tenth.sum.map((s) => db10(s / tenth.n)), peak: tenth.top.slice() });
+    tenth.n = 0; tenth.sum = [0, 0]; tenth.top = [-120, -120];
+  }
+  const gap = (now) => { if (trace.length && !trace[trace.length - 1].gap) trace.push({ t: now, gap: true }); };
+  // What is older than the minute goes, but for one point that carries the line to the edge.
+  const prune = (now) => { while (trace.length > 1 && trace[1].t < now - HIST * 1000) trace.shift(); };
   const dbx = (db, w) => Math.max(0, Math.min(1, (db + 60) / 60)) * w;
   const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
   const rr = (g, x, y, w, h, r) => { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); };
@@ -265,7 +281,7 @@
     [-60, -50, -40, -30, -20, -12, -6, -3, 0].forEach((db) => { const x = left + dbx(db, w); g.fillRect(x, 66, 1, 4); g.fillText(db === 0 ? '0' : String(db), Math.min(right - 6, Math.max(left + 10, x)), 80); });
     g.textAlign = 'left'; g.fillText('dB', 4, 80);
   }
-  function drawHistory(floor) {
+  function drawHistory(floor, now) {
     const c = $('history'); fit(c, 130); const g = c.getContext('2d'); const W = c.width, H = c.height; g.clearRect(0, 0, W, H);
     const left = 30, right = W - 12, top = 6, bottom = H - 16, w = right - left, h = bottom - top;
     const y = (db) => bottom - Math.max(0, Math.min(1, (db + 60) / 60)) * h;
@@ -277,15 +293,27 @@
     g.textAlign = 'center'; g.textBaseline = 'alphabetic'; [60, 45, 30, 15, 0].forEach((s) => { const x = left + (1 - s / HIST) * w; g.fillRect(x, bottom, 1, 3); g.fillText(s ? '-' + s + ' s' : 'now', Math.min(right - 12, Math.max(left + 12, x)), H - 3); });
     g.save(); rr(g, left, top, w, h, 4); g.clip();
     g.strokeStyle = 'rgba(214,69,69,.7)'; g.setLineDash([3, 3]); g.beginPath(); g.moveTo(left, y(floor) + 0.5); g.lineTo(right, y(floor) + 0.5); g.stroke(); g.setLineDash([]);
-    const runs = []; hist.forEach((s, i) => { if (!s) return; const r = runs[runs.length - 1]; if (r && r[1] === i - 1) r[1] = i; else runs.push([i, i]); });
-    if (!runs.length) { g.restore(); return; }
-    const xAt = (i) => left + (1 - (hist.length - 1 - i) / (HIST - 1)) * w;
+    const xAt = (t) => right - (now - t) / (HIST * 1000) * w;
+    // The runs to join: the points in order, broken where the level went away and where two
+    // stand further apart than their kind allows (a third of a second for the stream's,
+    // two and a half for the status's).
+    const runs = []; let run = null; let prev = null;
+    trace.forEach((p) => {
+      if (p.gap) { run = null; prev = null; return; }
+      if (!run || p.t - prev.t > (p.f && prev.f ? 350 : 2500)) { run = []; runs.push(run); }
+      run.push(p); prev = p;
+    });
+    // While the stream is live the newest run reaches the edge with the level of this moment.
+    if (run && isLive() && live.has && now - prev.t < 350) run.push({ t: now, rms: live.rms, peak: live.peak });
+    const drawn = runs.filter((r) => r.length > 1);
+    if (!drawn.length) { g.restore(); return; }
+    const path = (r, pick) => { g.beginPath(); r.forEach((p, i) => { i ? g.lineTo(xAt(p.t), y(pick(p))) : g.moveTo(xAt(p.t), y(pick(p))); }); };
     // the peak envelope, filled faintly
-    const high = (s) => Math.max(s.peak[0], s.peak[1]);
-    runs.forEach(([a, b]) => { g.beginPath(); for (let i = a; i <= b; i++) { i > a ? g.lineTo(xAt(i), y(high(hist[i]))) : g.moveTo(xAt(i), y(high(hist[i]))); } g.lineTo(xAt(b), bottom); g.lineTo(xAt(a), bottom); g.closePath(); g.fillStyle = 'rgba(255,255,255,.06)'; g.fill(); });
-    const line = (pick, col, width) => { g.strokeStyle = col; g.lineWidth = width; runs.forEach(([a, b]) => { g.beginPath(); g.moveTo(xAt(a) - (a === b ? 1 : 0), y(pick(hist[a]))); for (let i = a; i <= b; i++) g.lineTo(xAt(i), y(pick(hist[i]))); g.stroke(); }); };
+    const high = (p) => Math.max(p.peak[0], p.peak[1]);
+    drawn.forEach((r) => { path(r, high); g.lineTo(xAt(r[r.length - 1].t), bottom); g.lineTo(xAt(r[0].t), bottom); g.closePath(); g.fillStyle = 'rgba(255,255,255,.06)'; g.fill(); });
+    const line = (pick, col, width) => { g.strokeStyle = col; g.lineWidth = width; g.lineJoin = 'round'; drawn.forEach((r) => { path(r, pick); g.stroke(); }); };
     line(high, 'rgba(255,255,255,.35)', 1);
-    line((s) => s.rms[0], '#54b948', 1.6); line((s) => s.rms[1], '#4a90e2', 1.6);
+    line((p) => p.rms[0], '#54b948', 1.6); line((p) => p.rms[1], '#4a90e2', 1.6);
     g.restore();
   }
   function renderReadouts() {
@@ -293,10 +321,11 @@
     let html; let badge = ''; let badgeClass = 'badge';
     if (!lv) html = '<div style="grid-column:1/-1" class="help">no level: the tap is not measuring</div>';
     else {
-      const secs = hist.filter(Boolean); const last = secs.length ? secs[secs.length - 1] : lv; const ten = secs.slice(-10);
-      const rms10 = ten.length ? ten.reduce((a, s) => a + (s.rms[0] + s.rms[1]) / 2, 0) / ten.length : (lv.rms[0] + lv.rms[1]) / 2;
-      const peak60 = Math.max(lv.peak[0], lv.peak[1], ...secs.map((s) => Math.max(s.peak[0], s.peak[1])));
-      const bal = last.rms[0] - last.rms[1];
+      const now = performance.now(); const points = trace.filter((p) => !p.gap);
+      const ten = points.filter((p) => now - p.t <= 10000); const one = points.filter((p) => now - p.t <= 1500);
+      const rms10 = ten.length ? (db10(power(ten, 0)) + db10(power(ten, 1))) / 2 : (lv.rms[0] + lv.rms[1]) / 2;
+      const peak60 = points.reduce((a, p) => Math.max(a, p.peak[0], p.peak[1]), Math.max(lv.peak[0], lv.peak[1]));
+      const bal = one.length ? db10(power(one, 0)) - db10(power(one, 1)) : lv.rms[0] - lv.rms[1];
       html = '<div><div class="k">Peak hold</div><div class="v">' + peakHold[0].toFixed(1) + ' <small>/</small> ' + peakHold[1].toFixed(1) + '</div></div>'
         + '<div><div class="k">RMS, 10 s</div><div class="v">' + rms10.toFixed(1) + ' <small>dBFS</small></div></div>'
         + '<div><div class="k">Peak, 60 s</div><div class="v">' + peak60.toFixed(1) + ' <small>dBFS</small></div></div>'
@@ -311,14 +340,16 @@
   // One send of the stream: the level now, or word that there is none.
   function onLevel(m) {
     const now = performance.now(); live.at = now;
-    if (!m || m.none || !m.rms_db || !m.rms_db.length) { live.has = false; return; }
+    if (!m || m.none || !m.rms_db || !m.rms_db.length) { live.has = false; flush(); gap(now); return; }
     live.rms = pair(m.rms_db); live.peak = pair(m.peak_db || [], live.rms); live.has = true;
     hold(live.peak, now);
-    for (let i = 0; i < 2; i++) { live.sum[i] += Math.pow(10, live.rms[i] / 10); live.top[i] = Math.max(live.top[i], live.peak[i]); }
-    live.n += 1;
+    const b = Math.floor(now / 100); if (b !== tenth.b) { flush(); tenth.b = b; }
+    for (let i = 0; i < 2; i++) { tenth.sum[i] += Math.pow(10, live.rms[i] / 10); tenth.top[i] = Math.max(tenth.top[i], live.peak[i]); }
+    tenth.n += 1;
   }
   // Every frame the browser draws, while the stream is live: the bars at their meter's
-  // pace, the held peak let go in its time, the readouts four times a second.
+  // pace, the held peak let go in its time, the minute moved on (thirty times a second
+  // is a pixel at most), the readouts four times a second.
   function frame(t) {
     requestAnimationFrame(frame);
     if (!isLive()) { shown.at = 0; return; }
@@ -330,32 +361,27 @@
       if (now - heldAt[i] >= HOLD) { peakHold[i] = peak; heldAt[i] = now; }
     }
     drawBridge(shown, floorNow);
+    if (t - histAt >= 33) { histAt = t; prune(now); drawHistory(floorNow, now); }
     if (t - readAt >= 250) { readAt = t; renderReadouts(); }
   }
-  // Once a second, with the status: the minute's next second (from the stream, the
-  // second's own peak and RMS; without it, the status's reading), and without the stream
-  // the bridge and the readouts too. A second without a level is a gap, not the last one kept.
+  // Once a second, with the status: what the card takes from it, and without the stream
+  // the whole card: the bridge, the readouts, and the minute's next point, or a gap where
+  // there is no level, never the last one kept.
   function renderLevel(s) {
     floorNow = s.dead_air_level != null ? s.dead_air_level : -60; quietNow = s.quiet_seconds || 0;
     overs = (s.since && s.since.overs) || 0; // the core's count since the mark: every measurement at full scale
     sinceAt = s.since && s.since.at ? hm(s.since.at) : '';
-    const streamed = isLive(); let sec = null;
-    if (streamed) {
-      if (live.n) sec = { rms: live.sum.map((p) => 10 * Math.log10(p / live.n)), peak: live.top.slice() };
-      else if (live.has) sec = { rms: live.rms.slice(), peak: live.peak.slice() };
-    } else {
-      const lv = s.level && s.level.rms_db && s.level.rms_db.length ? s.level : null;
-      if (lv) {
-        const rms = pair(lv.rms_db); sec = { rms, peak: pair(lv.peak_db || [], rms) };
-        hold(sec.peak, performance.now());
-      } else { peakHold = [-60, -60]; }
-      cur = sec;
-    }
-    live.sum = [0, 0]; live.top = [-120, -120]; live.n = 0;
-    hist.push(sec); while (hist.length > HIST) hist.shift();
-    drawHistory(floorNow);
+    const streamed = isLive(); const now = performance.now();
     $('level-how').textContent = "dBFS, from the tap's meter, " + (streamed ? 'live' : 'each second');
-    if (!streamed) { drawBridge(sec, floorNow); renderReadouts(); }
+    if (streamed) return;
+    flush(); // what the stream left unfinished when it went
+    const lv = s.level && s.level.rms_db && s.level.rms_db.length ? s.level : null;
+    if (lv) {
+      const rms = pair(lv.rms_db); cur = { rms, peak: pair(lv.peak_db || [], rms) };
+      hold(cur.peak, now); trace.push({ t: now, f: false, rms: cur.rms, peak: cur.peak });
+    } else { cur = null; peakHold = [-60, -60]; gap(now); }
+    prune(now);
+    drawBridge(cur, floorNow); drawHistory(floorNow, now); renderReadouts();
   }
   // The stream: open while the page is in view and closed when it is not, so a page left
   // in a background tab costs the player nothing. The browser opens it again when it
