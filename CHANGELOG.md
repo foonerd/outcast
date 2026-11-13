@@ -2,6 +2,17 @@
 
 All notable changes to Outcast Uplink. The format follows Keep a Changelog; the versions follow Semantic Versioning.
 
+## [0.1.29] - 2026-11-13
+
+### Changed
+
+- The zip no longer carries the plugin's node modules. The plugin store wants them made on the player at install, as Volumio's own plugin tool makes them, so the install now makes them from the npm registry at the versions `package-lock.json` pins; the lock file rides in the zip and in the repository. The player needs the internet for the install's half a minute, as it did to fetch the plugin. The zip is 2 MB smaller.
+
+### Added
+
+- The install refuses cleanly, as it does for the binaries, when npm is not on the player, when the registry is out of reach or when a module did not install; the wiki's Troubleshooting page lists every install message.
+- The workshop check proves the lock file names every dependency at the spec `package.json` gives. The release workflow refuses a zip with modules in it and installs the modules from the zip's lock file the way a player does.
+
 ## [0.1.28] - 2026-11-12
 
 ### Changed
