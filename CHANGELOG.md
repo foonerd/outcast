@@ -2,6 +2,13 @@
 
 All notable changes to Outcast Uplink. The format follows Keep a Changelog; the versions follow Semantic Versioning.
 
+## [0.1.31] - 2026-11-13
+
+### Changed
+
+- The Level card's last minute moves with the sound, as the meter above it does. From the level's stream it is kept at ten points a second and drawn against the clock, so the trace glides instead of stepping once a second and shows what happens inside a second; the measured points are joined as they are, nothing is rounded into them. Without the stream it stays a point a second.
+- The card's RMS over ten seconds and its balance are taken from mean power, as an RMS is, rather than from an average of decibels.
+
 ## [0.1.30] - 2026-11-13
 
 ### Added
