@@ -2,6 +2,18 @@
 
 All notable changes to Outcast Uplink. The format follows Keep a Changelog; the versions follow Semantic Versioning.
 
+## [0.1.30] - 2026-11-13
+
+### Added
+
+- The dashboard's Level card moves with the sound. The core sends the page the tap's measurements about thirty times a second on a stream of its own (`/level`, server-sent events), each send the highest of every measurement since the one before; the bars rise at once and fall at a programme meter's pace, the held peak is let go after three seconds. The rest of the page keeps its second, and so does the card in a browser that cannot hold the stream; its title says which, **live** or **each second**. The stream is open to a page of your own, as the status is; the wiki's Dashboard page describes it.
+
+### Fixed
+
+- No peak and no over is missed between two looks at the tap's meter. The core read the newest measurement ten times a second while the tap makes 43 a second at 44.1 kHz, so three in four went unseen: the level shown could read low, and the count of overs too. Every measurement is now taken and counted, in the status and on the page.
+- The Level card with nothing playing: the peak markers no longer stay where they last stood, and the last minute moves on with a gap instead of standing still.
+- The Level card's overs are the count since the Since card's mark, cleared with it, as the wiki said; they were a count of the page's own, lost on a reload.
+
 ## [0.1.29] - 2026-11-13
 
 ### Changed
