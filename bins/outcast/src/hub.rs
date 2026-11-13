@@ -74,15 +74,28 @@ pub struct Hub {
     mixer: crate::mixer::Mixer,
     /// The inserts' folder, for the page's uploads.
     jingles: PathBuf,
+    /// Where the tap's rings are and the tag of the one followed, for the dashboard's
+    /// stream of the level.
+    shm: PathBuf,
+    tag: String,
 }
 
 impl Hub {
-    pub fn new(status: Arc<Mutex<Status>>, evopeg: &Path, config: &Path, jingles: &Path) -> Self {
+    pub fn new(
+        status: Arc<Mutex<Status>>,
+        evopeg: &Path,
+        config: &Path,
+        jingles: &Path,
+        shm: &Path,
+        tag: &str,
+    ) -> Self {
         Self {
             status,
             evopeg: evopeg.to_path_buf(),
             config: config.to_path_buf(),
             jingles: jingles.to_path_buf(),
+            shm: shm.to_path_buf(),
+            tag: tag.to_string(),
             workers: Vec::new(),
             title: String::new(),
             pending_title: None,
@@ -262,6 +275,8 @@ impl Hub {
                 port,
                 Arc::clone(&self.status),
                 self.jingles.clone(),
+                self.shm.clone(),
+                self.tag.clone(),
             ) {
                 Ok(s) => {
                     eprintln!("outcast: dashboard on port {port}");

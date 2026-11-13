@@ -175,7 +175,7 @@ impl Status {
     }
 }
 
-/// The newest hop's level per channel, in dBFS.
+/// The level per channel, in dBFS: the highest of the hops since the meter last looked.
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct Level {
     pub peak_db: Vec<f32>,

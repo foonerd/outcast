@@ -7,17 +7,21 @@
 //! carries a button that opens it. Beside it, DJ mode's programme page, and
 //! the inserts' files: listed, uploaded (converted to the WAV the mixer plays
 //! as they land) and deleted, from the page, so a jingle or a recording on a
-//! phone reaches the player with nothing but a browser.
+//! phone reaches the player with nothing but a browser. And the level as it
+//! moves: `/level` stays open and sends every measurement of the tap about
+//! thirty times a second as server-sent events, for the page's meter; the
+//! rest of the page keeps its second.
 
 use std::io::{Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use crate::status::{self, Status};
+use crate::level::{Hops, Look};
+use crate::status::{self, Level, Status};
 
 /// The page, whole.
 const PAGE: &str = include_str!("../assets/dashboard.html");
@@ -27,8 +31,18 @@ const DJ_PAGE: &str = include_str!("../assets/dj.html");
 /// About: what this is, the evo framework it comes from (with a code to scan), what it
 /// is built of, and how to support it. The QR code is an SVG built into the page.
 const ABOUT_PAGE: &str = include_str!("../assets/about.html");
-/// Connections answered at once; the rest wait in the listen queue.
+/// Requests answered at once; one more is told to come back in a second.
 const AT_ONCE: usize = 8;
+/// Level streams held open at once, counted apart from the requests: a page
+/// left open holds one, and never a place a status or an upload needs.
+const STREAMS: usize = 8;
+/// The time between two sends of the level: thirty a second. Each send carries
+/// every hop the tap published since the one before, so nothing is lost
+/// between them, and a browser draws no faster.
+const SEND: Duration = Duration::from_micros(33_333);
+/// While there is no level, how often the stream says so: the page knows the
+/// stream is alive, and a browser that went is found.
+const SAY_NONE: Duration = Duration::from_secs(1);
 /// An upload larger than this is refused.
 const MAX_UPLOAD: u64 = 256 * 1024 * 1024;
 
@@ -37,6 +51,41 @@ pub struct Server {
     pub port: u16,
     listener: TcpListener,
     acceptor: Option<JoinHandle<()>>,
+    shared: Arc<Shared>,
+}
+
+/// What every connection is served from.
+struct Shared {
+    status: Arc<Mutex<Status>>,
+    jingles: PathBuf,
+    /// Where the tap's rings are, and the tag of the one whose level is streamed.
+    shm: PathBuf,
+    tag: String,
+    /// The level streams open now.
+    streams: Arc<AtomicUsize>,
+    /// Set when the server stops: the streams end with it.
+    stopping: AtomicBool,
+}
+
+/// One of a counted number of places, given back when it is dropped.
+struct Place(Arc<AtomicUsize>);
+
+impl Place {
+    /// A place when fewer than `most` are taken.
+    fn take(count: &Arc<AtomicUsize>, most: usize) -> Option<Place> {
+        count
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| {
+                (n < most).then_some(n + 1)
+            })
+            .ok()
+            .map(|_| Place(Arc::clone(count)))
+    }
+}
+
+impl Drop for Place {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::SeqCst);
+    }
 }
 
 impl Server {
@@ -44,34 +93,38 @@ impl Server {
         port: u16,
         status: Arc<Mutex<Status>>,
         jingles: PathBuf,
+        shm: PathBuf,
+        tag: String,
     ) -> Result<Server, String> {
         let listener =
             TcpListener::bind(("0.0.0.0", port)).map_err(|e| format!("port {port}: {e}"))?;
         let acceptor = listener.try_clone().map_err(|e| e.to_string())?;
         let open = Arc::new(AtomicUsize::new(0));
-        let jingles = Arc::new(jingles);
+        let shared = Arc::new(Shared {
+            status,
+            jingles,
+            shm,
+            tag,
+            streams: Arc::new(AtomicUsize::new(0)),
+            stopping: AtomicBool::new(false),
+        });
+        let serving = Arc::clone(&shared);
         let thread = std::thread::Builder::new()
             .name("dashboard".into())
             .spawn(move || {
                 for stream in acceptor.incoming() {
                     let Ok(mut stream) = stream else { break };
-                    if open.load(Ordering::Relaxed) >= AT_ONCE {
+                    let Some(place) = Place::take(&open, AT_ONCE) else {
                         let _ = stream.set_write_timeout(Some(Duration::from_secs(2)));
                         let _ = stream.write_all(
                             b"HTTP/1.0 503 Service Unavailable\r\nRetry-After: 1\r\nConnection: close\r\nContent-Length: 0\r\n\r\n",
                         );
                         continue;
-                    }
-                    open.fetch_add(1, Ordering::Relaxed);
-                    let status = Arc::clone(&status);
-                    let open = Arc::clone(&open);
-                    let jingles = Arc::clone(&jingles);
+                    };
+                    let shared = Arc::clone(&serving);
                     let _ = std::thread::Builder::new()
                         .name("dashboard-serve".into())
-                        .spawn(move || {
-                            serve(stream, &status, &jingles);
-                            open.fetch_sub(1, Ordering::Relaxed);
-                        });
+                        .spawn(move || serve(stream, &shared, place));
                 }
             })
             .map_err(|e| e.to_string())?;
@@ -79,11 +132,14 @@ impl Server {
             port,
             listener,
             acceptor: Some(thread),
+            shared,
         })
     }
 
-    /// The listening socket shut, so the acceptor's wait ends and the port is free.
+    /// The listening socket shut, so the acceptor's wait ends and the port is free;
+    /// the level streams told to end.
     pub fn stop(mut self) {
+        self.shared.stopping.store(true, Ordering::Relaxed);
         {
             use std::os::unix::io::AsRawFd;
             unsafe { libc::shutdown(self.listener.as_raw_fd(), libc::SHUT_RDWR) };
@@ -139,6 +195,7 @@ fn reason(code: u16) -> &'static str {
         411 => "Length Required",
         413 => "Payload Too Large",
         500 => "Internal Server Error",
+        503 => "Service Unavailable",
         _ => "",
     }
 }
@@ -252,7 +309,75 @@ fn wav_seconds(path: &Path) -> Option<f64> {
     None
 }
 
-fn serve(mut stream: TcpStream, status: &Arc<Mutex<Status>>, jingles: &Path) {
+/// One send of the level, as a server-sent event: the peak and the RMS per
+/// channel in dBFS to a tenth, and how many of the hops in it stood at full scale.
+fn level_event(level: &Level, overs: u32) -> String {
+    let list = |values: &[f32]| {
+        values
+            .iter()
+            .map(|v| format!("{:.1}", v.clamp(-120.0, 99.9)))
+            .collect::<Vec<_>>()
+            .join(",")
+    };
+    format!(
+        "data: {{\"peak_db\":[{}],\"rms_db\":[{}],\"overs\":{overs}}}\n\n",
+        list(&level.peak_db),
+        list(&level.rms_db)
+    )
+}
+
+/// The level as the tap measures it, sent until the browser goes or the server
+/// stops. The stream reads the ring itself, with a reader of its own: the ring
+/// is shared memory any number may read, so nothing here waits on the status
+/// or stands in the sound's way. A browser that stops taking the stream is
+/// dropped when a write has waited two seconds.
+fn level_stream(mut stream: TcpStream, shared: &Shared) {
+    let _ = stream.set_write_timeout(Some(Duration::from_secs(2)));
+    let _ = stream.set_nodelay(true);
+    // No length: the events are the body until the connection closes. A proxy in
+    // front is told not to hold them back.
+    let head = "HTTP/1.1 200 OK\r\nServer: outcast\r\nContent-Type: text/event-stream\r\nCache-Control: no-store\r\nAccess-Control-Allow-Origin: *\r\nX-Accel-Buffering: no\r\nConnection: close\r\n\r\nretry: 2000\n\n";
+    if stream.write_all(head.as_bytes()).is_err() {
+        return;
+    }
+    let mut hops = Hops::new(&shared.shm, &shared.tag);
+    let mut said_none: Option<Instant> = None;
+    let mut due = Instant::now();
+    while !shared.stopping.load(Ordering::Relaxed) {
+        let event = match hops.look() {
+            Look::Hops(level, overs) => {
+                said_none = None;
+                Some(level_event(&level, overs))
+            }
+            Look::Same => None,
+            Look::Quiet => {
+                if said_none.is_none_or(|at| at.elapsed() >= SAY_NONE) {
+                    said_none = Some(Instant::now());
+                    Some("data: {\"none\":true}\n\n".to_string())
+                } else {
+                    None
+                }
+            }
+        };
+        if let Some(event) = event {
+            if stream.write_all(event.as_bytes()).is_err() {
+                break;
+            }
+        }
+        due += SEND;
+        let now = Instant::now();
+        if due > now {
+            std::thread::sleep(due - now);
+        } else {
+            due = now;
+        }
+    }
+    let _ = stream.shutdown(Shutdown::Both);
+}
+
+fn serve(mut stream: TcpStream, shared: &Shared, place: Place) {
+    let status = &shared.status;
+    let jingles: &Path = &shared.jingles;
     let _ = stream.set_read_timeout(Some(Duration::from_secs(30)));
     let _ = stream.set_write_timeout(Some(Duration::from_secs(10)));
     let mut buf = Vec::new();
@@ -282,6 +407,27 @@ fn serve(mut stream: TcpStream, status: &Arc<Mutex<Status>>, jingles: &Path) {
         .and_then(|(_, v)| v.trim().parse().ok());
     let bare = path.split('?').next().unwrap_or("/").to_string();
 
+    // The level, streamed: a place among the streams, and the request's own given back.
+    if bare == "/level" {
+        if method != "GET" {
+            respond(&mut stream, 405, "text/plain", "no-store", b"", false);
+            return;
+        }
+        let Some(_seat) = Place::take(&shared.streams, STREAMS) else {
+            respond(
+                &mut stream,
+                503,
+                "text/plain",
+                "no-store",
+                b"the level is being watched from as many pages as it is sent to",
+                false,
+            );
+            return;
+        };
+        drop(place);
+        level_stream(stream, shared);
+        return;
+    }
     // The page's one write of the counts: started again from now.
     if method == "POST" && bare == "/since/clear" {
         status
@@ -467,6 +613,7 @@ fn upload(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::level::tests::{hop, ring, ring_dir};
 
     #[test]
     fn the_routes_answer_the_page_the_status_and_nothing_else() {
@@ -587,7 +734,14 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("outcast-jingles-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let status = Arc::new(Mutex::new(Status::new("test")));
-        let s = Server::start(0, Arc::clone(&status), dir.clone()).unwrap();
+        let s = Server::start(
+            0,
+            Arc::clone(&status),
+            dir.clone(),
+            ring_dir("served"),
+            "outcast".to_string(),
+        )
+        .unwrap();
         let port = s.listener.local_addr().unwrap().port();
         let out = talk(port, b"GET /status.json HTTP/1.0\r\n\r\n");
         assert!(out.starts_with("HTTP/1.0 200 OK"));
@@ -655,5 +809,159 @@ mod tests {
             "the port is free again"
         );
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A level stream asked for; what it sends is read with `read_until`.
+    fn watch(port: u16) -> TcpStream {
+        let mut c = TcpStream::connect(("127.0.0.1", port)).unwrap();
+        c.set_read_timeout(Some(Duration::from_secs(6))).unwrap();
+        c.write_all(b"GET /level HTTP/1.1\r\nHost: player\r\n\r\n")
+            .unwrap();
+        c
+    }
+
+    /// The stream read into `got` until `want` is in it; false when the stream
+    /// ended or stood still for the read's timeout first.
+    fn read_until(c: &mut TcpStream, got: &mut String, want: &str) -> bool {
+        let mut chunk = [0u8; 4096];
+        while !got.contains(want) {
+            match c.read(&mut chunk) {
+                Ok(0) | Err(_) => break,
+                Ok(n) => got.push_str(&String::from_utf8_lossy(&chunk[..n])),
+            }
+        }
+        got.contains(want)
+    }
+
+    #[test]
+    fn the_level_is_streamed_with_every_hop_in_it_thirty_times_a_second_at_most() {
+        let rings = ring_dir("stream");
+        let status = Arc::new(Mutex::new(Status::new("outcast")));
+        let s = Server::start(
+            0,
+            status,
+            rings.join("jingles"),
+            rings.clone(),
+            "outcast".to_string(),
+        )
+        .unwrap();
+        let port = s.listener.local_addr().unwrap().port();
+        let mut c = watch(port);
+        let mut got = String::new();
+        assert!(
+            read_until(&mut c, &mut got, "data: {\"none\":true}\n\n"),
+            "nothing plays, and the stream says so: {got}"
+        );
+        assert!(got.starts_with("HTTP/1.1 200 OK\r\n"), "{got}");
+        assert!(
+            got.contains("Content-Type: text/event-stream\r\n")
+                && got.contains("X-Accel-Buffering: no\r\n")
+                && !got.to_lowercase().contains("content-length"),
+            "an event stream, its length open: {got}"
+        );
+        // The player plays for a second: a hop every 10 ms at -6 and -12 dBFS, one of
+        // them at full scale on the left.
+        let mut writer = ring(&rings, "outcast", 64);
+        let began = Instant::now();
+        for n in 0..100 {
+            writer.publish(&hop(if n == 70 { 1.0 } else { 0.5 }, 0.25));
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let played = began.elapsed();
+        assert!(
+            read_until(
+                &mut c,
+                &mut got,
+                "data: {\"peak_db\":[-6.0,-12.0],\"rms_db\":[-12.0,-18.1],\"overs\":0}\n\n"
+            ),
+            "the level as measured: {got}"
+        );
+        assert!(
+            read_until(
+                &mut c,
+                &mut got,
+                "data: {\"peak_db\":[0.0,-12.0],\"rms_db\":[-6.0,-18.1],\"overs\":1}\n\n"
+            ),
+            "the one hop at full scale is in a send, whichever hops it shared it with: {got}"
+        );
+        // The player stops: the stream says there is no level again.
+        let mut after = String::new();
+        assert!(
+            read_until(&mut c, &mut after, "data: {\"none\":true}\n\n"),
+            "the player stopped, and the stream says so: {after}"
+        );
+        let sends = got.matches("\"peak_db\"").count() + after.matches("\"peak_db\"").count();
+        let most = (played.as_secs_f64() * 30.0) as usize + 4;
+        assert!(
+            (10..=most).contains(&sends),
+            "{sends} sends in {played:?}: about thirty a second, {most} at most"
+        );
+        let overs: usize =
+            got.matches("\"overs\":1}").count() + after.matches("\"overs\":1}").count();
+        assert_eq!(overs, 1, "the over is said once");
+        s.stop();
+        let _ = std::fs::remove_dir_all(&rings);
+    }
+
+    #[test]
+    fn the_streams_have_places_of_their_own_and_end_with_the_server() {
+        let rings = ring_dir("places");
+        let status = Arc::new(Mutex::new(Status::new("outcast")));
+        let s = Server::start(
+            0,
+            status,
+            rings.join("jingles"),
+            rings.clone(),
+            "outcast".to_string(),
+        )
+        .unwrap();
+        let port = s.listener.local_addr().unwrap().port();
+        let mut streams: Vec<TcpStream> = (0..STREAMS)
+            .map(|_| {
+                let mut c = watch(port);
+                let mut got = String::new();
+                assert!(read_until(&mut c, &mut got, "retry: 2000\n\n"), "{got}");
+                c
+            })
+            .collect();
+        // One more is refused, and says why.
+        let out = talk(port, b"GET /level HTTP/1.1\r\n\r\n");
+        assert!(out.starts_with("HTTP/1.0 503"), "{out}");
+        // The requests have every place of theirs: a stream holds none.
+        for _ in 0..AT_ONCE + 2 {
+            let out = talk(port, b"GET /status.json HTTP/1.0\r\n\r\n");
+            assert!(out.starts_with("HTTP/1.0 200 OK"), "{out}");
+        }
+        let out = talk(port, b"POST /level HTTP/1.0\r\nContent-Length: 0\r\n\r\n");
+        assert!(out.starts_with("HTTP/1.0 405"), "{out}");
+        // A page closed gives its place back, once a send finds it gone.
+        drop(streams.pop());
+        let end = Instant::now() + Duration::from_secs(8);
+        let again = loop {
+            let mut c = watch(port);
+            let mut got = String::new();
+            if read_until(&mut c, &mut got, "retry: 2000\n\n") {
+                break Some(c);
+            }
+            if Instant::now() > end {
+                break None;
+            }
+            std::thread::sleep(Duration::from_millis(200));
+        };
+        streams.push(again.expect("the place of a page that went is free again"));
+        // The server stops: every stream ends, and the port is free.
+        s.stop();
+        for mut c in streams {
+            let mut rest = Vec::new();
+            assert!(
+                c.read_to_end(&mut rest).is_ok(),
+                "a stream ends with the server"
+            );
+        }
+        assert!(
+            TcpListener::bind(("0.0.0.0", port)).is_ok(),
+            "the port is free again"
+        );
+        let _ = std::fs::remove_dir_all(&rings);
     }
 }

@@ -180,7 +180,14 @@ fn main() {
 
     // The uplinks from their file, then the ring, followed on this thread
     // for as long as the daemon runs.
-    let mut hub = Hub::new(Arc::clone(&status), &evopeg, &a.uplinks, &a.jingles);
+    let mut hub = Hub::new(
+        Arc::clone(&status),
+        &evopeg,
+        &a.uplinks,
+        &a.jingles,
+        &a.shm,
+        &a.tag,
+    );
     if let Err(e) = hub.reload() {
         eprintln!("outcast: uplinks: {e}");
         let mut s = status.lock().unwrap_or_else(|e| e.into_inner());
