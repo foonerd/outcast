@@ -24,6 +24,7 @@ mod level;
 mod mixer;
 mod status;
 mod system;
+mod trim;
 mod uplink;
 
 use std::path::{Path, PathBuf};

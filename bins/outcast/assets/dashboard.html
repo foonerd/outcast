@@ -117,6 +117,7 @@
           <tr><td>Title</td><td id="title">—</td></tr>
           <tr><td>Stream</td><td id="stream">—</td></tr>
           <tr><td>Dead air</td><td id="deadair">—</td></tr>
+          <tr id="trimrow" class="hidden"><td>Trim</td><td id="trim">—</td></tr>
           <tr id="djrow" class="hidden"><td>DJ mode</td><td id="dj">—</td></tr>
         </table>
       </div>
@@ -372,7 +373,11 @@
     overs = (s.since && s.since.overs) || 0; // the core's count since the mark: every measurement at full scale
     sinceAt = s.since && s.since.at ? hm(s.since.at) : '';
     const streamed = isLive(); const now = performance.now();
-    $('level-how').textContent = "dBFS, from the tap's meter, " + (streamed ? 'live' : 'each second');
+    // The level is the one sent: the core takes the operator's trim off what the tap measured.
+    const trim = Math.round((Number(s.trim_db) || 0) * 10) / 10;
+    $('level-how').textContent = "dBFS, from the tap's meter" + (trim ? ', trimmed ' + trim + ' dB' : '') + ', ' + (streamed ? 'live' : 'each second');
+    $('trimrow').classList.toggle('hidden', !trim);
+    $('trim').innerHTML = trim ? '<b>' + trim + ' dB</b> <span class="help">off everything sent</span>' : '—';
     if (streamed) return;
     flush(); // what the stream left unfinished when it went
     const lv = s.level && s.level.rms_db && s.level.rms_db.length ? s.level : null;

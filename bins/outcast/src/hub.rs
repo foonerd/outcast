@@ -5,6 +5,7 @@
 //! and stops the uplink workers as the configuration says.
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
@@ -14,6 +15,7 @@ use tap::audio::Shape;
 
 use crate::config::{Monitor, Uplinks};
 use crate::status::{self, Status};
+use crate::trim::Trim;
 use crate::uplink::{self, Ctx};
 use stream::feed::{self, Conversion, Event, Segment};
 
@@ -63,9 +65,17 @@ pub struct Hub {
     /// A title just given, and when; told to the uplinks once it has stood.
     pending_title: Option<(String, Instant)>,
     segment: Option<(Segment, Conversion)>,
+    /// The shape of the ring being followed, to plan its segment again when
+    /// the trim changes in the middle of a stream.
+    shape: Option<Shape>,
     converted: Vec<u8>,
     /// What the status watches the programme for, from the last load.
     monitor: Monitor,
+    /// The trim on everything sent out, from the last load.
+    trim: Trim,
+    /// The same in dB, as an `f32`'s bits, for the dashboard's streams of the
+    /// level, which read the ring themselves.
+    trim_shared: Arc<AtomicU32>,
     /// Counted at every reload; the workers and the entries of one reload share it.
     generation: u64,
     /// The core's own page, while the settings want it.
@@ -100,8 +110,11 @@ impl Hub {
             title: String::new(),
             pending_title: None,
             segment: None,
+            shape: None,
             converted: Vec::new(),
             monitor: Monitor::default(),
+            trim: Trim::none(),
+            trim_shared: Arc::new(AtomicU32::new(0f32.to_bits())),
             generation: 0,
             dashboard: None,
             mixer: crate::mixer::Mixer::new(),
@@ -112,6 +125,23 @@ impl Hub {
         self.monitor
     }
 
+    /// The trim in force, in dB: 0 or below.
+    pub fn trim_db(&self) -> f32 {
+        self.trim.db()
+    }
+
+    /// The segment the uplinks get for a ring of this shape. Under a trim the
+    /// samples are widened to S32_LE first, so the trimmed ones keep the
+    /// precision the trim gives them; without one they pass as they are.
+    fn plan(&self, shape: &Shape) -> (Segment, Conversion) {
+        let planned = feed::plan(shape);
+        if self.trim.is_none() {
+            planned
+        } else {
+            feed::widened(planned)
+        }
+    }
+
     /// The configuration read again and the uplinks made anew from it: the
     /// old workers told to stop and joined, the new ones started, and the
     /// current segment and title given to them so a save in the middle of a
@@ -119,6 +149,23 @@ impl Hub {
     pub fn reload(&mut self) -> Result<(), String> {
         let uplinks = Uplinks::load(&self.config)?;
         self.monitor = uplinks.monitor;
+        let trim = Trim::new(uplinks.programme.trim_db);
+        let trim_changed = trim != self.trim;
+        if trim_changed {
+            self.trim = trim;
+            self.trim_shared
+                .store(trim.db().to_bits(), Ordering::Relaxed);
+            // A stream in flight is planned again: widened under a trim, as it
+            // is without one. The uplinks made below are given it.
+            if let Some(shape) = self.shape {
+                self.segment = Some(self.plan(&shape));
+            }
+            if trim.is_none() {
+                eprintln!("outcast: trim: none, the programme goes out as the player plays it");
+            } else {
+                eprintln!("outcast: trim: {} dB off everything sent", trim.db());
+            }
+        }
         self.dashboard(uplinks.dashboard);
         self.stop_all();
         self.generation += 1;
@@ -254,6 +301,17 @@ impl Hub {
             let names = self.names();
             let mut s = self.status.lock().unwrap_or_else(|e| e.into_inner());
             s.dead_air_level = self.monitor.dead_air_level;
+            s.trim_db = self.trim.db();
+            if trim_changed {
+                s.event(
+                    "info",
+                    if self.trim.is_none() {
+                        "trim: none".to_string()
+                    } else {
+                        format!("trim: {} dB", self.trim.db())
+                    },
+                );
+            }
             s.event("info", format!("uplinks: {names}"));
         }
         Ok(())
@@ -277,6 +335,7 @@ impl Hub {
                 self.jingles.clone(),
                 self.shm.clone(),
                 self.tag.clone(),
+                Arc::clone(&self.trim_shared),
             ) {
                 Ok(s) => {
                     eprintln!("outcast: dashboard on port {port}");
@@ -374,7 +433,8 @@ impl Hub {
 
     /// A new ring: the segment planned and announced.
     pub fn segment(&mut self, shape: &Shape) {
-        let planned = feed::plan(shape);
+        self.shape = Some(*shape);
+        let planned = self.plan(shape);
         self.segment = Some(planned);
         self.broadcast(Event::Segment(planned.0));
     }
@@ -382,16 +442,15 @@ impl Hub {
     /// Bytes of the current ring, converted once and given to every uplink
     /// that has room; the others lose this piece.
     pub fn pcm(&mut self, bytes: &[u8]) {
-        let Some((segment, conversion)) = self.segment.as_ref() else {
+        let Some((segment, conversion)) = self.segment else {
             return;
         };
-        feed::convert(conversion, segment, bytes, &mut self.converted);
+        feed::convert(&conversion, &segment, bytes, &mut self.converted);
         if self.converted.is_empty() {
             return;
         }
         // An insert over the programme, when one plays or waits; a plain pass otherwise.
         if self.mixer.playing().is_some() || self.mixer.waiting() > 0 {
-            let segment = *segment;
             let moments = self.mixer.process(&segment, &mut self.converted);
             if !moments.is_empty() {
                 let mut s = self.status.lock().unwrap_or_else(|e| e.into_inner());
@@ -416,6 +475,10 @@ impl Hub {
                 }
             }
         }
+        // The trim, after the insert, so that everything sent out carries it.
+        if !segment.dsd_silence {
+            self.trim.apply(&segment.layout, &mut self.converted);
+        }
         let piece = Arc::new(std::mem::take(&mut self.converted));
         let mut dropped: Vec<&str> = Vec::new();
         for w in &self.workers {
@@ -439,6 +502,7 @@ impl Hub {
 
     pub fn end(&mut self) {
         self.segment = None;
+        self.shape = None;
         self.broadcast(Event::End);
     }
 

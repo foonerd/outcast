@@ -352,6 +352,17 @@ pub struct Uplinks {
     pub monitor: Monitor,
     #[serde(default)]
     pub dashboard: Dashboard,
+    #[serde(default)]
+    pub programme: Programme,
+}
+
+/// The programme on its way out, the same for every uplink.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct Programme {
+    /// dB taken off everything sent out: 0, as the player plays it, down to
+    /// -12. Level is never added.
+    #[serde(default)]
+    pub trim_db: f32,
 }
 
 /// The dashboard: the core's own page on a port of the player, for watching
@@ -875,6 +886,7 @@ impl Uplinks {
         for i in std::iter::once(&mut self.icecast).chain(self.icecasts.iter_mut()) {
             i.tidy();
         }
+        self.programme.trim_db = crate::trim::Trim::new(self.programme.trim_db).db();
         self.srt.tidy();
         self.rtmp.tidy();
         self.ts.tidy();
@@ -1068,6 +1080,22 @@ mod tests {
         let d = Uplinks::default();
         assert_eq!(d.icecast.protocol, Protocol::Icecast2);
         assert_eq!(d.icecast.stream_id, 1);
+    }
+
+    #[test]
+    fn the_programme_has_no_trim_unless_the_file_sets_one_within_its_range() {
+        let none: Uplinks = serde_json::from_str("{}").unwrap();
+        assert_eq!(none.programme.trim_db, 0.0);
+        let mut set: Uplinks = serde_json::from_str(r#"{"programme":{"trim_db":-3.5}}"#).unwrap();
+        set.tidy();
+        assert_eq!(set.programme.trim_db, -3.5);
+        // A file written by hand: level is never added, and twelve dB is the most.
+        let mut up: Uplinks = serde_json::from_str(r#"{"programme":{"trim_db":4}}"#).unwrap();
+        up.tidy();
+        assert_eq!(up.programme.trim_db, 0.0);
+        let mut far: Uplinks = serde_json::from_str(r#"{"programme":{"trim_db":-40}}"#).unwrap();
+        far.tidy();
+        assert_eq!(far.programme.trim_db, -12.0);
     }
 
     #[test]

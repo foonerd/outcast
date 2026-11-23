@@ -354,6 +354,34 @@ test('the dead-air watch takes a level and a time, and the file carries them', (
     assert.equal(h.uplinksFrom((k, d) => (k in off ? off[k] : d)).monitor.dead_air_seconds, 0);
 });
 
+test('the programme level is a trim from 0 to -12 dB, read as it is meant and never a gain', () => {
+    for (const ok of ['0', '-3', '-3.5', '-12', ' -6 ', '-0', '-4,5', '\u22122']) {
+        assert.equal(h.validateLevel({ level_trim: ok }, t), null, ok);
+    }
+    for (const bad of ['3', '-12.1', '-13', 'loud', '', '--3', '-3 dB', undefined]) {
+        assert.equal(h.validateLevel({ level_trim: bad }, t), 'ERR_RANGE {"field":"LEVEL_TRIM","min":-12,"max":0}', String(bad));
+    }
+    // Kept as the number meant, to a tenth; the file the core reads carries it.
+    const kept = {};
+    const set = (k, v) => { kept[k] = v; };
+    h.applyLevel({ level_trim: ' -4,5 ' }, set);
+    assert.deepEqual(kept, { level_trim: '-4.5' });
+    assert.equal(h.uplinksFrom((k, d) => (k in kept ? kept[k] : d)).programme.trim_db, -4.5);
+    h.applyLevel({ level_trim: '\u22122' }, set);
+    assert.equal(kept.level_trim, '-2');
+    h.applyLevel({ level_trim: '-0' }, set);
+    assert.equal(kept.level_trim, '0');
+    h.applyLevel({ level_trim: '-3.26' }, set);
+    assert.equal(kept.level_trim, '-3.3');
+    // No trim unless one was saved; a value in the file the page never wrote is brought
+    // into the range, and level is never added.
+    assert.equal(h.uplinksFrom((k, d) => d).programme.trim_db, 0);
+    assert.equal(Object.is(h.uplinksFrom((k, d) => d).programme.trim_db, -0), false);
+    assert.equal(h.uplinksFrom((k, d) => (k === 'level_trim' ? '-40' : d)).programme.trim_db, -12);
+    assert.equal(h.uplinksFrom((k, d) => (k === 'level_trim' ? '6' : d)).programme.trim_db, 0);
+    assert.equal(h.uplinksFrom((k, d) => (k === 'level_trim' ? 'x' : d)).programme.trim_db, 0);
+});
+
 test('a section switched off shows its switch alone, whatever its nested controls say', () => {
     const field = (id, on) => ({ id, visibleIf: on ? { field: on, value: true } : undefined });
     const content = [

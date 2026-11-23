@@ -15,7 +15,7 @@
 use std::io::{Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
@@ -61,6 +61,9 @@ struct Shared {
     /// Where the tap's rings are, and the tag of the one whose level is streamed.
     shm: PathBuf,
     tag: String,
+    /// The trim on everything sent out, in dB as an `f32`'s bits: the level
+    /// streamed is the level sent.
+    trim: Arc<AtomicU32>,
     /// The level streams open now.
     streams: Arc<AtomicUsize>,
     /// Set when the server stops: the streams end with it.
@@ -95,6 +98,7 @@ impl Server {
         jingles: PathBuf,
         shm: PathBuf,
         tag: String,
+        trim: Arc<AtomicU32>,
     ) -> Result<Server, String> {
         let listener =
             TcpListener::bind(("0.0.0.0", port)).map_err(|e| format!("port {port}: {e}"))?;
@@ -105,6 +109,7 @@ impl Server {
             jingles,
             shm,
             tag,
+            trim,
             streams: Arc::new(AtomicUsize::new(0)),
             stopping: AtomicBool::new(false),
         });
@@ -310,7 +315,7 @@ fn wav_seconds(path: &Path) -> Option<f64> {
 }
 
 /// One send of the level, as a server-sent event: the peak and the RMS per
-/// channel in dBFS to a tenth, and how many of the hops in it stood at full scale.
+/// channel as sent, in dBFS to a tenth, and how many overs began in it.
 fn level_event(level: &Level, overs: u32) -> String {
     let list = |values: &[f32]| {
         values
@@ -326,8 +331,8 @@ fn level_event(level: &Level, overs: u32) -> String {
     )
 }
 
-/// The level as the tap measures it, sent until the browser goes or the server
-/// stops. The stream reads the ring itself, with a reader of its own: the ring
+/// The level as it is sent, the tap's measurement less the trim, until the
+/// browser goes or the server stops. The stream reads the ring itself, with a reader of its own: the ring
 /// is shared memory any number may read, so nothing here waits on the status
 /// or stands in the sound's way. A browser that stops taking the stream is
 /// dropped when a write has waited two seconds.
@@ -344,7 +349,8 @@ fn level_stream(mut stream: TcpStream, shared: &Shared) {
     let mut said_none: Option<Instant> = None;
     let mut due = Instant::now();
     while !shared.stopping.load(Ordering::Relaxed) {
-        let event = match hops.look() {
+        let trim_db = f32::from_bits(shared.trim.load(Ordering::Relaxed));
+        let event = match hops.look(trim_db) {
             Look::Hops(level, overs) => {
                 said_none = None;
                 Some(level_event(&level, overs))
@@ -740,6 +746,7 @@ mod tests {
             dir.clone(),
             ring_dir("served"),
             "outcast".to_string(),
+            no_trim(),
         )
         .unwrap();
         let port = s.listener.local_addr().unwrap().port();
@@ -811,6 +818,11 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// No trim, as the hub holds it for the streams.
+    fn no_trim() -> Arc<AtomicU32> {
+        Arc::new(AtomicU32::new(0f32.to_bits()))
+    }
+
     /// A level stream asked for; what it sends is read with `read_until`.
     fn watch(port: u16) -> TcpStream {
         let mut c = TcpStream::connect(("127.0.0.1", port)).unwrap();
@@ -843,6 +855,7 @@ mod tests {
             rings.join("jingles"),
             rings.clone(),
             "outcast".to_string(),
+            no_trim(),
         )
         .unwrap();
         let port = s.listener.local_addr().unwrap().port();
@@ -904,6 +917,60 @@ mod tests {
     }
 
     #[test]
+    fn the_level_streamed_is_the_level_sent_and_follows_the_trim_as_it_changes() {
+        let rings = ring_dir("trimmed");
+        let status = Arc::new(Mutex::new(Status::new("outcast")));
+        let trim = Arc::new(AtomicU32::new((-6.0f32).to_bits()));
+        let s = Server::start(
+            0,
+            status,
+            rings.join("jingles"),
+            rings.clone(),
+            "outcast".to_string(),
+            Arc::clone(&trim),
+        )
+        .unwrap();
+        let port = s.listener.local_addr().unwrap().port();
+        let mut c = watch(port);
+        let mut got = String::new();
+        let mut writer = ring(&rings, "outcast", 64);
+        // Half and a quarter of full scale at the player, six dB off as sent; one hop
+        // at full scale among them is no over, six dB under it.
+        for n in 0..40 {
+            writer.publish(&hop(if n == 20 { 1.0 } else { 0.5 }, 0.25));
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(
+            read_until(
+                &mut c,
+                &mut got,
+                "data: {\"peak_db\":[-12.0,-18.0],\"rms_db\":[-18.0,-24.1],\"overs\":0}\n\n"
+            ),
+            "six dB off what the tap measured: {got}"
+        );
+        // The operator saves another trim: the stream that is open follows.
+        trim.store((-3.0f32).to_bits(), Ordering::Relaxed);
+        for _ in 0..40 {
+            writer.publish(&hop(0.5, 0.25));
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(
+            read_until(
+                &mut c,
+                &mut got,
+                "data: {\"peak_db\":[-9.0,-15.0],\"rms_db\":[-15.0,-21.1],\"overs\":0}\n\n"
+            ),
+            "three dB off from the save on: {got}"
+        );
+        assert!(
+            !got.contains("\"overs\":1"),
+            "full scale at the player was never full scale as sent: {got}"
+        );
+        s.stop();
+        let _ = std::fs::remove_dir_all(&rings);
+    }
+
+    #[test]
     fn the_streams_have_places_of_their_own_and_end_with_the_server() {
         let rings = ring_dir("places");
         let status = Arc::new(Mutex::new(Status::new("outcast")));
@@ -913,6 +980,7 @@ mod tests {
             rings.join("jingles"),
             rings.clone(),
             "outcast".to_string(),
+            no_trim(),
         )
         .unwrap();
         let port = s.listener.local_addr().unwrap().port();

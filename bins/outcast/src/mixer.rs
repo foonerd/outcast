@@ -191,30 +191,7 @@ impl Mixer {
 pub fn put(layout: &Layout, value: f32, out: &mut [u8]) {
     let v = (f64::from(value) * 2_147_483_648.0).clamp(-2_147_483_648.0, 2_147_483_647.0) as i32;
     match *layout {
-        Layout::Linear {
-            bytes: n,
-            valid,
-            signed,
-            little,
-        } => {
-            let n = n as usize;
-            if out.len() < n {
-                return;
-            }
-            let mut s = v;
-            if !signed {
-                s ^= i32::MIN;
-            }
-            let u = (s as u32).wrapping_shr(32 - valid as u32);
-            for i in 0..n {
-                let b = ((u >> (8 * i)) & 0xff) as u8;
-                if little {
-                    out[i] = b;
-                } else {
-                    out[n - 1 - i] = b;
-                }
-            }
-        }
+        Layout::Linear { .. } => put_i32(layout, v, out),
         Layout::Float { little } => {
             if out.len() < 4 {
                 return;
@@ -228,6 +205,38 @@ pub fn put(layout: &Layout, value: f32, out: &mut [u8]) {
             out[..4].copy_from_slice(&raw);
         }
         Layout::Dsd { .. } => {}
+    }
+}
+
+/// A sample at the full scale of 32 bits into the linear sample at the start
+/// of `out`, in the layout's own width and order: what `Layout::to_i32` gave,
+/// given back. A layout that is not linear is left.
+pub fn put_i32(layout: &Layout, v: i32, out: &mut [u8]) {
+    let Layout::Linear {
+        bytes: n,
+        valid,
+        signed,
+        little,
+    } = *layout
+    else {
+        return;
+    };
+    let n = n as usize;
+    if out.len() < n {
+        return;
+    }
+    let mut s = v;
+    if !signed {
+        s ^= i32::MIN;
+    }
+    let u = (s as u32).wrapping_shr(32 - valid as u32);
+    for i in 0..n {
+        let b = ((u >> (8 * i)) & 0xff) as u8;
+        if little {
+            out[i] = b;
+        } else {
+            out[n - 1 - i] = b;
+        }
     }
 }
 

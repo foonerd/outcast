@@ -53,6 +53,20 @@ test('every TRANSLATE key of the page is in the English strings', () => {
     }
 });
 
+test('the programme level sits between what plays and how it is watched, after the destinations', () => {
+    const sections = json('UIConfig.json').sections.map((s) => s.id);
+    const at = (id) => sections.indexOf(id);
+    assert.ok(at('level_section') > 0, 'the section is on the page');
+    assert.equal(at('level_section'), at('dj_section') + 1, 'after DJ mode, which makes the programme');
+    assert.equal(at('level_section'), at('monitor_section') - 1, 'before the watching, whose dead-air level and dashboard speak of the level as sent');
+    assert.ok(at('hls_section') < at('level_section') && at('status_section') > at('level_section'));
+    const level = json('UIConfig.json').sections[at('level_section')];
+    assert.deepEqual(level.saveButton.data, ['level_trim']);
+    assert.equal(level.onSave.method, 'updateLevel');
+    assert.equal(json('config.json').level_trim.value, '0', 'no trim until the operator sets one');
+    assert.ok(read('index.js').includes('Outcast.prototype.updateLevel = '), 'the page\'s save has its method');
+});
+
 test('the strings index.js uses exist, and every language carries every string', () => {
     const en = json('i18n/strings_en.json').OUTCAST;
     const idx = read('index.js');

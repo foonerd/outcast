@@ -53,8 +53,8 @@ pub struct Status {
     pub last_error: String,
     /// The uplinks, each with its own state.
     pub uplinks: Vec<Uplink>,
-    /// The programme's level from the tap's measurement ring; none when the
-    /// tap measures nothing.
+    /// The programme's level as it is sent: the tap's measurement less the
+    /// trim; none when the tap measures nothing.
     pub level: Option<Level>,
     /// The programme has been below the dead-air level for the dead-air time.
     pub dead_air: bool,
@@ -65,6 +65,8 @@ pub struct Status {
     pub system: Option<crate::system::System>,
     /// The dead-air floor as set, in dBFS, for the page's meter.
     pub dead_air_level: f32,
+    /// The trim on everything sent out, in dB: 0 when there is none.
+    pub trim_db: f32,
     /// Counts, peaks and the last events since a mark: the core's start, or
     /// the dashboard's Clear.
     pub since: Since,
@@ -119,7 +121,8 @@ pub struct Since {
     pub uplinks_kbps_avg: f32,
     pub lost: u64,
     pub dropped: u64,
-    /// Meter hops at full scale.
+    /// Times the programme as sent stood at full scale: measurements there
+    /// within a second of each other are one.
     pub overs: u32,
     /// Inserts played into the stream.
     pub inserts: u32,
@@ -175,7 +178,8 @@ impl Status {
     }
 }
 
-/// The level per channel, in dBFS: the highest of the hops since the meter last looked.
+/// The level per channel as sent, in dBFS: the highest of the hops since the
+/// meter last looked, less the trim.
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct Level {
     pub peak_db: Vec<f32>,
@@ -255,6 +259,7 @@ impl Status {
             quiet_seconds: 0,
             system: None,
             dead_air_level: -60.0,
+            trim_db: 0.0,
             since: Since::new(started),
             played: VecDeque::new(),
             dj: serde_json::Value::Null,

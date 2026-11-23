@@ -97,6 +97,33 @@ pub fn plan(shape: &Shape) -> (Segment, Conversion) {
     )
 }
 
+/// A plan with its linear samples widened to S32_LE where they would pass
+/// narrower: for a stream whose level is changed on the way, so the changed
+/// samples keep the precision the change gives them and the encoder, not the
+/// change, decides what width goes out. A float stream, one as wide already
+/// and silence stay as planned.
+pub fn widened(planned: (Segment, Conversion)) -> (Segment, Conversion) {
+    let (segment, conversion) = planned;
+    let s32 = Layout::Linear {
+        bytes: 4,
+        valid: 32,
+        signed: true,
+        little: true,
+    };
+    match (conversion, segment.layout) {
+        (Conversion::Pass, layout @ Layout::Linear { .. }) if layout != s32 => (
+            Segment {
+                format: "s32le",
+                layout: s32,
+                frame_bytes: 4 * segment.channels,
+                ..segment
+            },
+            Conversion::Widen(layout),
+        ),
+        _ => (segment, conversion),
+    }
+}
+
 /// The ring's bytes as the segment's.
 pub fn convert(conversion: &Conversion, segment: &Segment, bytes: &[u8], out: &mut Vec<u8>) {
     out.clear();
@@ -148,6 +175,31 @@ mod tests {
         let mut out = Vec::new();
         convert(&conv, &seg, &[1, 2, 3, 4], &mut out);
         assert_eq!(out, vec![1, 2, 3, 4]);
+    }
+
+    #[test]
+    fn a_plan_is_widened_where_its_samples_would_pass_narrower() {
+        // S16_LE passes as it is; widened, every sample is the same value in 32 bits.
+        let (seg, conv) = widened(plan(&shape(2, 48000, 2, 4, false)));
+        assert_eq!(seg.format, "s32le");
+        assert_eq!((seg.rate, seg.channels, seg.frame_bytes), (48000, 2, 8));
+        assert!(!seg.dsd_silence);
+        let mut out = Vec::new();
+        convert(&conv, &seg, &[0x34, 0x12, 0x00, 0x80], &mut out);
+        assert_eq!(out, vec![0, 0, 0x34, 0x12, 0, 0, 0x00, 0x80]);
+        // S32_LE (ALSA 10) and float (ALSA 14) are as wide as there is: left as planned.
+        for format in [10, 14] {
+            let planned = plan(&shape(format, 96000, 2, 8, false));
+            let (seg, conv) = widened(planned);
+            assert_eq!(seg, planned.0);
+            assert!(matches!(conv, Conversion::Pass));
+        }
+        // What was widened already, and one-bit audio's silence, stay as planned.
+        let planned = plan(&shape(3, 44100, 2, 4, false));
+        assert_eq!(widened(planned).0, planned.0);
+        let planned = plan(&shape(48, 2_822_400, 2, 2, true));
+        let (seg, conv) = widened(planned);
+        assert!(seg.dsd_silence && matches!(conv, Conversion::Silence { .. }));
     }
 
     #[test]

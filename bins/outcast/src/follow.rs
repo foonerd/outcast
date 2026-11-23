@@ -44,7 +44,7 @@ fn ring_of(reader: &Reader) -> Ring {
 /// meter read. False when the control side is gone.
 fn commands(hub: &mut Hub, rx: &Receiver<Command>, meter: &mut Meter) -> bool {
     hub.tick();
-    meter.tick(&hub.monitor());
+    meter.tick(&hub.monitor(), hub.trim_db());
     loop {
         match rx.try_recv() {
             Ok(c) => hub.command(c),
