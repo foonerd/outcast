@@ -2,6 +2,18 @@
 
 All notable changes to Outcast Uplink. The format follows Keep a Changelog; the versions follow Semantic Versioning.
 
+## [0.1.32] - 2026-11-23
+
+### Added
+
+- A trim for the programme's level on the way out. The tap takes the player's stream bit for bit, at the level its tracks were mastered to, which for most music is full scale; a lossy encoder fed that has no room for the peaks it makes, and they clip at the listener. The new **Programme level** section of the settings page, between DJ mode and Watching the programme, sets one trim from 0 to −12 dB for everything sent out: every uplink, the recording and the inserts alike. At 0, the default, nothing is touched and the stream is the player's bit for bit. The player's own sound and its volume control are apart from it. Under a trim the samples are carried in 32 bits, so nothing of the trimmed sound is lost before the encoder. The page is in eleven languages.
+- The dashboard names the trim on the Programme card and in the Level card's title, and the Since card notes each change of it.
+
+### Changed
+
+- The level in the status, on the dashboard and on the level's stream is the programme as sent: the tap's measurement less the trim. Dead air is judged on it. Without a trim nothing changes.
+- An over is a time the programme as sent stood at full scale: measurements there within a second of each other are one over. Every measurement at full scale used to be counted, which on music mastered to full scale ran into the thousands an hour and said nothing. The level stream's `overs` is the overs begun in each event.
+
 ## [0.1.31] - 2026-11-13
 
 ### Changed
